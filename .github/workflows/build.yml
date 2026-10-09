@@ -32,23 +32,34 @@ jobs:
       - name: Generate missing Android files
         run: flutter create . --platforms=android --org com.example --project-name secretary_app
 
-      # 🔴 الحل: نضيف gradle.properties يحدد compileSdk لكل الحزم
-      - name: Configure Gradle properties
+      # 🔴 الحل النهائي: نضيف compileSdkVersion لكل الحزم اللي محتاجاها
+      - name: Patch all plugins to use compileSdkVersion 35
         run: |
-          cat >> android/gradle.properties << 'EOF'
+          # نلاقي كل الحزم في pub cache ونعدلها
+          PUB_CACHE="${HOME}/.pub-cache/hosted/pub.dev"
           
-          android.compileSdkVersion=35
-          android.buildToolsVersion=34.0.0
-          android.enableJetifier=true
-          android.useAndroidX=true
-          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=2g
-          EOF
-
-      # 🔴 نحذف build.gradle اللي كنا عملناه (كان بيعمل مشاكل)
-      - name: Clean custom build.gradle
-        run: |
-          rm -f android/build.gradle
-          flutter create --platforms=android --org com.example --project-name secretary_app .
+          # قائمة الحزم اللي محتاجة تعديل
+          PLUGINS=(
+            "geolocator_android"
+            "flutter_local_notifications"
+            "permission_handler_android"
+            "wakelock_plus"
+          )
+          
+          for plugin in "${PLUGINS[@]}"; do
+            # نلاقي المجلد بالظبط (ممكن يكون فيه رقم إصدار)
+            PLUGIN_DIR=$(find "$PUB_CACHE" -maxdepth 1 -type d -name "${plugin}-*" | head -1)
+            
+            if [ -n "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/android/build.gradle" ]; then
+              echo "✅ تعديل: $PLUGIN_DIR"
+              
+              # لو الملف فيه android { } بدون compileSdkVersion، نضيفها
+              if ! grep -q "compileSdkVersion" "$PLUGIN_DIR/android/build.gradle"; then
+                # نضيف compileSdkVersion بعد كلمة android {
+                sed -i 's/android {/android {\n    compileSdkVersion 35\n    buildToolsVersion "34.0.0"/' "$PLUGIN_DIR/android/build.gradle"
+              fi
+            fi
+          done
 
       - name: Build APK
         run: flutter build apk --release
