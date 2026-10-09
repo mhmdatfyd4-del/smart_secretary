@@ -32,6 +32,12 @@ jobs:
       - name: Generate missing Android files
         run: flutter create . --platforms=android --org com.example --project-name secretary_app
 
+      # 🔴 تحديث Gradle إلى 8.0
+      - name: Update Gradle to 8.0
+        run: |
+          sed -i 's|distributionUrl=.*gradle-.*-all.zip|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.0-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
+          cat android/gradle/wrapper/gradle-wrapper.properties
+
       - name: Build APK
         run: flutter build apk --release
 
