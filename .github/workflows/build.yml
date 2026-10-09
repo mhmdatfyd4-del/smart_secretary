@@ -32,48 +32,23 @@ jobs:
       - name: Generate missing Android files
         run: flutter create . --platforms=android --org com.example --project-name secretary_app
 
-      # 🔴 الخطوة المهمة: إصلاح compileSdkVersion لكل الحزم
-      - name: Fix compileSdkVersion for all subprojects
+      # 🔴 الحل: نضيف gradle.properties يحدد compileSdk لكل الحزم
+      - name: Configure Gradle properties
         run: |
-          cat > android/build.gradle << 'EOF'
-          buildscript {
-              ext.kotlin_version = '1.9.22'
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:8.1.4'
-                  classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-              }
-          }
-
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-
-          rootProject.buildDir = '../build'
-
-          subprojects {
-              project.buildDir = "${rootProject.buildDir}/${project.name}"
-              project.evaluationDependsOn(':app')
-          }
-
-          subprojects { subproject ->
-              if (subproject.plugins.hasPlugin("com.android.library") || subproject.plugins.hasPlugin("com.android.application")) {
-                  subproject.android {
-                      compileSdkVersion 35
-                  }
-              }
-          }
-
-          tasks.register("clean", Delete) {
-              delete rootProject.buildDir
-          }
+          cat >> android/gradle.properties << 'EOF'
+          
+          android.compileSdkVersion=35
+          android.buildToolsVersion=34.0.0
+          android.enableJetifier=true
+          android.useAndroidX=true
+          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=2g
           EOF
+
+      # 🔴 نحذف build.gradle اللي كنا عملناه (كان بيعمل مشاكل)
+      - name: Clean custom build.gradle
+        run: |
+          rm -f android/build.gradle
+          flutter create --platforms=android --org com.example --project-name secretary_app .
 
       - name: Build APK
         run: flutter build apk --release
