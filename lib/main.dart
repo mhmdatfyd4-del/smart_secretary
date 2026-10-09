@@ -398,20 +398,46 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   Future<void> _initSpeech() async {
-    try {
-      _speechReady = await _speech.initialize(
-        onStatus: (status) {
-          if ((status == 'done' || status == 'notListening') && mounted && _isListening) {
-            setState(() => _isListening = false);
+  try {
+    _speechReady = await _speech.initialize(
+      onStatus: (status) {
+        if ((status == 'done' || status == 'notListening') && mounted && _isListening) {
+          setState(() => _isListening = false);
+        }
+      },
+      onError: (error) {
+        if (mounted) setState(() => _isListening = false);
+      },
+    );
+    if (_speechReady) {
+      // 🔴 نعرض اللغات المتاحة
+      final locales = await _speech.locales();
+      final arabicLocales = locales.where((l) => l.localeId.toLowerCase().contains('ar')).toList();
+      String msg = 'اللغات العربية المتاحة:\n';
+      if (arabicLocales.isEmpty) {
+        msg += 'مفيش لغات عربية!';
+      } else {
+        for (final l in arabicLocales) {
+          msg += '${l.localeId} - ${l.name}\n';
+        }
+      }
+      if (mounted) {
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(msg),
+                duration: const Duration(seconds: 15),
+                backgroundColor: Colors.green.shade800,
+              ),
+            );
           }
-        },
-        onError: (error) {
-          if (mounted) setState(() => _isListening = false);
-        },
-      );
-    } catch (_) {
-      _speechReady = false;
+        });
+      }
     }
+  } catch (_) {
+    _speechReady = false;
+  }
   }
 
   // 📳 كاشف اهتزاز الجهاز
