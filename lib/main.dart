@@ -703,6 +703,7 @@ class _MainDashboardState extends State<MainDashboard> {
       tzTime,
       notificationDetails,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 
