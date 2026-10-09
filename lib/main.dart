@@ -13,7 +13,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:pray_times/pray_times.dart';
+import 'package:adhan/adhan.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 // ─── متغيرات عامة ───
@@ -1305,36 +1305,35 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   Future<Map<String, String>> _calculatePrayerTimes() async {
-    try {
-      final coordinates = Coordinates(30.0444, 31.2357);
-      final prayerTimes = PrayerTimes.today(
-        coordinates,
-        calculationMethod: CalculationMethod.egyptian,
-        precision: true,
-      );
+  try {
+    final coordinates = Coordinates(30.0444, 31.2357);
+    final date = DateComponents.from(DateTime.now());
+    final params = CalculationMethod.egyptian.getParameters();
+    params.madhab = Madhab.shafi;
+    final prayerTimes = PrayerTimes(coordinates, date, params);
 
-      final format = DateFormat('hh:mm a', 'ar');
-      return {
-        'fajr': format.format(prayerTimes.fajr!),
-        'sunrise': format.format(prayerTimes.sunrise!),
-        'dhuhr': format.format(prayerTimes.dhuhr!),
-        'asr': format.format(prayerTimes.asr!),
-        'maghrib': format.format(prayerTimes.maghrib!),
-        'isha': format.format(prayerTimes.isha!),
-      };
-    } catch (e) {
-      final format = DateFormat('hh:mm a', 'ar');
-      final now = DateTime.now();
-      return {
-        'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)),
-        'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)),
-        'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)),
-        'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)),
-        'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)),
-        'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55)),
-      };
-    }
+    final format = DateFormat('hh:mm a', 'ar');
+    return {
+      'fajr': format.format(prayerTimes.fajr),
+      'sunrise': format.format(prayerTimes.sunrise),
+      'dhuhr': format.format(prayerTimes.dhuhr),
+      'asr': format.format(prayerTimes.asr),
+      'maghrib': format.format(prayerTimes.maghrib),
+      'isha': format.format(prayerTimes.isha),
+    };
+  } catch (e) {
+    final format = DateFormat('hh:mm a', 'ar');
+    final now = DateTime.now();
+    return {
+      'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)),
+      'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)),
+      'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)),
+      'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)),
+      'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)),
+      'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55)),
+    };
   }
+}
 
   Widget _prayerCard(String title, String time, IconData icon) {
     return Container(
