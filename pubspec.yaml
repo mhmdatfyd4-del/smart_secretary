@@ -18,11 +18,15 @@ dependencies:
   shared_preferences: ^2.2.2
   intl: ^0.19.0
   permission_handler: ^11.3.1
-  flutter_local_notifications: ^14.0.0
+  flutter_local_notifications: ^17.2.3
   timezone: ^0.9.4
   pray_times: ^0.0.1
   wakelock_plus: ^1.2.5
   cupertino_icons: ^1.0.8
+
+# 🔴 الحل: نجبر Flutter يستخدم نسخة قديمة من package_info_plus
+dependency_overrides:
+  package_info_plus: ^4.2.0
 
 dev_dependencies:
   flutter_test:
