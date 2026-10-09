@@ -35,7 +35,7 @@ dependencies:
   timezone: ^0.9.4
 
   # مواقيت الصلاة
-  pray_times: ^1.0.2
+  pray_times: ^0.0.1
 
   # إبقاء الشاشة صاحية
   wakelock_plus: ^1.2.5
