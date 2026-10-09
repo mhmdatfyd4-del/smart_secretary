@@ -32,32 +32,21 @@ jobs:
       - name: Generate missing Android files
         run: flutter create . --platforms=android --org com.example --project-name secretary_app
 
-      # 🔴 الحل النهائي: نضيف compileSdkVersion لكل الحزم اللي محتاجاها
-      - name: Patch all plugins to use compileSdkVersion 35
+      # 🔴 نصلح compileSdkVersion في كل الحزم
+      - name: Patch plugin build.gradle files
         run: |
-          # نلاقي كل الحزم في pub cache ونعدلها
-          PUB_CACHE="${HOME}/.pub-cache/hosted/pub.dev"
+          set -e
+          PUB_CACHE_PATH=$(find /home/runner -maxdepth 3 -type d -name "hosted" 2>/dev/null | head -1)
+          echo "🔍 Pub cache: $PUB_CACHE_PATH"
           
-          # قائمة الحزم اللي محتاجة تعديل
-          PLUGINS=(
-            "geolocator_android"
-            "flutter_local_notifications"
-            "permission_handler_android"
-            "wakelock_plus"
-          )
-          
-          for plugin in "${PLUGINS[@]}"; do
-            # نلاقي المجلد بالظبط (ممكن يكون فيه رقم إصدار)
-            PLUGIN_DIR=$(find "$PUB_CACHE" -maxdepth 1 -type d -name "${plugin}-*" | head -1)
-            
-            if [ -n "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/android/build.gradle" ]; then
-              echo "✅ تعديل: $PLUGIN_DIR"
-              
-              # لو الملف فيه android { } بدون compileSdkVersion، نضيفها
-              if ! grep -q "compileSdkVersion" "$PLUGIN_DIR/android/build.gradle"; then
-                # نضيف compileSdkVersion بعد كلمة android {
-                sed -i 's/android {/android {\n    compileSdkVersion 35\n    buildToolsVersion "34.0.0"/' "$PLUGIN_DIR/android/build.gradle"
-              fi
+          find "$PUB_CACHE_PATH" -maxdepth 2 -type d -name "geolocator_android*" | while read -r dir; do
+            echo "📁 Found: $dir"
+            if [ -f "$dir/android/build.gradle" ]; then
+              echo "📝 Patching: $dir/android/build.gradle"
+              # نضيف compileSdkVersion داخل android { }
+              sed -i 's/android {/android {\n    compileSdkVersion 35\n    buildToolsVersion "34.0.0"/' "$dir/android/build.gradle"
+              echo "✅ Done"
+              cat "$dir/android/build.gradle" | head -20
             fi
           done
 
