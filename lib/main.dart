@@ -13,8 +13,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:adhan/adhan.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:pray_times/pray_times.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 // ─── متغيرات عامة ───
@@ -144,7 +143,6 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
   Future<void> _requestPermissions() async {
     await Permission.microphone.request();
     await Permission.notification.request();
-    await Permission.location.request();
     if (mounted) {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupSecretaryScreen()));
     }
@@ -185,8 +183,6 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
                       SizedBox(height: 5),
                       Text('• التنبيهات والإشعارات: لإطلاق المنبه الصوتي والتذكير المسبق بالمناسبات.', style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 5),
-                      Text('• الموقع: لحساب مواقيت الصلاة بدقة.', style: TextStyle(fontSize: 14, height: 1.6)),
-                      SizedBox(height: 5),
                       Text('• مستشعرات الحركة: للتعرف على هز الجهاز وتفعيل المساعد مباشرة.', style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 15),
                       Text('جميع البيانات محفوظة بأمان محلياً على جهازك.', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey)),
@@ -219,7 +215,7 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
   }
 }
 
-// 2. شاشة إعداد السكرتيرة (ست فقط)
+// 2. شاشة إعداد السكرتيرة
 class SetupSecretaryScreen extends StatefulWidget {
   const SetupSecretaryScreen({super.key});
   @override
@@ -269,8 +265,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
           child: Column(
             children: [
               const SizedBox(height: 10),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
+              Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.pink.shade800,
@@ -460,7 +455,6 @@ class _MainDashboardState extends State<MainDashboard> {
         _specialEvents = List<Map<String, dynamic>>.from(json.decode(eventsString));
       });
     } else {
-      // لا مناسبات افتراضية
       setState(() {
         _specialEvents = [];
       });
@@ -507,7 +501,8 @@ class _MainDashboardState extends State<MainDashboard> {
     await _tts.setPitch(1.20);
     await _tts.setSpeechRate(0.48);
     _configureVoiceAndGreet();
-  }  
+  }
+
   Future<void> _listenVoiceCommand() async {
     if (_isListening) {
       await _speech.stop();
@@ -677,15 +672,13 @@ class _MainDashboardState extends State<MainDashboard> {
     await _tts.speak("تم التنفيذ $userTitle! تم تسجيل: $cleanTitle، في تمام الساعة $h12$minuteText $periodText.");
   }
 
-  // 🔔 جدولة التنبيه (في الخلفية + داخل التطبيق)
+  // 🔔 جدولة التنبيه
   void _scheduleContinuousAlarm(String taskTitle, DateTime scheduledDateTime) {
     Duration difference = scheduledDateTime.difference(DateTime.now());
     if (difference.isNegative) return;
 
-    // إشعار في الخلفية (يشتغل حتى لو التطبيق مقفول)
     _scheduleBackgroundNotification(taskTitle, scheduledDateTime);
 
-    // تايمر داخل التطبيق
     Timer timer = Timer(difference, () {
       if (mounted) _startAlarmLoop(taskTitle);
     });
@@ -760,7 +753,7 @@ class _MainDashboardState extends State<MainDashboard> {
     );
   }
 
-  // 🗑️ حذف مهمة وإلغاء منبهها
+  // 🗑️ حذف مهمة
   void _deleteTask(int index) {
     setState(() {
       _tasks.removeAt(index);
@@ -771,7 +764,7 @@ class _MainDashboardState extends State<MainDashboard> {
     );
   }
 
-  // 🎁 إضافة مناسبة مع تاريخ حقيقي
+  // 🎁 إضافة مناسبة
   void _addSpecialEventDialog() {
     TextEditingController titleCtrl = TextEditingController();
     TextEditingController detailCtrl = TextEditingController();
@@ -1284,14 +1277,14 @@ class _MainDashboardState extends State<MainDashboard> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
               ),
-              child: Column(
+              child: const Column(
                 children: [
-                  const Row(
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.location_on, color: Color(0xFFC5A059), size: 22),
+                      Icon(Icons.access_time_filled, color: Color(0xFFC5A059), size: 22),
                       SizedBox(width: 8),
-                      Text('مواقيت الصلاة حسب موقعك', style: TextStyle(color: Color(0xFFC5A059), fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text('مواقيت الصلاة اليوم', style: TextStyle(color: Color(0xFFC5A059), fontSize: 16, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ],
@@ -1312,29 +1305,21 @@ class _MainDashboardState extends State<MainDashboard> {
 
   Future<Map<String, String>> _calculatePrayerTimes() async {
     try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
+      final coordinates = Coordinates(30.0444, 31.2357);
+      final prayerTimes = PrayerTimes.today(
+        coordinates,
+        calculationMethod: CalculationMethod.egyptian,
+        precision: true,
       );
-
-      final coordinates = Coordinates(position.latitude, position.longitude);
-      final date = DateComponents.from(DateTime.now());
-      final params = CalculationMethod.egyptian.getParameters();
-      params.madhab = Madhab.shafi;
-      final prayerTimes = PrayerTimes(coordinates, date, params);
 
       final format = DateFormat('hh:mm a', 'ar');
       return {
-        'fajr': format.format(prayerTimes.fajr),
-        'sunrise': format.format(prayerTimes.sunrise),
-        'dhuhr': format.format(prayerTimes.dhuhr),
-        'asr': format.format(prayerTimes.asr),
-        'maghrib': format.format(prayerTimes.maghrib),
-        'isha': format.format(prayerTimes.isha),
+        'fajr': format.format(prayerTimes.fajr!),
+        'sunrise': format.format(prayerTimes.sunrise!),
+        'dhuhr': format.format(prayerTimes.dhuhr!),
+        'asr': format.format(prayerTimes.asr!),
+        'maghrib': format.format(prayerTimes.maghrib!),
+        'isha': format.format(prayerTimes.isha!),
       };
     } catch (e) {
       final format = DateFormat('hh:mm a', 'ar');
