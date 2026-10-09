@@ -507,7 +507,8 @@ class _MainDashboardState extends State<MainDashboard> {
     await _tts.setPitch(1.20);
     await _tts.setSpeechRate(0.48);
     _configureVoiceAndGreet();
-  }  Future<void> _listenVoiceCommand() async {
+  }  
+  Future<void> _listenVoiceCommand() async {
     if (_isListening) {
       await _speech.stop();
       if (mounted) setState(() => _isListening = false);
