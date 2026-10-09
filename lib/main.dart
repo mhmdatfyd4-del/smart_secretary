@@ -522,17 +522,27 @@ class _MainDashboardState extends State<MainDashboard> {
       await _tts.stop();
       if (mounted) setState(() => _isListening = true);
 
-      await _speech.listen(
-        localeId: "ar_SA",
-        listenFor: const Duration(seconds: 20),
-        pauseFor: const Duration(seconds: 4),
-        onResult: (val) {
-          if (val.finalResult) {
-            if (mounted) setState(() => _isListening = false);
-            _processSmartVoiceCommand(val.recognizedWords);
-          }
-        },
+await _speech.listen(
+  localeId: "ar_SA",
+  listenFor: const Duration(seconds: 20),
+  pauseFor: const Duration(seconds: 4),
+  onResult: (val) {
+    // 🔴 نعرض الكلام اللي بيتسمع لحظياً
+    if (mounted && val.recognizedWords.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('سمعت: ${val.recognizedWords}'),
+          duration: const Duration(seconds: 3),
+          backgroundColor: Colors.blue.shade800,
+        ),
       );
+    }
+    if (val.finalResult) {
+      if (mounted) setState(() => _isListening = false);
+      _processSmartVoiceCommand(val.recognizedWords);
+    }
+  },
+);
     } finally {
       _starting = false;
     }
