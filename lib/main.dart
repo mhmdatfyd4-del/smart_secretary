@@ -549,7 +549,7 @@ class _MainDashboardState extends State<MainDashboard> {
       if (mounted) setState(() => _isListening = true);
 
 await _speech.listen(
-  localeId: "ar_SA",
+  localeId: "ar_AE",
   listenFor: const Duration(seconds: 20),
   pauseFor: const Duration(seconds: 4),
   onResult: (val) {
