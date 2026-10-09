@@ -32,29 +32,6 @@ jobs:
       - name: Generate missing Android files
         run: flutter create . --platforms=android --org com.example --project-name secretary_app
 
-      # 🔴 الحل: نضيف compileSdkVersion لأي حزمة ناقصة
-      - name: Patch all plugins missing compileSdkVersion
-        run: |
-          PUB_CACHE="$HOME/.pub-cache/hosted/pub.dev"
-          echo "🔍 Searching in: $PUB_CACHE"
-          PATCHED=0
-          
-          # ندوّر على كل ملفات build.gradle في مجلدات الحزم
-          for gradle_file in $(find "$PUB_CACHE" -name "build.gradle" -path "*/android/*" 2>/dev/null); do
-            # نتأكد إن الملف فيه android { أو android{
-            if grep -qE "^\s*android\s*\{" "$gradle_file"; then
-              # ونتأكد إن مفيش compileSdkVersion
-              if ! grep -q "compileSdkVersion" "$gradle_file"; then
-                echo "📝 Patching: $gradle_file"
-                # نضيف compileSdkVersion بعد android { مباشرة
-                sed -i -E 's/^([[:space:]]*android[[:space:]]*\{)/\1\n    compileSdkVersion 35\n    buildToolsVersion "34.0.0"/' "$gradle_file"
-                PATCHED=$((PATCHED+1))
-              fi
-            fi
-          done
-          
-          echo "✅ Patched $PATCHED files"
-
       - name: Build APK
         run: flutter build apk --release
 
