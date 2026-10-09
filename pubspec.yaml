@@ -24,9 +24,10 @@ dependencies:
   wakelock_plus: ^1.2.5
   cupertino_icons: ^1.0.8
 
-# 🔴 الحل: نجبر Flutter يستخدم نسخة قديمة من package_info_plus
+# 🔴 الحل: نجبر Flutter يستخدم نسخ قديمة متوافقة
 dependency_overrides:
   package_info_plus: ^4.2.0
+  wakelock_plus: ^1.1.4
 
 dev_dependencies:
   flutter_test:
