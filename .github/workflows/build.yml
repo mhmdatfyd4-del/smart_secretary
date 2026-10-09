@@ -32,24 +32,6 @@ jobs:
       - name: Generate missing Android files
         run: flutter create . --platforms=android --org com.example --project-name secretary_app
 
-      # 🔴 نصلح compileSdkVersion في كل الحزم
-      - name: Patch plugin build.gradle files
-        run: |
-          set -e
-          PUB_CACHE_PATH=$(find /home/runner -maxdepth 3 -type d -name "hosted" 2>/dev/null | head -1)
-          echo "🔍 Pub cache: $PUB_CACHE_PATH"
-          
-          find "$PUB_CACHE_PATH" -maxdepth 2 -type d -name "geolocator_android*" | while read -r dir; do
-            echo "📁 Found: $dir"
-            if [ -f "$dir/android/build.gradle" ]; then
-              echo "📝 Patching: $dir/android/build.gradle"
-              # نضيف compileSdkVersion داخل android { }
-              sed -i 's/android {/android {\n    compileSdkVersion 35\n    buildToolsVersion "34.0.0"/' "$dir/android/build.gradle"
-              echo "✅ Done"
-              cat "$dir/android/build.gradle" | head -20
-            fi
-          done
-
       - name: Build APK
         run: flutter build apk --release
 
