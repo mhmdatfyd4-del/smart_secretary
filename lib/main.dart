@@ -554,11 +554,11 @@ await _speech.listen(
   pauseFor: const Duration(seconds: 4),
   onResult: (val) {
     // 🔴 نعرض الكلام اللي بيتسمع لحظياً
-    if (mounted && val.recognizedWords.isNotEmpty) {
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('سمعت: ${val.recognizedWords}'),
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 15),
           backgroundColor: Colors.blue.shade800,
         ),
       );
