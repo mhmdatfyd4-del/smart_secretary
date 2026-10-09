@@ -12,34 +12,16 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # الصوت
   flutter_tts: ^3.8.5
-
-  # التعرف على الصوت
   speech_to_text: ^6.6.1
-
-  # الهز
   sensors_plus: ^5.0.1
-
-  # التخزين المحلي
   shared_preferences: ^2.2.2
-
-  # التواريخ العربية
   intl: ^0.19.0
-
-  # الأذونات
   permission_handler: ^11.3.1
-
-  # المنبه في الخلفية
-  flutter_local_notifications: ^17.2.3
+  flutter_local_notifications: ^14.0.0
   timezone: ^0.9.4
-
-  # مواقيت الصلاة
   pray_times: ^0.0.1
-
-  # إبقاء الشاشة صاحية
   wakelock_plus: ^1.2.5
-
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
