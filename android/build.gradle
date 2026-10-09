@@ -21,33 +21,7 @@ allprojects {
 rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
-}
-
-subprojects {
     project.evaluationDependsOn(':app')
-    project.configurations.all {
-        resolutionStrategy.eachDependency { details ->
-            if (details.requested.group == 'com.android.tools.build' && details.requested.name == 'gradle') {
-                details.useVersion '8.1.4'
-            }
-        }
-    }
-}
-
-// 🔴 السطر المهم اللي بيحل المشكلة
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                if (compileSdkVersion == null) {
-                    compileSdkVersion 35
-                }
-                if (buildToolsVersion == null) {
-                    buildToolsVersion "34.0.0"
-                }
-            }
-        }
-    }
 }
 
 tasks.register("clean", Delete) {
