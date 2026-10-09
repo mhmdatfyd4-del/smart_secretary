@@ -28,7 +28,6 @@ android {
     ndkVersion flutter.ndkVersion
 
     compileOptions {
-        // مطلوب لـ flutter_local_notifications (للدعم على أندرويد أقدم)
         coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -44,7 +43,6 @@ android {
 
     defaultConfig {
         applicationId "com.example.secretary_app"
-        // تم الرفع من 21 إلى 23 لـ flutter_local_notifications
         minSdkVersion 23
         targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
@@ -54,7 +52,6 @@ android {
 
     buildTypes {
         release {
-            // التوقيع مؤقت (هنعدله بعدين لو حبيت تنشر على Play Store)
             signingConfig signingConfigs.debug
             minifyEnabled false
             shrinkResources false
@@ -67,6 +64,5 @@ flutter {
 }
 
 dependencies {
-    // مطلوب لـ flutter_local_notifications
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
 }
