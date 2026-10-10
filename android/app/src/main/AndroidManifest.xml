@@ -12,8 +12,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- 🔴 أذونات الخدمة في الخلفية -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
     <application
         android:label="السكرتيرة الذكية"
         android:name="${applicationName}"
@@ -39,7 +43,7 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- مستقبلات الإشعارات (مطلوبة لـ flutter_local_notifications) -->
+        <!-- مستقبلات الإشعارات -->
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
             <intent-filter>
@@ -49,9 +53,14 @@
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
             </intent-filter>
         </receiver>
+
+        <!-- 🔴 الخدمة في الخلفية -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
     </application>
 
-    <!-- مطلوب لتعمل خدمة التعرف على الصوت على أندرويد 11 وأحدث -->
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService" />
