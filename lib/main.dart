@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +17,9 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:adhan/adhan.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
 
 // ─── متغيرات عامة ───
 final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
@@ -105,16 +109,13 @@ int _parseMinute(String cmd) {
   return 0;
 }
 
-// ─── أدوات العد التنازلي ───
 String _formatRemaining(DateTime target) {
   final now = DateTime.now();
   final diff = target.difference(now);
   if (diff.isNegative) return 'انتهى';
-
   final days = diff.inDays;
   final hours = diff.inHours % 24;
   final minutes = diff.inMinutes % 60;
-
   if (days > 0) {
     if (hours > 0) return 'فاضل $days يوم و $hours ساعة';
     return 'فاضل $days يوم';
@@ -126,6 +127,12 @@ String _formatRemaining(DateTime target) {
   } else {
     return 'فاضل أقل من دقيقة';
   }
+}
+
+String _formatDuration(Duration d) {
+  final minutes = d.inMinutes.toString().padLeft(2, '0');
+  final seconds = (d.inSeconds % 60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
 }
 
 // ─── إعدادات التطبيق ───
@@ -466,12 +473,22 @@ class _MainDashboardState extends State<MainDashboard> {
   Timer? _adhanTimer;
   bool _adhanAlerted = false;
 
+  // 🔴 المسجل الصوتي
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _isRecording = false;
+  List<Map<String, dynamic>> _recordings = [];
+  Duration _recordingDuration = Duration.zero;
+  Timer? _recordingTimer;
+  String? _currentlyPlayingPath;
+
   String get _userTitle => widget.isUserMale ? "يا فندم" : "يا أستاذة";
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadRecordings();
     _configureVoice();
     _initSpeech();
     _initShakeDetector();
@@ -505,7 +522,7 @@ class _MainDashboardState extends State<MainDashboard> {
         final now = DateTime.now();
         if (_lastShake != null && now.difference(_lastShake!) < const Duration(seconds: 3)) return;
         _lastShake = now;
-        if (!_isListening && !_starting) _listenVoiceCommand();
+        if (!_isListening && !_starting && !_isRecording) _listenVoiceCommand();
       }
     });
   }
@@ -601,10 +618,146 @@ class _MainDashboardState extends State<MainDashboard> {
     await prefs.setBool('adhan_alert_enabled', _settings.adhanAlertEnabled);
   }
 
+  // ─── المسجل الصوتي ───
+  Future<void> _loadRecordings() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? recordingsString = prefs.getString('saved_recordings');
+    if (recordingsString != null) {
+      setState(() {
+        _recordings = List<Map<String, dynamic>>.from(json.decode(recordingsString));
+      });
+    }
+  }
+
+  Future<void> _saveRecordings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('saved_recordings', json.encode(_recordings));
+  }
+
+  Future<void> _startRecording() async {
+    try {
+      if (await _audioRecorder.hasPermission()) {
+        final dir = await getApplicationDocumentsDirectory();
+        final recordingsDir = Directory('${dir.path}/recordings');
+        if (!await recordingsDir.exists()) {
+          await recordingsDir.create(recursive: true);
+        }
+        final fileName = 'rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        final path = '${recordingsDir.path}/$fileName';
+
+        await _audioRecorder.start(const RecordConfig(), path: path);
+        setState(() {
+          _isRecording = true;
+          _recordingDuration = Duration.zero;
+        });
+
+        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في التسجيل: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    try {
+      _recordingTimer?.cancel();
+      final path = await _audioRecorder.stop();
+      if (path != null) {
+        final newRecording = {
+          'path': path,
+          'name': 'تسجيل ${DateFormat('yyyy/MM/dd HH:mm').format(DateTime.now())}',
+          'duration': _formatDuration(_recordingDuration),
+          'createdAt': DateTime.now().toIso8601String(),
+        };
+        setState(() {
+          _recordings.insert(0, newRecording);
+          _isRecording = false;
+          _recordingDuration = Duration.zero;
+        });
+        await _saveRecordings();
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isRecording = false);
+    }
+  }
+
+  Future<void> _playRecording(String path) async {
+    try {
+      if (_currentlyPlayingPath == path) {
+        await _audioPlayer.stop();
+        setState(() => _currentlyPlayingPath = null);
+      } else {
+        await _audioPlayer.stop();
+        await _audioPlayer.play(DeviceFileSource(path));
+        setState(() => _currentlyPlayingPath = path);
+        _audioPlayer.onPlayerComplete.listen((_) {
+          if (mounted) setState(() => _currentlyPlayingPath = null);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في التشغيل: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteRecording(int index) async {
+    try {
+      final path = _recordings[index]['path'].toString();
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+      setState(() {
+        _recordings.removeAt(index);
+      });
+      await _saveRecordings();
+    } catch (_) {}
+  }
+
+  void _renameRecording(int index) {
+    TextEditingController nameCtrl = TextEditingController(text: _recordings[index]['name'].toString());
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Text('إعادة تسمية التسجيل', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'الاسم الجديد')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+            onPressed: () {
+              if (nameCtrl.text.isNotEmpty) {
+                setState(() {
+                  _recordings[index]['name'] = nameCtrl.text;
+                });
+                _saveRecordings();
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('حفظ', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _accelerometerSub?.cancel();
     _adhanTimer?.cancel();
+    _recordingTimer?.cancel();
+    _audioRecorder.dispose();
+    _audioPlayer.dispose();
     for (var timer in _activeTimers) {
       timer.cancel();
     }
@@ -682,6 +835,7 @@ class _MainDashboardState extends State<MainDashboard> {
     final prayerKeywords = ["صلوات", "صلاة", "مواقيت", "اذان", "أذان"];
     final diaryKeywords = ["يوميات", "مفكرة", "تدوين", "خواطر"];
     final eventKeywords = ["مناسبات", "مناسبة", "عيد", "ذكرى"];
+    final recordKeywords = ["سجل", "تسجيل", "مسجل"];
     if (_hasAny(cmd, prayerKeywords)) {
       setState(() => _currentIndex = 2);
       await _speak("تم الانتقال لمواقيت الصلاة $userTitle.");
@@ -693,6 +847,10 @@ class _MainDashboardState extends State<MainDashboard> {
     } else if (_hasAny(cmd, eventKeywords)) {
       setState(() => _currentIndex = 3);
       await _speak("تم الانتقال للمناسبات السنوية $userTitle.");
+      return;
+    } else if (_hasAny(cmd, recordKeywords)) {
+      setState(() => _currentIndex = 4);
+      await _speak("تم فتح قسم المسجل $userTitle.");
       return;
     }
     if (isCalledByName) {
@@ -1229,7 +1387,7 @@ class _MainDashboardState extends State<MainDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final List<Widget> screens = [_buildCalendarAndTasksTab(), _buildDiariesTab(), _buildPrayerTimesTab(), _buildSpecialEventsTab()];
+    final List<Widget> screens = [_buildCalendarAndTasksTab(), _buildDiariesTab(), _buildPrayerTimesTab(), _buildSpecialEventsTab(), _buildRecorderTab()];
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF1B2A4A),
@@ -1259,13 +1417,14 @@ class _MainDashboardState extends State<MainDashboard> {
         onTap: (index) => setState(() => _currentIndex = index),
         selectedItemColor: const Color(0xFF1B2A4A),
         unselectedItemColor: Colors.grey,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'التقويم'),
           BottomNavigationBarItem(icon: Icon(Icons.book), label: 'يومياتي'),
           BottomNavigationBarItem(icon: Icon(Icons.access_time_filled), label: 'الصلاة'),
           BottomNavigationBarItem(icon: Icon(Icons.stars), label: 'المناسبات'),
+          BottomNavigationBarItem(icon: Icon(Icons.mic), label: 'المسجل'),
         ],
       ),
     );
@@ -1407,5 +1566,104 @@ class _MainDashboardState extends State<MainDashboard> {
           );
         }),
     ]);
+  }
+
+  // 🎙️ تاب المسجل
+  Widget _buildRecorderTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF0F172A)]),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.mic, color: Color(0xFFC5A059), size: 40),
+                const SizedBox(height: 10),
+                Text(
+                  _isRecording ? 'جاري التسجيل...' : 'اضغط للتسجيل',
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _formatDuration(_recordingDuration),
+                  style: const TextStyle(color: Color(0xFFC5A059), fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 15),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isRecording ? Colors.red : const Color(0xFFC5A059),
+                    minimumSize: const Size.fromHeight(50),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _isRecording ? _stopRecording : _startRecording,
+                  icon: Icon(_isRecording ? Icons.stop : Icons.fiber_manual_record, color: _isRecording ? Colors.white : Colors.black),
+                  label: Text(
+                    _isRecording ? 'إيقاف التسجيل' : 'بدء التسجيل',
+                    style: TextStyle(color: _isRecording ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Align(
+            alignment: Alignment.centerRight,
+            child: Text('التسجيلات المحفوظة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: _recordings.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.mic_none, size: 60, color: Colors.grey.shade400),
+                        const SizedBox(height: 10),
+                        const Text('لا توجد تسجيلات', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _recordings.length,
+                    itemBuilder: (ctx, i) {
+                      final rec = _recordings[i];
+                      final path = rec['path'].toString();
+                      final isPlaying = _currentlyPlayingPath == path;
+                      return Container(
+                        margin: const EdgeInsets.symmetric(vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isPlaying ? const Color(0xFFC5A059) : Colors.grey.shade300, width: isPlaying ? 2 : 1),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
+                        ),
+                        child: ListTile(
+                          leading: IconButton(
+                            icon: Icon(isPlaying ? Icons.stop_circle : Icons.play_circle_fill, color: const Color(0xFF1B2A4A), size: 32),
+                            onPressed: () => _playRecording(path),
+                          ),
+                          title: Text(rec['name'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          subtitle: Text('المدة: ${rec['duration']}', style: const TextStyle(fontSize: 12)),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(icon: const Icon(Icons.edit, color: Colors.blue, size: 22), onPressed: () => _renameRecording(i)),
+                              IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22), onPressed: () => _deleteRecording(i)),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
   }
 }
