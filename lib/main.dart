@@ -21,6 +21,7 @@ import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'foreground_service.dart';
 
 // ─── متغيرات عامة ───
 final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
@@ -44,6 +45,7 @@ void main() async {
   await initializeDateFormatting('ar');
   tz.initializeTimeZones();
   await _initNotifications();
+  await initForegroundService();
 
   final prefs = await SharedPreferences.getInstance();
   bool isFirstTime = prefs.getBool('is_first_time') ?? true;
@@ -493,6 +495,13 @@ class _MainDashboardState extends State<MainDashboard> {
     _initSpeech();
     _initShakeDetector();
     _startAdhanWatcher();
+    _startBackgroundService();
+  }
+
+  Future<void> _startBackgroundService() async {
+    try {
+      await startForegroundService();
+    } catch (_) {}
   }
 
   Future<void> _initSpeech() async {
@@ -1608,7 +1617,6 @@ class _MainDashboardState extends State<MainDashboard> {
     ]);
   }
 
-  // 🎙️ تاب المسجل
   Widget _buildRecorderTab() {
     return Padding(
       padding: const EdgeInsets.all(16),
