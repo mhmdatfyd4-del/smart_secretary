@@ -22,6 +22,18 @@ final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotifications
 const String _secretaryImagePath = 'assets/secretary.jpg';
 const List<String> _weekDays = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
 
+const Map<String, String> _secretaryImages = {
+  'سارة': 'assets/secretary.jpg',
+  'مريم': 'assets/maryam.jpg',
+  'ندى': 'assets/nada.jpg',
+  'نور': 'assets/noor.jpg',
+  'ياسمين': 'assets/yasmine.jpg',
+};
+
+String _getSecretaryImage(String name) {
+  return _secretaryImages[name] ?? 'assets/secretary.jpg';
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ar');
@@ -324,17 +336,18 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
           child: Column(
             children: [
               const SizedBox(height: 10),
-              Container(
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
                 width: 150,
                 height: 150,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(color: const Color(0xFFC5A059), width: 4),
                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
-                  image: const DecorationImage(
-                    image: AssetImage(_secretaryImagePath),
+                  image: DecorationImage(
+                    image: AssetImage(_getSecretaryImage(_nameController.text)),
                     fit: BoxFit.cover,
-                    alignment: Alignment(0, -0.4),
+                    alignment: const Alignment(0, -0.4),
                   ),
                 ),
               ),
@@ -395,6 +408,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
               const SizedBox(height: 15),
               TextField(
                 controller: _nameController,
+                onChanged: (v) => setState(() {}),
                 decoration: InputDecoration(
                   labelText: 'اسم السكرتيرة',
                   prefixIcon: const Icon(Icons.badge, color: Color(0xFF1B2A4A)),
@@ -1222,7 +1236,7 @@ class _MainDashboardState extends State<MainDashboard> {
         foregroundColor: Colors.white,
         elevation: 3,
         title: Row(children: [
-          CircleAvatar(radius: 22, backgroundColor: const Color(0xFFC5A059), child: ClipOval(child: Image.asset(_secretaryImagePath, width: 44, height: 44, fit: BoxFit.cover, alignment: const Alignment(0, -0.3), errorBuilder: (c, e, s) => const Icon(Icons.face_3, color: Colors.white)))),
+          CircleAvatar(radius: 22, backgroundColor: const Color(0xFFC5A059), child: ClipOval(child: Image.asset(_getSecretaryImage(widget.secretaryName), width: 44, height: 44, fit: BoxFit.cover, alignment: const Alignment(0, -0.3), errorBuilder: (c, e, s) => const Icon(Icons.face_3, color: Colors.white)))),
           const SizedBox(width: 12),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('السكرتيرة: ${widget.secretaryName}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -1269,7 +1283,7 @@ class _MainDashboardState extends State<MainDashboard> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)], begin: Alignment.topRight, end: Alignment.bottomLeft), borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4))]),
           child: Row(children: [
-            Container(width: 70, height: 70, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFFC5A059), width: 2), image: const DecorationImage(image: AssetImage(_secretaryImagePath), fit: BoxFit.cover, alignment: Alignment(0, -0.3))), child: const SizedBox()),
+            Container(width: 70, height: 70, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFFC5A059), width: 2), image: DecorationImage(image: AssetImage(_getSecretaryImage(widget.secretaryName)), fit: BoxFit.cover, alignment: const Alignment(0, -0.3)))),
             const SizedBox(width: 15),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('مرحباً بك $userTitle! 👋', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
