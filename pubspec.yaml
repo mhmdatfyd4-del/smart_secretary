@@ -31,7 +31,7 @@ dependencies:
 
   # المشاركة
   share_plus: ^7.2.1
-flutter_foreground_task: ^8.10.4
+flutter_foreground_task: ^8.0.0
 
 dev_dependencies:
   flutter_test:
