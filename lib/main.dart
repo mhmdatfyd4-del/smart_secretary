@@ -20,6 +20,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 // ─── متغيرات عامة ───
 final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
@@ -62,7 +63,6 @@ Future<void> _initNotifications() async {
   await _notifications.initialize(initSettings);
 }
 
-// ─── أدوات تطبيع النص العربي ───
 String _norm(String s) {
   const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
   var out = s.toLowerCase().replaceAll(RegExp(r'[\u064B-\u0652]'), '');
@@ -135,7 +135,6 @@ String _formatDuration(Duration d) {
   return '$minutes:$seconds';
 }
 
-// ─── إعدادات التطبيق ───
 class AppSettings {
   int defaultReminderHour;
   int defaultReminderMinute;
@@ -168,7 +167,6 @@ class AppSettings {
   }
 }
 
-// ─── التطبيق ───
 class SecretaryApp extends StatelessWidget {
   final bool isFirstTime;
   final String? savedName;
@@ -208,7 +206,6 @@ class SecretaryApp extends StatelessWidget {
   }
 }
 
-// 1. شاشة الاتفاقية والأذونات
 class TermsAndPermissionsScreen extends StatefulWidget {
   const TermsAndPermissionsScreen({super.key});
   @override
@@ -293,7 +290,6 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
   }
 }
 
-// 2. شاشة إعداد السكرتيرة
 class SetupSecretaryScreen extends StatefulWidget {
   const SetupSecretaryScreen({super.key});
   @override
@@ -473,7 +469,7 @@ class _MainDashboardState extends State<MainDashboard> {
   Timer? _adhanTimer;
   bool _adhanAlerted = false;
 
-  // 🔴 المسجل الصوتي
+  // 🎙️ المسجل الصوتي
   final AudioRecorder _audioRecorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isRecording = false;
@@ -481,6 +477,10 @@ class _MainDashboardState extends State<MainDashboard> {
   Duration _recordingDuration = Duration.zero;
   Timer? _recordingTimer;
   String? _currentlyPlayingPath;
+  Duration _currentPosition = Duration.zero;
+  Duration _currentDuration = Duration.zero;
+  StreamSubscription? _positionSub;
+  StreamSubscription? _durationSub;
 
   String get _userTitle => widget.isUserMale ? "يا فندم" : "يا أستاذة";
 
@@ -671,7 +671,7 @@ class _MainDashboardState extends State<MainDashboard> {
       if (path != null) {
         final newRecording = {
           'path': path,
-          'name': 'تسجيل ${DateFormat('yyyy/MM/dd HH:mm').format(DateTime.now())}',
+          'name': 'تسجيل ${_recordings.length + 1}',
           'duration': _formatDuration(_recordingDuration),
           'createdAt': DateTime.now().toIso8601String(),
         };
@@ -691,19 +691,57 @@ class _MainDashboardState extends State<MainDashboard> {
     try {
       if (_currentlyPlayingPath == path) {
         await _audioPlayer.stop();
-        setState(() => _currentlyPlayingPath = null);
+        await _positionSub?.cancel();
+        await _durationSub?.cancel();
+        setState(() {
+          _currentlyPlayingPath = null;
+          _currentPosition = Duration.zero;
+          _currentDuration = Duration.zero;
+        });
       } else {
         await _audioPlayer.stop();
+        await _positionSub?.cancel();
+        await _durationSub?.cancel();
+
+        _positionSub = _audioPlayer.onPositionChanged.listen((pos) {
+          if (mounted) setState(() => _currentPosition = pos);
+        });
+        _durationSub = _audioPlayer.onDurationChanged.listen((dur) {
+          if (mounted) setState(() => _currentDuration = dur);
+        });
+
         await _audioPlayer.play(DeviceFileSource(path));
         setState(() => _currentlyPlayingPath = path);
+
         _audioPlayer.onPlayerComplete.listen((_) {
-          if (mounted) setState(() => _currentlyPlayingPath = null);
+          if (mounted) {
+            setState(() {
+              _currentlyPlayingPath = null;
+              _currentPosition = Duration.zero;
+              _currentDuration = Duration.zero;
+            });
+          }
         });
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('خطأ في التشغيل: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareRecording(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await Share.shareXFiles([XFile(path)], text: 'تسجيل صوتي');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في المشاركة: $e')),
         );
       }
     }
@@ -756,6 +794,8 @@ class _MainDashboardState extends State<MainDashboard> {
     _accelerometerSub?.cancel();
     _adhanTimer?.cancel();
     _recordingTimer?.cancel();
+    _positionSub?.cancel();
+    _durationSub?.cancel();
     _audioRecorder.dispose();
     _audioPlayer.dispose();
     for (var timer in _activeTimers) {
@@ -835,7 +875,7 @@ class _MainDashboardState extends State<MainDashboard> {
     final prayerKeywords = ["صلوات", "صلاة", "مواقيت", "اذان", "أذان"];
     final diaryKeywords = ["يوميات", "مفكرة", "تدوين", "خواطر"];
     final eventKeywords = ["مناسبات", "مناسبة", "عيد", "ذكرى"];
-    final recordKeywords = ["سجل", "تسجيل", "مسجل"];
+    final recordKeywords = ["مسجل", "تسجيل", "سجل صوت"];
     if (_hasAny(cmd, prayerKeywords)) {
       setState(() => _currentIndex = 2);
       await _speak("تم الانتقال لمواقيت الصلاة $userTitle.");
@@ -1417,7 +1457,7 @@ class _MainDashboardState extends State<MainDashboard> {
         onTap: (index) => setState(() => _currentIndex = index),
         selectedItemColor: const Color(0xFF1B2A4A),
         unselectedItemColor: Colors.grey,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'التقويم'),
@@ -1635,6 +1675,10 @@ class _MainDashboardState extends State<MainDashboard> {
                       final rec = _recordings[i];
                       final path = rec['path'].toString();
                       final isPlaying = _currentlyPlayingPath == path;
+                      String dateText = '';
+                      try {
+                        dateText = DateFormat('yyyy/MM/dd - HH:mm').format(DateTime.parse(rec['createdAt'].toString()));
+                      } catch (_) {}
                       return Container(
                         margin: const EdgeInsets.symmetric(vertical: 5),
                         decoration: BoxDecoration(
@@ -1643,20 +1687,53 @@ class _MainDashboardState extends State<MainDashboard> {
                           border: Border.all(color: isPlaying ? const Color(0xFFC5A059) : Colors.grey.shade300, width: isPlaying ? 2 : 1),
                           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
                         ),
-                        child: ListTile(
-                          leading: IconButton(
-                            icon: Icon(isPlaying ? Icons.stop_circle : Icons.play_circle_fill, color: const Color(0xFF1B2A4A), size: 32),
-                            onPressed: () => _playRecording(path),
-                          ),
-                          title: Text(rec['name'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                          subtitle: Text('المدة: ${rec['duration']}', style: const TextStyle(fontSize: 12)),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(icon: const Icon(Icons.edit, color: Colors.blue, size: 22), onPressed: () => _renameRecording(i)),
-                              IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22), onPressed: () => _deleteRecording(i)),
-                            ],
-                          ),
+                        child: Column(
+                          children: [
+                            ListTile(
+                              leading: IconButton(
+                                icon: Icon(isPlaying ? Icons.stop_circle : Icons.play_circle_fill, color: const Color(0xFF1B2A4A), size: 32),
+                                onPressed: () => _playRecording(path),
+                              ),
+                              title: Text(rec['name'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              subtitle: Text(
+                                'المدة: ${rec['duration']}\n$dateText',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              isThreeLine: true,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(icon: const Icon(Icons.share, color: Colors.green, size: 22), onPressed: () => _shareRecording(path)),
+                                  IconButton(icon: const Icon(Icons.edit, color: Colors.blue, size: 22), onPressed: () => _renameRecording(i)),
+                                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22), onPressed: () => _deleteRecording(i)),
+                                ],
+                              ),
+                            ),
+                            if (isPlaying)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                child: Column(
+                                  children: [
+                                    Slider(
+                                      value: _currentPosition.inSeconds.toDouble().clamp(0, _currentDuration.inSeconds.toDouble()),
+                                      min: 0,
+                                      max: _currentDuration.inSeconds > 0 ? _currentDuration.inSeconds.toDouble() : 1,
+                                      activeColor: const Color(0xFFC5A059),
+                                      onChanged: (val) {
+                                        _audioPlayer.seek(Duration(seconds: val.toInt()));
+                                      },
+                                    ),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(_formatDuration(_currentPosition), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                        Text(_formatDuration(_currentDuration), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
                         ),
                       );
                     },
