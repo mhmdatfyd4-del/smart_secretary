@@ -27,7 +27,7 @@ dependencies:
   # 🔴 جديد - للمسجل الصوتي
   record: ^5.0.4
   audioplayers: ^5.2.1
-  path_provider: ^2.1.5
+  path_provider: ^2.1.3
 
 dev_dependencies:
   flutter_test:
