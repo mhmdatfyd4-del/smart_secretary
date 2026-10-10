@@ -33,3 +33,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/secretary.jpg
+    - assets/maryam.jpg
+    - assets/nada.jpg
+    - assets/noor.jpg
+    - assets/yasmine.jpg
