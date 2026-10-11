@@ -21,6 +21,7 @@ import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'foreground_service.dart';
 
 // ─── متغيرات عامة ───
@@ -471,7 +472,6 @@ class _MainDashboardState extends State<MainDashboard> {
   Timer? _adhanTimer;
   bool _adhanAlerted = false;
 
-  // 🎙️ المسجل الصوتي
   final AudioRecorder _audioRecorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isRecording = false;
@@ -501,6 +501,13 @@ class _MainDashboardState extends State<MainDashboard> {
   Future<void> _startBackgroundService() async {
     try {
       await startForegroundService();
+      FlutterForegroundTask.addTaskDataCallback((data) {
+        if (data == 'SHAKE_DETECTED') {
+          if (mounted && !_isListening && !_starting && !_isRecording) {
+            _listenVoiceCommand();
+          }
+        }
+      });
     } catch (_) {}
   }
 
@@ -627,7 +634,6 @@ class _MainDashboardState extends State<MainDashboard> {
     await prefs.setBool('adhan_alert_enabled', _settings.adhanAlertEnabled);
   }
 
-  // ─── المسجل الصوتي ───
   Future<void> _loadRecordings() async {
     final prefs = await SharedPreferences.getInstance();
     String? recordingsString = prefs.getString('saved_recordings');
@@ -1134,7 +1140,6 @@ class _MainDashboardState extends State<MainDashboard> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
   }
 
-  // ⚙️ شاشة الإعدادات
   void _openSettingsScreen() {
     showDialog(
       context: context,
@@ -1633,50 +1638,25 @@ class _MainDashboardState extends State<MainDashboard> {
               children: [
                 const Icon(Icons.mic, color: Color(0xFFC5A059), size: 40),
                 const SizedBox(height: 10),
-                Text(
-                  _isRecording ? 'جاري التسجيل...' : 'اضغط للتسجيل',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
+                Text(_isRecording ? 'جاري التسجيل...' : 'اضغط للتسجيل', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                Text(
-                  _formatDuration(_recordingDuration),
-                  style: const TextStyle(color: Color(0xFFC5A059), fontSize: 24, fontWeight: FontWeight.bold),
-                ),
+                Text(_formatDuration(_recordingDuration), style: const TextStyle(color: Color(0xFFC5A059), fontSize: 24, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 15),
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isRecording ? Colors.red : const Color(0xFFC5A059),
-                    minimumSize: const Size.fromHeight(50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: _isRecording ? Colors.red : const Color(0xFFC5A059), minimumSize: const Size.fromHeight(50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                   onPressed: _isRecording ? _stopRecording : _startRecording,
                   icon: Icon(_isRecording ? Icons.stop : Icons.fiber_manual_record, color: _isRecording ? Colors.white : Colors.black),
-                  label: Text(
-                    _isRecording ? 'إيقاف التسجيل' : 'بدء التسجيل',
-                    style: TextStyle(color: _isRecording ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
-                  ),
+                  label: Text(_isRecording ? 'إيقاف التسجيل' : 'بدء التسجيل', style: TextStyle(color: _isRecording ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 20),
-          const Align(
-            alignment: Alignment.centerRight,
-            child: Text('التسجيلات المحفوظة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
-          ),
+          const Align(alignment: Alignment.centerRight, child: Text('التسجيلات المحفوظة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A)))),
           const SizedBox(height: 10),
           Expanded(
             child: _recordings.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.mic_none, size: 60, color: Colors.grey.shade400),
-                        const SizedBox(height: 10),
-                        const Text('لا توجد تسجيلات', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                      ],
-                    ),
-                  )
+                ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.mic_none, size: 60, color: Colors.grey.shade400), const SizedBox(height: 10), const Text('لا توجد تسجيلات', style: TextStyle(color: Colors.grey, fontSize: 14))]))
                 : ListView.builder(
                     itemCount: _recordings.length,
                     itemBuilder: (ctx, i) {
@@ -1689,57 +1669,36 @@ class _MainDashboardState extends State<MainDashboard> {
                       } catch (_) {}
                       return Container(
                         margin: const EdgeInsets.symmetric(vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: isPlaying ? const Color(0xFFC5A059) : Colors.grey.shade300, width: isPlaying ? 2 : 1),
-                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
-                        ),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: isPlaying ? const Color(0xFFC5A059) : Colors.grey.shade300, width: isPlaying ? 2 : 1), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)]),
                         child: Column(
                           children: [
                             ListTile(
-                              leading: IconButton(
-                                icon: Icon(isPlaying ? Icons.stop_circle : Icons.play_circle_fill, color: const Color(0xFF1B2A4A), size: 32),
-                                onPressed: () => _playRecording(path),
-                              ),
+                              leading: IconButton(icon: Icon(isPlaying ? Icons.stop_circle : Icons.play_circle_fill, color: const Color(0xFF1B2A4A), size: 32), onPressed: () => _playRecording(path)),
                               title: Text(rec['name'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              subtitle: Text(
-                                'المدة: ${rec['duration']}\n$dateText',
-                                style: const TextStyle(fontSize: 12),
-                              ),
+                              subtitle: Text('المدة: ${rec['duration']}\n$dateText', style: const TextStyle(fontSize: 12)),
                               isThreeLine: true,
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(icon: const Icon(Icons.share, color: Colors.green, size: 22), onPressed: () => _shareRecording(path)),
-                                  IconButton(icon: const Icon(Icons.edit, color: Colors.blue, size: 22), onPressed: () => _renameRecording(i)),
-                                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22), onPressed: () => _deleteRecording(i)),
-                                ],
-                              ),
+                              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                                IconButton(icon: const Icon(Icons.share, color: Colors.green, size: 22), onPressed: () => _shareRecording(path)),
+                                IconButton(icon: const Icon(Icons.edit, color: Colors.blue, size: 22), onPressed: () => _renameRecording(i)),
+                                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22), onPressed: () => _deleteRecording(i)),
+                              ]),
                             ),
                             if (isPlaying)
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                child: Column(
-                                  children: [
-                                    Slider(
-                                      value: _currentPosition.inSeconds.toDouble().clamp(0, _currentDuration.inSeconds.toDouble()),
-                                      min: 0,
-                                      max: _currentDuration.inSeconds > 0 ? _currentDuration.inSeconds.toDouble() : 1,
-                                      activeColor: const Color(0xFFC5A059),
-                                      onChanged: (val) {
-                                        _audioPlayer.seek(Duration(seconds: val.toInt()));
-                                      },
-                                    ),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(_formatDuration(_currentPosition), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                        Text(_formatDuration(_currentDuration), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                      ],
-                                    ),
-                                  ],
-                                ),
+                                child: Column(children: [
+                                  Slider(
+                                    value: _currentPosition.inSeconds.toDouble().clamp(0, _currentDuration.inSeconds.toDouble()),
+                                    min: 0,
+                                    max: _currentDuration.inSeconds > 0 ? _currentDuration.inSeconds.toDouble() : 1,
+                                    activeColor: const Color(0xFFC5A059),
+                                    onChanged: (val) { _audioPlayer.seek(Duration(seconds: val.toInt())); },
+                                  ),
+                                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                                    Text(_formatDuration(_currentPosition), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                    Text(_formatDuration(_currentDuration), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                  ]),
+                                ]),
                               ),
                           ],
                         ),
