@@ -21,8 +21,6 @@ import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'foreground_service.dart';
 
 // ─── متغيرات عامة ───
 final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
@@ -46,7 +44,6 @@ void main() async {
   await initializeDateFormatting('ar');
   tz.initializeTimeZones();
   await _initNotifications();
-  await initForegroundService();
 
   final prefs = await SharedPreferences.getInstance();
   bool isFirstTime = prefs.getBool('is_first_time') ?? true;
@@ -495,20 +492,6 @@ class _MainDashboardState extends State<MainDashboard> {
     _initSpeech();
     _initShakeDetector();
     _startAdhanWatcher();
-    _startBackgroundService();
-  }
-
-  Future<void> _startBackgroundService() async {
-    try {
-      await startForegroundService();
-      FlutterForegroundTask.addTaskDataCallback((data) {
-        if (data == 'SHAKE_DETECTED') {
-          if (mounted && !_isListening && !_starting && !_isRecording) {
-            _listenVoiceCommand();
-          }
-        }
-      });
-    } catch (_) {}
   }
 
   Future<void> _initSpeech() async {
@@ -1027,29 +1010,29 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   Future<void> _scheduleBackgroundNotification(String taskTitle, DateTime scheduledDateTime) async {
-  final tzTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
-  const androidDetails = AndroidNotificationDetails(
-    'secretary_alarm_v2',
-    'منبه السكرتير v2',
-    channelDescription: 'تنبيهات المواعيد',
-    importance: Importance.max,
-    priority: Priority.high,
-    playSound: true,
-    enableVibration: true,
-    category: AndroidNotificationCategory.alarm,
-    autoCancel: false,
-    ongoing: true,
-  );
-  const notificationDetails = NotificationDetails(android: androidDetails);
-  await _notifications.zonedSchedule(
-    taskTitle.hashCode,
-    'تنبيه هام!',
-    'حان الآن موعد: $taskTitle',
-    tzTime,
-    notificationDetails,
-    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-  );
+    final tzTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
+    const androidDetails = AndroidNotificationDetails(
+      'secretary_alarm_v2',
+      'منبه السكرتير v2',
+      channelDescription: 'تنبيهات المواعيد',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      category: AndroidNotificationCategory.alarm,
+      autoCancel: false,
+      ongoing: true,
+    );
+    const notificationDetails = NotificationDetails(android: androidDetails);
+    await _notifications.zonedSchedule(
+      taskTitle.hashCode,
+      'تنبيه هام!',
+      'حان الآن موعد: $taskTitle',
+      tzTime,
+      notificationDetails,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+    );
   }
 
   void _startAlarmLoop(String taskTitle, String repeat, String interval, List<String> customDays, DateTime scheduled) {
