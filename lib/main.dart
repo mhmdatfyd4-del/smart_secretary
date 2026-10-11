@@ -1027,10 +1027,29 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   Future<void> _scheduleBackgroundNotification(String taskTitle, DateTime scheduledDateTime) async {
-    final tzTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
-    const androidDetails = AndroidNotificationDetails('secretary_alarm', 'منبه السكرتير', channelDescription: 'تنبيهات المواعيد', importance: Importance.max, priority: Priority.high, playSound: true);
-    const notificationDetails = NotificationDetails(android: androidDetails);
-    await _notifications.zonedSchedule(taskTitle.hashCode, 'تنبيه هام!', 'حان الآن موعد: $taskTitle', tzTime, notificationDetails, androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime);
+  final tzTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
+  const androidDetails = AndroidNotificationDetails(
+    'secretary_alarm_v2',
+    'منبه السكرتير v2',
+    channelDescription: 'تنبيهات المواعيد',
+    importance: Importance.max,
+    priority: Priority.high,
+    playSound: true,
+    enableVibration: true,
+    category: AndroidNotificationCategory.alarm,
+    autoCancel: false,
+    ongoing: true,
+  );
+  const notificationDetails = NotificationDetails(android: androidDetails);
+  await _notifications.zonedSchedule(
+    taskTitle.hashCode,
+    'تنبيه هام!',
+    'حان الآن موعد: $taskTitle',
+    tzTime,
+    notificationDetails,
+    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+  );
   }
 
   void _startAlarmLoop(String taskTitle, String repeat, String interval, List<String> customDays, DateTime scheduled) {
