@@ -482,6 +482,7 @@ class _MainDashboardState extends State<MainDashboard> {
   StreamSubscription? _durationSub;
   double _playbackVolume = 1.0;
   double _playbackSpeed = 1.0;
+  double _ttsVolume = 1.0;
 
   String get _userTitle => widget.isUserMale ? "يا فندم" : "يا أستاذة";
 
@@ -497,7 +498,6 @@ class _MainDashboardState extends State<MainDashboard> {
     _scheduleAdhan7Days();
   }
 
-  // 🕌 جدولة تنبيهات الأذان لـ 7 أيام مقدماً
   Future<void> _scheduleAdhan7Days() async {
     try {
       for (int day = 0; day < 7; day++) {
@@ -680,6 +680,7 @@ class _MainDashboardState extends State<MainDashboard> {
     _settings.adhanAlertEnabled = prefs.getBool('adhan_alert_enabled') ?? true;
     _playbackVolume = prefs.getDouble('playback_volume') ?? 1.0;
     _playbackSpeed = prefs.getDouble('playback_speed') ?? 1.0;
+    _ttsVolume = prefs.getDouble('tts_volume') ?? 1.0;
     setState(() {});
   }
 
@@ -699,6 +700,7 @@ class _MainDashboardState extends State<MainDashboard> {
     await prefs.setBool('adhan_alert_enabled', _settings.adhanAlertEnabled);
     await prefs.setDouble('playback_volume', _playbackVolume);
     await prefs.setDouble('playback_speed', _playbackSpeed);
+    await prefs.setDouble('tts_volume', _ttsVolume);
   }
 
   Future<void> _loadRecordings() async {
@@ -900,7 +902,7 @@ class _MainDashboardState extends State<MainDashboard> {
     await _tts.setLanguage("ar-SA");
     await _tts.setPitch(1.20);
     await _tts.setSpeechRate(_settings.speechRate);
-    await _tts.setVolume(_settings.speechVolume);
+    await _tts.setVolume(_settings.speechVolume * _ttsVolume);
     if (_settings.greetingEnabled) {
       await _tts.speak("أهلاً بك $_userTitle. أنا سكرتيرتك ${widget.secretaryName}، هُز الهاتف في أي وقت لأكون في خدمتك.");
     }
@@ -910,13 +912,13 @@ class _MainDashboardState extends State<MainDashboard> {
     await _tts.setLanguage("ar-SA");
     await _tts.setPitch(1.20);
     await _tts.setSpeechRate(_settings.speechRate);
-    await _tts.setVolume(_settings.speechVolume);
+    await _tts.setVolume(_settings.speechVolume * _ttsVolume);
     _configureVoiceAndGreet();
   }
 
   Future<void> _speak(String text) async {
     await _tts.setSpeechRate(_settings.speechRate);
-    await _tts.setVolume(_settings.speechVolume);
+    await _tts.setVolume(_settings.speechVolume * _ttsVolume);
     await _tts.speak(text);
   }
 
@@ -1059,6 +1061,9 @@ class _MainDashboardState extends State<MainDashboard> {
 
   int _getIntervalSeconds(String interval) {
     switch (interval) {
+      case 'كل 10 ثواني': return 10;
+      case 'كل 20 ثانية': return 20;
+      case 'كل 30 ثانية': return 30;
       case 'كل دقيقة': return 60;
       case 'كل دقيقتين': return 120;
       case 'كل 3 دقايق': return 180;
@@ -1265,6 +1270,20 @@ class _MainDashboardState extends State<MainDashboard> {
                   onChanged: (val) => setStateSB(() => _settings.voiceLevel = val ?? 'عالي'),
                 ),
                 const Divider(),
+                const Text('🔊 صوت السكرتيرة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Row(children: [
+                  Expanded(
+                    child: Slider(
+                      value: _ttsVolume,
+                      min: 0.0,
+                      max: 1.0,
+                      activeColor: const Color(0xFFC5A059),
+                      onChanged: (val) => setStateSB(() => _ttsVolume = val),
+                    ),
+                  ),
+                  Text('${(_ttsVolume * 100).toInt()}%', style: const TextStyle(fontSize: 12)),
+                ]),
+                const Divider(),
                 SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('الجملة الترحيبية', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), value: _settings.greetingEnabled, activeColor: const Color(0xFF1B2A4A), onChanged: (v) => setStateSB(() => _settings.greetingEnabled = v)),
                 SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('تنبيه الأذان', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), value: _settings.adhanAlertEnabled, activeColor: const Color(0xFF1B2A4A), onChanged: (v) => setStateSB(() => _settings.adhanAlertEnabled = v)),
               ],
@@ -1295,7 +1314,7 @@ class _MainDashboardState extends State<MainDashboard> {
     String selectedInterval = 'كل 5 دقايق';
     List<String> selectedDays = [];
     final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'أسبوعي', 'شهري', 'مخصص'];
-    final List<String> intervalOptions = ['بدون تنبيه', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+    final List<String> intervalOptions = ['بدون تنبيه', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1372,7 +1391,7 @@ class _MainDashboardState extends State<MainDashboard> {
     String selectedInterval = task['repeatInterval'] ?? 'كل 5 دقايق';
     List<String> selectedDays = List<String>.from(task['customDays'] ?? []);
     final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'أسبوعي', 'شهري', 'مخصص'];
-    final List<String> intervalOptions = ['بدون تنبيه', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+    final List<String> intervalOptions = ['بدون تنبيه', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
