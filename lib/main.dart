@@ -480,6 +480,8 @@ class _MainDashboardState extends State<MainDashboard> {
   Duration _currentDuration = Duration.zero;
   StreamSubscription? _positionSub;
   StreamSubscription? _durationSub;
+  double _playbackVolume = 1.0;
+  double _playbackSpeed = 1.0;
 
   String get _userTitle => widget.isUserMale ? "يا فندم" : "يا أستاذة";
 
@@ -498,7 +500,6 @@ class _MainDashboardState extends State<MainDashboard> {
   // 🕌 جدولة تنبيهات الأذان لـ 7 أيام مقدماً
   Future<void> _scheduleAdhan7Days() async {
     try {
-      // إلغاء التنبيهات القديمة
       for (int day = 0; day < 7; day++) {
         for (final prayer in ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']) {
           await _notifications.cancel((day * 10) + prayer.hashCode);
@@ -542,7 +543,6 @@ class _MainDashboardState extends State<MainDashboard> {
 
         for (final prayer in prayers) {
           final prayerTime = dayPrayers[prayer]!;
-          // تخطى الأوقات اللي عدت
           if (prayerTime.isBefore(now)) continue;
 
           final androidDetails = AndroidNotificationDetails(
@@ -678,6 +678,8 @@ class _MainDashboardState extends State<MainDashboard> {
     _settings.voiceLevel = prefs.getString('voice_level') ?? 'عالي';
     _settings.greetingEnabled = prefs.getBool('greeting_enabled') ?? true;
     _settings.adhanAlertEnabled = prefs.getBool('adhan_alert_enabled') ?? true;
+    _playbackVolume = prefs.getDouble('playback_volume') ?? 1.0;
+    _playbackSpeed = prefs.getDouble('playback_speed') ?? 1.0;
     setState(() {});
   }
 
@@ -695,6 +697,8 @@ class _MainDashboardState extends State<MainDashboard> {
     await prefs.setString('voice_level', _settings.voiceLevel);
     await prefs.setBool('greeting_enabled', _settings.greetingEnabled);
     await prefs.setBool('adhan_alert_enabled', _settings.adhanAlertEnabled);
+    await prefs.setDouble('playback_volume', _playbackVolume);
+    await prefs.setDouble('playback_speed', _playbackSpeed);
   }
 
   Future<void> _loadRecordings() async {
@@ -723,7 +727,13 @@ class _MainDashboardState extends State<MainDashboard> {
         final fileName = 'rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
         final path = '${recordingsDir.path}/$fileName';
 
-        await _audioRecorder.start(const RecordConfig(), path: path);
+        const config = RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+          numChannels: 1,
+        );
+        await _audioRecorder.start(config, path: path);
         setState(() {
           _isRecording = true;
           _recordingDuration = Duration.zero;
@@ -788,6 +798,8 @@ class _MainDashboardState extends State<MainDashboard> {
           if (mounted) setState(() => _currentDuration = dur);
         });
 
+        await _audioPlayer.setVolume(_playbackVolume);
+        await _audioPlayer.setPlaybackRate(_playbackSpeed);
         await _audioPlayer.play(DeviceFileSource(path));
         setState(() => _currentlyPlayingPath = path);
 
@@ -1780,6 +1792,45 @@ class _MainDashboardState extends State<MainDashboard> {
                                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                                     Text(_formatDuration(_currentPosition), style: const TextStyle(fontSize: 12, color: Colors.grey)),
                                     Text(_formatDuration(_currentDuration), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                  ]),
+                                  const SizedBox(height: 8),
+                                  Row(children: [
+                                    const Icon(Icons.volume_up, size: 20, color: Color(0xFF1B2A4A)),
+                                    Expanded(
+                                      child: Slider(
+                                        value: _playbackVolume,
+                                        min: 0.0,
+                                        max: 1.0,
+                                        activeColor: const Color(0xFFC5A059),
+                                        onChanged: (val) {
+                                          setState(() => _playbackVolume = val);
+                                          _audioPlayer.setVolume(val);
+                                          _saveSettings();
+                                        },
+                                      ),
+                                    ),
+                                    Text('${(_playbackVolume * 100).toInt()}%', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                  ]),
+                                  const SizedBox(height: 4),
+                                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                    const Text('السرعة:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    const SizedBox(width: 8),
+                                    ...[0.5, 1.0, 1.5, 2.0].map((speed) {
+                                      final isSelected = _playbackSpeed == speed;
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                                        child: ChoiceChip(
+                                          label: Text('${speed}x', style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : Colors.black87)),
+                                          selected: isSelected,
+                                          selectedColor: const Color(0xFF1B2A4A),
+                                          onSelected: (v) {
+                                            setState(() => _playbackSpeed = speed);
+                                            _audioPlayer.setPlaybackRate(speed);
+                                            _saveSettings();
+                                          },
+                                        ),
+                                      );
+                                    }).toList(),
                                   ]),
                                 ]),
                               ),
