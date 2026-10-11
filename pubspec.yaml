@@ -32,9 +32,8 @@ dependencies:
   # المشاركة
   share_plus: ^7.2.1
 
-  # 🔴 للأذان والمنبه في الخلفية
-awqat: ^0.1.14
-android_alarm_manager_plus: ^4.0.8
+  # المنبه في الخلفية
+  android_alarm_manager_plus: ^4.0.8
 
 dev_dependencies:
   flutter_test:
@@ -49,3 +48,4 @@ flutter:
     - assets/nada.jpg
     - assets/noor.jpg
     - assets/yasmine.jpg
+    - assets/sounds/
