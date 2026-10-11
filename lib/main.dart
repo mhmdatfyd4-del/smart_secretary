@@ -21,7 +21,7 @@ import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:awqat/awqat.dart';
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 // ─── متغيرات عامة ───
 final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
@@ -40,11 +40,58 @@ String _getSecretaryImage(String name) {
   return _secretaryImages[name] ?? 'assets/secretary.jpg';
 }
 
+// ─── دوال تشغيل صوت الأذان في الخلفية ───
+@pragma('vm:entry-point')
+Future<void> _playFajrAdhan() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final player = AudioPlayer();
+    await player.play(AssetSource('sounds/adhan_fajr.mp3'));
+  } catch (_) {}
+}
+
+@pragma('vm:entry-point')
+Future<void> _playDhuhrAdhan() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final player = AudioPlayer();
+    await player.play(AssetSource('sounds/adhan_dhuhr.mp3'));
+  } catch (_) {}
+}
+
+@pragma('vm:entry-point')
+Future<void> _playAsrAdhan() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final player = AudioPlayer();
+    await player.play(AssetSource('sounds/adhan_asr.mp3'));
+  } catch (_) {}
+}
+
+@pragma('vm:entry-point')
+Future<void> _playMaghribAdhan() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final player = AudioPlayer();
+    await player.play(AssetSource('sounds/adhan_maghrib.mp3'));
+  } catch (_) {}
+}
+
+@pragma('vm:entry-point')
+Future<void> _playIshaAdhan() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final player = AudioPlayer();
+    await player.play(AssetSource('sounds/adhan_isha.mp3'));
+  } catch (_) {}
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ar');
   tz.initializeTimeZones();
   await _initNotifications();
+  await AndroidAlarmManager.initialize();
 
   final prefs = await SharedPreferences.getInstance();
   bool isFirstTime = prefs.getBool('is_first_time') ?? true;
@@ -493,43 +540,52 @@ class _MainDashboardState extends State<MainDashboard> {
     _initSpeech();
     _initShakeDetector();
     _startAdhanWatcher();
-    _setupAdhanReminders();
+    _scheduleAdhanAlarms();
   }
 
-  // 🕌 إعداد تنبيهات الأذان في الخلفية
-  Future<void> _setupAdhanReminders() async {
+  // 🕌 جدولة تنبيهات الأذان بـ AndroidAlarmManager
+  Future<void> _scheduleAdhanAlarms() async {
+    if (!_settings.adhanAlertEnabled) return;
     try {
-      await Awqat.initialize(
-        config: AwqatConfig(
-          latitude: 30.0444,
-          longitude: 31.2357,
-          method: CalculationMethod.egyptian,
-          madhab: Madhab.shafi,
-        ),
-      );
+      final coordinates = Coordinates(30.0444, 31.2357);
+      final date = DateComponents.from(DateTime.now());
+      final params = CalculationMethod.egyptian.getParameters();
+      params.madhab = Madhab.shafi;
+      final prayerTimes = PrayerTimes(coordinates, date, params);
 
-      if (!await Awqat.hasPermission()) {
-        await Awqat.requestPermission();
+      final now = DateTime.now();
+
+      final Map<String, DateTime> prayers = {
+        'fajr': prayerTimes.fajr,
+        'dhuhr': prayerTimes.dhuhr,
+        'asr': prayerTimes.asr,
+        'maghrib': prayerTimes.maghrib,
+        'isha': prayerTimes.isha,
+      };
+
+      final Map<String, Function> callbacks = {
+        'fajr': _playFajrAdhan,
+        'dhuhr': _playDhuhrAdhan,
+        'asr': _playAsrAdhan,
+        'maghrib': _playMaghribAdhan,
+        'isha': _playIshaAdhan,
+      };
+
+      for (final entry in prayers.entries) {
+        var prayerTime = entry.value;
+        if (prayerTime.isBefore(now)) {
+          prayerTime = prayerTime.add(const Duration(days: 1));
+        }
+
+        await AndroidAlarmManager.oneShotAt(
+          tz.TZDateTime.from(prayerTime, tz.local),
+          entry.key.hashCode,
+          callbacks[entry.key]!,
+          exact: true,
+          wakeup: true,
+          rescheduleOnReboot: true,
+        );
       }
-
-      await Awqat.scheduleReminders(
-        prayers: [
-          PrayerType.fajr,
-          PrayerType.dhuhr,
-          PrayerType.asr,
-          PrayerType.maghrib,
-          PrayerType.isha,
-        ],
-        playSound: true,
-        sound: 'adhan',
-        messages: [
-          "حان الآن موعد صلاة الفجر",
-          "حان الآن موعد صلاة الظهر",
-          "حان الآن موعد صلاة العصر",
-          "حان الآن موعد صلاة المغرب",
-          "حان الآن موعد صلاة العشاء",
-        ],
-      );
     } catch (_) {}
   }
 
