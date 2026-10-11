@@ -11,28 +11,54 @@ void startCallback() {
 class SecretaryTaskHandler extends TaskHandler {
   StreamSubscription? _accelSub;
   DateTime? _lastShake;
+  int _shakeCount = 0;
+  int _eventCount = 0;
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    // 🔴 كود الهز - شغال حتى لو التطبيق مقفول
-    _accelSub = accelerometerEventStream().listen((AccelerometerEvent event) {
-      double gX = event.x / 9.81;
-      double gY = event.y / 9.81;
-      double gZ = event.z / 9.81;
-      double gForce = sqrt(gX * gX + gY * gY + gZ * gZ);
+    try {
+      _accelSub = accelerometerEventStream().listen((AccelerometerEvent event) {
+        _eventCount++;
+        
+        // 🔴 نعرض عدد الأحداث في الإشعار
+        if (_eventCount % 100 == 0) {
+          FlutterForegroundTask.updateService(
+            notificationTitle: 'السكرتيرة جاهزة',
+            notificationText: 'أحداث: $_eventCount • هزات: $_shakeCount',
+          );
+        }
 
-      if (gForce > 2.2) {
-        final now = DateTime.now();
-        if (_lastShake != null && now.difference(_lastShake!) < const Duration(seconds: 3)) return;
-        _lastShake = now;
+        double gX = event.x / 9.81;
+        double gY = event.y / 9.81;
+        double gZ = event.z / 9.81;
+        double gForce = sqrt(gX * gX + gY * gY + gZ * gZ);
 
-        // نبعت إشارة للـ main isolate
-        FlutterForegroundTask.sendDataToMain('SHAKE_DETECTED');
+        if (gForce > 2.2) {
+          final now = DateTime.now();
+          if (_lastShake != null && now.difference(_lastShake!) < const Duration(seconds: 3)) return;
+          _lastShake = now;
+          _shakeCount++;
 
-        // نفتح التطبيق
-        FlutterForegroundTask.launchApp();
-      }
-    });
+          FlutterForegroundTask.updateService(
+            notificationTitle: 'السكرتيرة جاهزة',
+            notificationText: 'هزات: $_shakeCount',
+          );
+
+          FlutterForegroundTask.sendDataToMain('SHAKE_DETECTED');
+          FlutterForegroundTask.launchApp();
+        }
+      });
+
+      FlutterForegroundTask.updateService(
+        notificationTitle: 'السكرتيرة جاهزة',
+        notificationText: 'تم تشغيل مراقبة الهز',
+      );
+    } catch (e) {
+      FlutterForegroundTask.updateService(
+        notificationTitle: 'خطأ في المراقبة',
+        notificationText: '$e',
+      );
+    }
   }
 
   @override
