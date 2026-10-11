@@ -1475,7 +1475,7 @@ class _MainDashboardState extends State<MainDashboard> {
               children: [
                 TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المناسبة')),
                 const SizedBox(height: 10),
-                TextField(controller: detailCtrl, decoration: const InputDecoration(labelText: 'التفاصيل')),
+                TextField(controller: detailCtrl, decoration: const InputDecoration(labelText: 'التفاصيل/الاسم')), // <--- التعديل هنا
                 const SizedBox(height: 15),
                 ListTile(contentPadding: EdgeInsets.zero, title: Text('التاريخ: ${DateFormat('yyyy/MM/dd').format(selectedEventDate)}'), trailing: const Icon(Icons.calendar_today, color: Color(0xFF1B2A4A)), onTap: () async {
                   final picked = await showDatePicker(context: context, initialDate: selectedEventDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
