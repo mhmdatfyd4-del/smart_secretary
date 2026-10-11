@@ -167,6 +167,216 @@ class AppSettings {
   }
 }
 
+// ═══════════════════════════════════════
+// شاشة الإعدادات (كاملة)
+// ═══════════════════════════════════════
+class SettingsScreen extends StatefulWidget {
+  final AppSettings settings;
+  final double ttsVolume;
+  final Future<void> Function(int hour, int minute, String voiceLevel, bool greeting, bool adhan, double ttsVol) onSave;
+
+  const SettingsScreen({
+    super.key,
+    required this.settings,
+    required this.ttsVolume,
+    required this.onSave,
+  });
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  late int _defaultReminderHour;
+  late int _defaultReminderMinute;
+  late String _voiceLevel;
+  late bool _greetingEnabled;
+  late bool _adhanAlertEnabled;
+  late double _ttsVolume;
+
+  @override
+  void initState() {
+    super.initState();
+    _defaultReminderHour = widget.settings.defaultReminderHour;
+    _defaultReminderMinute = widget.settings.defaultReminderMinute;
+    _voiceLevel = widget.settings.voiceLevel;
+    _greetingEnabled = widget.settings.greetingEnabled;
+    _adhanAlertEnabled = widget.settings.adhanAlertEnabled;
+    _ttsVolume = widget.ttsVolume;
+  }
+
+  Future<void> _save() async {
+    await widget.onSave(
+      _defaultReminderHour,
+      _defaultReminderMinute,
+      _voiceLevel,
+      _greetingEnabled,
+      _adhanAlertEnabled,
+      _ttsVolume,
+    );
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ الإعدادات')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('الإعدادات', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF1B2A4A),
+        foregroundColor: Colors.white,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // وقت التذكير الافتراضي
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: ListTile(
+              leading: const Icon(Icons.access_time, color: Color(0xFF1B2A4A), size: 30),
+              title: const Text('وقت التذكير الافتراضي للمناسبات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${_defaultReminderHour.toString().padLeft(2, '0')}:${_defaultReminderMinute.toString().padLeft(2, '0')}',
+                  style: const TextStyle(fontSize: 20, color: Color(0xFFC5A059), fontWeight: FontWeight.bold),
+                ),
+              ),
+              trailing: const Icon(Icons.edit, color: Color(0xFF1B2A4A)),
+              onTap: () async {
+                final t = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay(hour: _defaultReminderHour, minute: _defaultReminderMinute),
+                );
+                if (t != null) {
+                  setState(() {
+                    _defaultReminderHour = t.hour;
+                    _defaultReminderMinute = t.minute;
+                  });
+                }
+              },
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // مستوى الصوت
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.volume_up, color: Color(0xFF1B2A4A), size: 26),
+                      SizedBox(width: 10),
+                      Text('مستوى الصوت', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _voiceLevel,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    items: ['عالي', 'متوسط', 'منخفض'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                    onChanged: (val) => setState(() => _voiceLevel = val ?? 'عالي'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // صوت السكرتيرة (TTS)
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.record_voice_over, color: Color(0xFF1B2A4A), size: 26),
+                      SizedBox(width: 10),
+                      Text('صوت السكرتيرة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    ],
+                  ),
+                  Row(children: [
+                    Expanded(
+                      child: Slider(
+                        value: _ttsVolume,
+                        min: 0.0,
+                        max: 1.0,
+                        activeColor: const Color(0xFFC5A059),
+                        onChanged: (val) => setState(() => _ttsVolume = val),
+                      ),
+                    ),
+                    Text('${(_ttsVolume * 100).toInt()}%', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // الجملة الترحيبية
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: SwitchListTile(
+              secondary: const Icon(Icons.waving_hand, color: Color(0xFF1B2A4A), size: 26),
+              title: const Text('الجملة الترحيبية عند البدء', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              value: _greetingEnabled,
+              activeColor: const Color(0xFF1B2A4A),
+              onChanged: (v) => setState(() => _greetingEnabled = v),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // تنبيه الأذان
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: SwitchListTile(
+              secondary: const Icon(Icons.mosque, color: Color(0xFF1B2A4A), size: 26),
+              title: const Text('تنبيه الأذان', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              value: _adhanAlertEnabled,
+              activeColor: const Color(0xFF1B2A4A),
+              onChanged: (v) => setState(() => _adhanAlertEnabled = v),
+            ),
+          ),
+
+          const SizedBox(height: 30),
+
+          // زر الحفظ
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B2A4A),
+              minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.save, color: Color(0xFFC5A059)),
+            label: const Text('حفظ الإعدادات', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            onPressed: _save,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class SecretaryApp extends StatelessWidget {
   final bool isFirstTime;
   final String? savedName;
@@ -447,7 +657,7 @@ class MainDashboard extends StatefulWidget {
   State<MainDashboard> createState() => _MainDashboardState();
 }
 
-class _MainDashboardState extends State<MainDashboard> {
+class _MainDashboardState extends State<MainDashboard> with SingleTickerProviderStateMixin {
   final FlutterTts _tts = FlutterTts();
   final stt.SpeechToText _speech = stt.SpeechToText();
 
@@ -498,6 +708,7 @@ class _MainDashboardState extends State<MainDashboard> {
     _scheduleAdhan7Days();
   }
 
+  // 🕌 جدولة تنبيهات الأذان لـ 7 أيام
   Future<void> _scheduleAdhan7Days() async {
     try {
       for (int day = 0; day < 7; day++) {
@@ -1239,69 +1450,26 @@ class _MainDashboardState extends State<MainDashboard> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
   }
 
+  // 🎯 فتح شاشة الإعدادات الكاملة
   void _openSettingsScreen() {
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateSB) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          title: const Row(children: [Icon(Icons.settings, color: Color(0xFF1B2A4A), size: 28), SizedBox(width: 10), Text('الإعدادات', style: TextStyle(fontWeight: FontWeight.bold))]),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('وقت التذكير الافتراضي للمناسبات:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(child: Text('${_settings.defaultReminderHour.toString().padLeft(2, '0')}:${_settings.defaultReminderMinute.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A)))),
-                  TextButton.icon(icon: const Icon(Icons.access_time, color: Color(0xFFC5A059)), label: const Text('تغيير'), onPressed: () async {
-                    final t = await showTimePicker(context: context, initialTime: TimeOfDay(hour: _settings.defaultReminderHour, minute: _settings.defaultReminderMinute));
-                    if (t != null) setStateSB(() { _settings.defaultReminderHour = t.hour; _settings.defaultReminderMinute = t.minute; });
-                  }),
-                ]),
-                const Divider(),
-                const Text('مستوى الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: _settings.voiceLevel,
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
-                  items: ['عالي', 'متوسط', 'منخفض'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-                  onChanged: (val) => setStateSB(() => _settings.voiceLevel = val ?? 'عالي'),
-                ),
-                const Divider(),
-                const Text('🔊 صوت السكرتيرة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                Row(children: [
-                  Expanded(
-                    child: Slider(
-                      value: _ttsVolume,
-                      min: 0.0,
-                      max: 1.0,
-                      activeColor: const Color(0xFFC5A059),
-                      onChanged: (val) => setStateSB(() => _ttsVolume = val),
-                    ),
-                  ),
-                  Text('${(_ttsVolume * 100).toInt()}%', style: const TextStyle(fontSize: 12)),
-                ]),
-                const Divider(),
-                SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('الجملة الترحيبية', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), value: _settings.greetingEnabled, activeColor: const Color(0xFF1B2A4A), onChanged: (v) => setStateSB(() => _settings.greetingEnabled = v)),
-                SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('تنبيه الأذان', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), value: _settings.adhanAlertEnabled, activeColor: const Color(0xFF1B2A4A), onChanged: (v) => setStateSB(() => _settings.adhanAlertEnabled = v)),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
-              onPressed: () async {
-                await _saveSettings();
-                await _scheduleAdhan7Days();
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ الإعدادات')));
-              },
-              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
-            ),
-          ],
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SettingsScreen(
+          settings: _settings,
+          ttsVolume: _ttsVolume,
+          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol) async {
+            setState(() {
+              _settings.defaultReminderHour = hour;
+              _settings.defaultReminderMinute = minute;
+              _settings.voiceLevel = voiceLevel;
+              _settings.greetingEnabled = greeting;
+              _settings.adhanAlertEnabled = adhan;
+              _ttsVolume = ttsVol;
+            });
+            await _saveSettings();
+            await _scheduleAdhan7Days();
+          },
         ),
       ),
     );
@@ -1475,7 +1643,7 @@ class _MainDashboardState extends State<MainDashboard> {
               children: [
                 TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المناسبة')),
                 const SizedBox(height: 10),
-                TextField(controller: detailCtrl, decoration: const InputDecoration(labelText: 'التفاصيل/الاسم')), // <--- التعديل هنا
+                TextField(controller: detailCtrl, decoration: const InputDecoration(labelText: 'التفاصيل')),
                 const SizedBox(height: 15),
                 ListTile(contentPadding: EdgeInsets.zero, title: Text('التاريخ: ${DateFormat('yyyy/MM/dd').format(selectedEventDate)}'), trailing: const Icon(Icons.calendar_today, color: Color(0xFF1B2A4A)), onTap: () async {
                   final picked = await showDatePicker(context: context, initialDate: selectedEventDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
@@ -1574,7 +1742,25 @@ class _MainDashboardState extends State<MainDashboard> {
           IconButton(icon: const Icon(Icons.settings, color: Color(0xFFC5A059)), onPressed: _openSettingsScreen),
         ],
       ),
-      body: screens[_currentIndex],
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        transitionBuilder: (Widget child, Animation<double> animation) {
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.05, 0),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+              child: child,
+            ),
+          );
+        },
+        child: KeyedSubtree(
+          key: ValueKey<int>(_currentIndex),
+          child: screens[_currentIndex],
+        ),
+      ),
       floatingActionButton: _currentIndex == 0
           ? FloatingActionButton.extended(onPressed: _addNewTaskDialog, backgroundColor: const Color(0xFF1B2A4A), icon: const Icon(Icons.add, color: Color(0xFFC5A059)), label: const Text('إضافة موعد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))
           : (_currentIndex == 3
