@@ -21,7 +21,6 @@ import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 // ─── متغيرات عامة ───
 final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
@@ -40,58 +39,11 @@ String _getSecretaryImage(String name) {
   return _secretaryImages[name] ?? 'assets/secretary.jpg';
 }
 
-// ─── دوال تشغيل صوت الأذان في الخلفية ───
-@pragma('vm:entry-point')
-Future<void> _playFajrAdhan() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    final player = AudioPlayer();
-    await player.play(AssetSource('sounds/adhan_fajr.mp3'));
-  } catch (_) {}
-}
-
-@pragma('vm:entry-point')
-Future<void> _playDhuhrAdhan() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    final player = AudioPlayer();
-    await player.play(AssetSource('sounds/adhan_dhuhr.mp3'));
-  } catch (_) {}
-}
-
-@pragma('vm:entry-point')
-Future<void> _playAsrAdhan() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    final player = AudioPlayer();
-    await player.play(AssetSource('sounds/adhan_asr.mp3'));
-  } catch (_) {}
-}
-
-@pragma('vm:entry-point')
-Future<void> _playMaghribAdhan() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    final player = AudioPlayer();
-    await player.play(AssetSource('sounds/adhan_maghrib.mp3'));
-  } catch (_) {}
-}
-
-@pragma('vm:entry-point')
-Future<void> _playIshaAdhan() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    final player = AudioPlayer();
-    await player.play(AssetSource('sounds/adhan_isha.mp3'));
-  } catch (_) {}
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ar');
   tz.initializeTimeZones();
   await _initNotifications();
-  await AndroidAlarmManager.initialize();
 
   final prefs = await SharedPreferences.getInstance();
   bool isFirstTime = prefs.getBool('is_first_time') ?? true;
@@ -540,51 +492,84 @@ class _MainDashboardState extends State<MainDashboard> {
     _initSpeech();
     _initShakeDetector();
     _startAdhanWatcher();
-    _scheduleAdhanAlarms();
+    _scheduleAdhan7Days();
   }
 
-  // 🕌 جدولة تنبيهات الأذان بـ AndroidAlarmManager
-  Future<void> _scheduleAdhanAlarms() async {
-    if (!_settings.adhanAlertEnabled) return;
+  // 🕌 جدولة تنبيهات الأذان لـ 7 أيام مقدماً
+  Future<void> _scheduleAdhan7Days() async {
     try {
-      final coordinates = Coordinates(30.0444, 31.2357);
-      final date = DateComponents.from(DateTime.now());
-      final params = CalculationMethod.egyptian.getParameters();
-      params.madhab = Madhab.shafi;
-      final prayerTimes = PrayerTimes(coordinates, date, params);
+      // إلغاء التنبيهات القديمة
+      for (int day = 0; day < 7; day++) {
+        for (final prayer in ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']) {
+          await _notifications.cancel((day * 10) + prayer.hashCode);
+        }
+      }
+
+      final prayers = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
+      final names = {
+        'fajr': 'الفجر',
+        'dhuhr': 'الظهر',
+        'asr': 'العصر',
+        'maghrib': 'المغرب',
+        'isha': 'العشاء',
+      };
+      final sounds = {
+        'fajr': 'adhan_fajr',
+        'dhuhr': 'adhan_dhuhr',
+        'asr': 'adhan_asr',
+        'maghrib': 'adhan_maghrib',
+        'isha': 'adhan_isha',
+      };
 
       final now = DateTime.now();
 
-      final Map<String, DateTime> prayers = {
-        'fajr': prayerTimes.fajr,
-        'dhuhr': prayerTimes.dhuhr,
-        'asr': prayerTimes.asr,
-        'maghrib': prayerTimes.maghrib,
-        'isha': prayerTimes.isha,
-      };
+      for (int day = 0; day < 7; day++) {
+        final targetDate = now.add(Duration(days: day));
 
-      final Map<String, Function> callbacks = {
-        'fajr': _playFajrAdhan,
-        'dhuhr': _playDhuhrAdhan,
-        'asr': _playAsrAdhan,
-        'maghrib': _playMaghribAdhan,
-        'isha': _playIshaAdhan,
-      };
+        final coordinates = Coordinates(30.0444, 31.2357);
+        final date = DateComponents.from(targetDate);
+        final params = CalculationMethod.egyptian.getParameters();
+        params.madhab = Madhab.shafi;
+        final prayerTimes = PrayerTimes(coordinates, date, params);
 
-      for (final entry in prayers.entries) {
-        var prayerTime = entry.value;
-        if (prayerTime.isBefore(now)) {
-          prayerTime = prayerTime.add(const Duration(days: 1));
+        final Map<String, DateTime> dayPrayers = {
+          'fajr': prayerTimes.fajr,
+          'dhuhr': prayerTimes.dhuhr,
+          'asr': prayerTimes.asr,
+          'maghrib': prayerTimes.maghrib,
+          'isha': prayerTimes.isha,
+        };
+
+        for (final prayer in prayers) {
+          final prayerTime = dayPrayers[prayer]!;
+          // تخطى الأوقات اللي عدت
+          if (prayerTime.isBefore(now)) continue;
+
+          final androidDetails = AndroidNotificationDetails(
+            'adhan_channel_v1',
+            'تنبيهات الأذان',
+            channelDescription: 'تنبيهات مواقيت الصلاة',
+            importance: Importance.max,
+            priority: Priority.high,
+            playSound: true,
+            sound: RawResourceAndroidNotificationSound(sounds[prayer]),
+            enableVibration: true,
+            category: AndroidNotificationCategory.alarm,
+            autoCancel: false,
+            ongoing: true,
+            fullScreenIntent: true,
+          );
+
+          await _notifications.zonedSchedule(
+            (day * 10) + prayer.hashCode,
+            'حان الآن موعد صلاة ${names[prayer]}',
+            'موعد صلاة ${names[prayer]}',
+            tz.TZDateTime.from(prayerTime, tz.local),
+            NotificationDetails(android: androidDetails),
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          );
         }
-
-        await AndroidAlarmManager.oneShotAt(
-          tz.TZDateTime.from(prayerTime, tz.local),
-          entry.key.hashCode,
-          callbacks[entry.key]!,
-          exact: true,
-          wakeup: true,
-          rescheduleOnReboot: true,
-        );
       }
     } catch (_) {}
   }
@@ -1279,6 +1264,7 @@ class _MainDashboardState extends State<MainDashboard> {
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
               onPressed: () async {
                 await _saveSettings();
+                await _scheduleAdhan7Days();
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ الإعدادات')));
               },
