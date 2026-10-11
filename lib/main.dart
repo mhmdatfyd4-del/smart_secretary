@@ -21,6 +21,7 @@ import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:awqat/awqat.dart';
 
 // ─── متغيرات عامة ───
 final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
@@ -492,6 +493,44 @@ class _MainDashboardState extends State<MainDashboard> {
     _initSpeech();
     _initShakeDetector();
     _startAdhanWatcher();
+    _setupAdhanReminders();
+  }
+
+  // 🕌 إعداد تنبيهات الأذان في الخلفية
+  Future<void> _setupAdhanReminders() async {
+    try {
+      await Awqat.initialize(
+        config: AwqatConfig(
+          latitude: 30.0444,
+          longitude: 31.2357,
+          method: CalculationMethod.egyptian,
+          madhab: Madhab.shafi,
+        ),
+      );
+
+      if (!await Awqat.hasPermission()) {
+        await Awqat.requestPermission();
+      }
+
+      await Awqat.scheduleReminders(
+        prayers: [
+          PrayerType.fajr,
+          PrayerType.dhuhr,
+          PrayerType.asr,
+          PrayerType.maghrib,
+          PrayerType.isha,
+        ],
+        playSound: true,
+        sound: 'adhan',
+        messages: [
+          "حان الآن موعد صلاة الفجر",
+          "حان الآن موعد صلاة الظهر",
+          "حان الآن موعد صلاة العصر",
+          "حان الآن موعد صلاة المغرب",
+          "حان الآن موعد صلاة العشاء",
+        ],
+      );
+    } catch (_) {}
   }
 
   Future<void> _initSpeech() async {
