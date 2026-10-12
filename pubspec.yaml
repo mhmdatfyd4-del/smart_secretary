@@ -35,6 +35,9 @@ dependencies:
   # المنبه في الخلفية
   android_alarm_manager_plus: ^4.0.8
 
+  # ✅ جديد: لفتح صفحة إذن الإشعارات ملء الشاشة
+  android_intent_plus: ^5.1.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
