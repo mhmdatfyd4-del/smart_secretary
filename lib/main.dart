@@ -21,8 +21,6 @@ import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-// ✅ جديد: لفتح صفحة إذن الإشعارات ملء الشاشة
-import 'package:android_intent_plus/android_intent_plus.dart';
 
 // ─── متغيرات عامة ───
 final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
@@ -41,25 +39,12 @@ String _getSecretaryImage(String name) {
   return _secretaryImages[name] ?? 'assets/secretary.jpg';
 }
 
-// ✅ جديد: دالة تفتح صفحة إعدادات "إشعارات ملء الشاشة" للمستخدم
+// ✅ دالة تفتح إعدادات التطبيق لتفعيل إذن إشعارات ملء الشاشة
 Future<void> _requestFullScreenIntentPermission() async {
   if (Platform.isAndroid) {
     try {
-      final intent = AndroidIntent(
-        action: 'android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT',
-        data: 'package:com.example.secretary_app',
-      );
-      await intent.launch();
-    } catch (e) {
-      // لو مش مدعوم على النسخة دي، افتح إعدادات التطبيق العامة
-      try {
-        final fallback = AndroidIntent(
-          action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
-          data: 'package:com.example.secretary_app',
-        );
-        await fallback.launch();
-      } catch (_) {}
-    }
+      await openAppSettings();
+    } catch (_) {}
   }
 }
 
