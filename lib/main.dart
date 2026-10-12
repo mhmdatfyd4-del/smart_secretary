@@ -200,7 +200,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _adhanAlertEnabled;
   late double _ttsVolume;
 
-  // ✅ جديد: بيانات السكرتيرة
   late String _secretaryName;
   late bool _isUserMale;
   final TextEditingController _nameController = TextEditingController();
@@ -235,7 +234,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _adhanAlertEnabled,
       _ttsVolume,
     );
-    // ✅ حفظ بيانات السكرتيرة
     final newName = _nameController.text.trim().isEmpty ? 'سارة' : _nameController.text.trim();
     await widget.onSaveSecretary(newName, _isUserMale);
     if (mounted) {
@@ -257,7 +255,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ═══════ قسم السكرتيرة (جديد) ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -354,8 +351,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // ═══════ وقت التذكير الافتراضي ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -385,8 +380,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // ═══════ مستوى الصوت ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -414,8 +407,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // ═══════ صوت السكرتيرة (TTS Slider) ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -448,8 +439,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // ═══════ الجملة الترحيبية ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -462,8 +451,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // ═══════ تنبيه الأذان ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -476,8 +463,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 30),
-
-          // ═══════ زر الحفظ ═══════
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1B2A4A),
@@ -804,7 +789,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   DateTime _diaryDate = DateTime.now();
   DateTime? _lastShake;
 
-  // ✅ جديد: بيانات السكرتيرة (قابلة للتعديل من الإعدادات)
   late String _secretaryName;
   late bool _isUserMale;
 
@@ -818,7 +802,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   Timer? _adhanTimer;
   bool _adhanAlerted = false;
 
-  // متغيرات نظام المناسبات
   Timer? _eventRepeatTimer;
   bool _eventAnnouncing = false;
   String _eventAnnouncingTitle = '';
@@ -846,7 +829,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // ✅ نهيئ البيانات من widget
     _secretaryName = widget.secretaryName;
     _isUserMale = widget.isUserMale;
     _loadData();
@@ -859,7 +841,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     Future.delayed(const Duration(seconds: 3), _checkPendingEventAnnouncements);
   }
 
-  // ✅ لما التطبيق يرجع للمقدمة، نتأكد من المناسبات المعلقة
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -868,7 +849,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ نتحقق من أي مناسبة معلقة
   Future<void> _checkPendingEventAnnouncements() async {
     if (_eventDialogShowing) return;
     final prefs = await SharedPreferences.getInstance();
@@ -903,7 +883,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     } catch (_) {}
   }
 
-  // ✅ دالة تحوّل اسم الصلاة العربي للمفتاح الإنجليزي
   String _prayerKey(String arabicName) {
     switch (arabicName) {
       case 'الفجر': return 'fajr';
@@ -915,7 +894,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // 🕌 جدولة تنبيهات الأذان لـ 30 يوم
   Future<void> _scheduleAdhan30Days() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -1366,6 +1344,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await _tts.speak(text);
   }
 
+  // ✅ دالة معدلة: تكتشف اللغة العربية المتاحة على الجهاز تلقائياً
   Future<void> _listenVoiceCommand() async {
     if (_isListening) {
       await _speech.stop();
@@ -1382,8 +1361,34 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
       await _tts.stop();
       if (mounted) setState(() => _isListening = true);
+
+      // ✅ نكتشف اللغة العربية المتاحة على الجهاز
+      String arabicLocale = "ar-SA";
+      try {
+        final locales = await _speech.locales();
+        final availableArabic = locales
+            .where((l) => l.localeId.toLowerCase().startsWith('ar'))
+            .map((l) => l.localeId)
+            .toList();
+        print('✅ Arabic locales available: $availableArabic');
+        if (availableArabic.isNotEmpty) {
+          if (availableArabic.any((l) => l.toLowerCase().contains('sa'))) {
+            arabicLocale = availableArabic.firstWhere((l) => l.toLowerCase().contains('sa'));
+          } else if (availableArabic.any((l) => l.toLowerCase().contains('eg'))) {
+            arabicLocale = availableArabic.firstWhere((l) => l.toLowerCase().contains('eg'));
+          } else {
+            arabicLocale = availableArabic.first;
+          }
+        } else {
+          print('⚠️ مفيش عربي متاح، اللغات المتاحة: ${locales.map((l) => l.localeId).toList()}');
+        }
+      } catch (e) {
+        print('خطأ في جلب اللغات: $e');
+      }
+
+      print('🎤 Using locale: $arabicLocale');
       await _speech.listen(
-        localeId: "ar_AE",
+        localeId: arabicLocale,
         listenFor: const Duration(seconds: 20),
         pauseFor: const Duration(seconds: 4),
         onResult: (val) {
@@ -1758,7 +1763,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
   }
 
-  // ✅ الإعدادات مع بيانات السكرتيرة
   void _openSettingsScreen() {
     Navigator.push(
       context,
@@ -1780,7 +1784,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             await _saveSettings();
             await _scheduleAdhan30Days();
           },
-          // ✅ حفظ بيانات السكرتيرة الجديدة
           onSaveSecretary: (name, isUserMale) async {
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('secretary_name', name);
@@ -1789,7 +1792,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               _secretaryName = name;
               _isUserMale = isUserMale;
             });
-            // ✅ إعادة تهيئة الصوت عشان الجملة الترحيبية تتحدث
             await _configureVoice();
           },
         ),
