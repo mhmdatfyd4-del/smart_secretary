@@ -24,13 +24,22 @@ import 'package:share_plus/share_plus.dart';
 
 // ─── متغيرات عامة ───
 final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
-const String _secretaryImagePath = 'assets/secretary.jpg';
 const List<String> _weekDays = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
 
 // ✅ قناة MethodChannel للتحكم في شاشة القفل
 const MethodChannel _lockScreenChannel = MethodChannel('com.example.secretary_app/lock_screen');
 
-const Map<String, String> _secretaryImages = {
+// ✅ أسماء وصور الرجالة
+const Map<String, String> _maleNamesMap = {
+  'محمد': 'assets/mohamed.jpg',
+  'أحمد': 'assets/ahmed.jpg',
+  'علي': 'assets/ali.jpg',
+  'عمر': 'assets/omar.jpg',
+  'يوسف': 'assets/youssef.jpg',
+};
+
+// ✅ أسماء وصور الستات
+const Map<String, String> _femaleNamesMap = {
   'سارة': 'assets/secretary.jpg',
   'مريم': 'assets/maryam.jpg',
   'ندى': 'assets/nada.jpg',
@@ -38,8 +47,17 @@ const Map<String, String> _secretaryImages = {
   'ياسمين': 'assets/yasmine.jpg',
 };
 
-String _getSecretaryImage(String name) {
-  return _secretaryImages[name] ?? 'assets/secretary.jpg';
+const String _defaultMaleImage = 'assets/mohamed.jpg';
+const String _defaultFemaleImage = 'assets/secretary.jpg';
+
+String _getSecretaryImage(String name, String voiceGender) {
+  if (_maleNamesMap.containsKey(name)) return _maleNamesMap[name]!;
+  if (_femaleNamesMap.containsKey(name)) return _femaleNamesMap[name]!;
+  return voiceGender == 'ذكر' ? _defaultMaleImage : _defaultFemaleImage;
+}
+
+List<String> _getNamesForGender(String voiceGender) {
+  return voiceGender == 'ذكر' ? _maleNamesMap.keys.toList() : _femaleNamesMap.keys.toList();
 }
 
 void main() async {
@@ -54,7 +72,6 @@ void main() async {
   bool? isUserMale = prefs.getBool('is_user_male');
   bool showAboveLockScreen = prefs.getBool('show_above_lock_screen') ?? false;
 
-  // ✅ تطبيق إعداد شاشة القفل
   try {
     if (showAboveLockScreen) {
       await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
@@ -155,6 +172,8 @@ class AppSettings {
   bool greetingEnabled;
   bool adhanAlertEnabled;
   bool showAboveLockScreen;
+  bool shakeInBackgroundEnabled;
+  String voiceGender;
 
   AppSettings({
     this.defaultReminderHour = 18,
@@ -163,6 +182,8 @@ class AppSettings {
     this.greetingEnabled = true,
     this.adhanAlertEnabled = true,
     this.showAboveLockScreen = false,
+    this.shakeInBackgroundEnabled = true,
+    this.voiceGender = 'ذكر',
   });
 
   double get speechRate {
@@ -187,8 +208,18 @@ class SettingsScreen extends StatefulWidget {
   final double ttsVolume;
   final String currentSecretaryName;
   final bool currentIsUserMale;
-  final Future<void> Function(int hour, int minute, String voiceLevel, bool greeting, bool adhan, double ttsVol, bool showLock) onSave;
-  final Future<void> Function(String name, bool isUserMale) onSaveSecretary;
+  final Future<void> Function(
+    int hour,
+    int minute,
+    String voiceLevel,
+    bool greeting,
+    bool adhan,
+    double ttsVol,
+    bool showLock,
+    bool shakeBg,
+    String voiceGender,
+  ) onSave;
+  final Future<void> Function(String name, String voiceGender) onSaveSecretary;
 
   const SettingsScreen({
     super.key,
@@ -212,11 +243,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _adhanAlertEnabled;
   late double _ttsVolume;
   late bool _showAboveLockScreen;
+  late bool _shakeInBackground;
+  late String _voiceGender;
 
   late String _secretaryName;
-  late bool _isUserMale;
   final TextEditingController _nameController = TextEditingController();
-  static const List<String> _femaleNames = ['سارة', 'مريم', 'ندى', 'نور', 'ياسمين'];
 
   @override
   void initState() {
@@ -228,8 +259,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _adhanAlertEnabled = widget.settings.adhanAlertEnabled;
     _ttsVolume = widget.ttsVolume;
     _showAboveLockScreen = widget.settings.showAboveLockScreen;
+    _shakeInBackground = widget.settings.shakeInBackgroundEnabled;
+    _voiceGender = widget.settings.voiceGender;
     _secretaryName = widget.currentSecretaryName;
-    _isUserMale = widget.currentIsUserMale;
     _nameController.text = _secretaryName;
   }
 
@@ -240,6 +272,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _save() async {
+    final newName = _nameController.text.trim().isEmpty
+        ? (_voiceGender == 'ذكر' ? 'محمد' : 'سارة')
+        : _nameController.text.trim();
+
     await widget.onSave(
       _defaultReminderHour,
       _defaultReminderMinute,
@@ -248,9 +284,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _adhanAlertEnabled,
       _ttsVolume,
       _showAboveLockScreen,
+      _shakeInBackground,
+      _voiceGender,
     );
-    final newName = _nameController.text.trim().isEmpty ? 'سارة' : _nameController.text.trim();
-    await widget.onSaveSecretary(newName, _isUserMale);
+    await widget.onSaveSecretary(newName, _voiceGender);
+
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -261,6 +299,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final names = _getNamesForGender(_voiceGender);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('الإعدادات', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -270,7 +310,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ═══════ قسم السكرتيرة ═══════
+          // جنس الصوت
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.record_voice_over, color: Color(0xFF1B2A4A), size: 26),
+                      SizedBox(width: 10),
+                      Text('جنس صوت السكرتير', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _voiceGender,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    items: ['ذكر', 'أنثى'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _voiceGender = val ?? 'ذكر';
+                        if (!names.contains(_nameController.text)) {
+                          _nameController.text = _voiceGender == 'ذكر' ? 'محمد' : 'سارة';
+                        }
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // السكرتير
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -283,7 +359,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       Icon(Icons.face_3, color: Color(0xFF1B2A4A), size: 26),
                       SizedBox(width: 10),
-                      Text('السكرتيرة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text('السكرتير', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                     ],
                   ),
                   const SizedBox(height: 15),
@@ -297,7 +373,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         border: Border.all(color: const Color(0xFFC5A059), width: 3),
                         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8)],
                         image: DecorationImage(
-                          image: AssetImage(_getSecretaryImage(_nameController.text)),
+                          image: AssetImage(_getSecretaryImage(_nameController.text, _voiceGender)),
                           fit: BoxFit.cover,
                           alignment: const Alignment(0, -0.4),
                         ),
@@ -305,37 +381,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 15),
-                  const Text('نوع المستخدم:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 5),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: RadioListTile<String>(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('ذكر', style: TextStyle(fontSize: 14)),
-                          value: 'male',
-                          groupValue: _isUserMale ? 'male' : 'female',
-                          onChanged: (v) => setState(() => _isUserMale = v == 'male'),
-                        ),
-                      ),
-                      Expanded(
-                        child: RadioListTile<String>(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('أنثى', style: TextStyle(fontSize: 14)),
-                          value: 'female',
-                          groupValue: _isUserMale ? 'male' : 'female',
-                          onChanged: (v) => setState(() => _isUserMale = v == 'female'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  const Text('اسم السكرتيرة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const Text('اختر اسماً:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8.0,
                     runSpacing: 8.0,
-                    children: _femaleNames.map((name) {
+                    children: names.map((name) {
                       final isSelected = _nameController.text == name;
                       return ActionChip(
                         label: Text(name),
@@ -357,7 +408,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     controller: _nameController,
                     onChanged: (v) => setState(() {}),
                     decoration: InputDecoration(
-                      labelText: 'اسم السكرتيرة',
+                      labelText: 'اسم السكرتير',
                       prefixIcon: const Icon(Icons.badge, color: Color(0xFF1B2A4A)),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
@@ -368,7 +419,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ═══════ وقت التذكير الافتراضي ═══════
+          // وقت التذكير
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -399,7 +450,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ═══════ مستوى الصوت ═══════
+          // مستوى الصوت
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -428,7 +479,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ═══════ صوت السكرتيرة ═══════
+          // صوت السكرتير
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -441,7 +492,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       Icon(Icons.record_voice_over, color: Color(0xFF1B2A4A), size: 26),
                       SizedBox(width: 10),
-                      Text('صوت السكرتيرة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text('صوت السكرتير', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                     ],
                   ),
                   Row(children: [
@@ -462,7 +513,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ═══════ الجملة الترحيبية ═══════
+          // الجملة الترحيبية
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -476,7 +527,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ═══════ تنبيه الأذان ═══════
+          // تنبيه الأذان
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -490,7 +541,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // ═══════ ✅ جديد: إظهار فوق شاشة القفل ═══════
+          // شاشة القفل
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(
@@ -514,9 +565,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (v) => setState(() => _showAboveLockScreen = v),
             ),
           ),
+          const SizedBox(height: 12),
+
+          // الهز في الخلفية
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: _shakeInBackground ? const Color(0xFFC5A059) : Colors.transparent, width: 2),
+            ),
+            child: SwitchListTile(
+              secondary: Icon(Icons.vibration, color: _shakeInBackground ? const Color(0xFFC5A059) : const Color(0xFF1B2A4A), size: 26),
+              title: const Text('تشغيل الهز في الخلفية', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  _shakeInBackground
+                      ? 'الهز هيشتغل حتى لو التطبيق في الخلفية'
+                      : 'الهز مش هيشتغل غير لما التطبيق مفتوح قدامك',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+              value: _shakeInBackground,
+              activeColor: const Color(0xFFC5A059),
+              onChanged: (v) => setState(() => _shakeInBackground = v),
+            ),
+          ),
           const SizedBox(height: 30),
 
-          // ═══════ زر الحفظ ═══════
+          // زر الحفظ
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1B2A4A),
@@ -547,7 +624,7 @@ class SecretaryApp extends StatelessWidget {
       homeScreen = const TermsAndPermissionsScreen();
     } else {
       homeScreen = MainDashboard(
-        secretaryName: savedName ?? 'سارة',
+        secretaryName: savedName ?? 'محمد',
         isUserMale: savedIsUserMale ?? true,
       );
     }
@@ -683,9 +760,8 @@ class SetupSecretaryScreen extends StatefulWidget {
 
 class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
   String _userGender = 'male';
-  final TextEditingController _nameController = TextEditingController(text: 'سارة');
-
-  final List<String> _femaleNames = ['سارة', 'مريم', 'ندى', 'نور', 'ياسمين'];
+  String _voiceGender = 'ذكر';
+  final TextEditingController _nameController = TextEditingController(text: 'محمد');
 
   @override
   void dispose() {
@@ -694,11 +770,14 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
   }
 
   Future<void> _saveAndContinue() async {
-    final name = _nameController.text.trim().isEmpty ? 'سارة' : _nameController.text.trim();
+    final name = _nameController.text.trim().isEmpty
+        ? (_voiceGender == 'ذكر' ? 'محمد' : 'سارة')
+        : _nameController.text.trim();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_first_time', false);
     await prefs.setString('secretary_name', name);
     await prefs.setBool('is_user_male', _userGender == 'male');
+    await prefs.setString('voice_gender', _voiceGender);
 
     if (mounted) {
       Navigator.pushReplacement(
@@ -712,9 +791,11 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final names = _getNamesForGender(_voiceGender);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('تحديد هويّة السكرتيرة'),
+        title: const Text('إعداد السكرتير الشخصي'),
         backgroundColor: const Color(0xFF1B2A4A),
         foregroundColor: Colors.white,
       ),
@@ -733,26 +814,73 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
                   border: Border.all(color: const Color(0xFFC5A059), width: 4),
                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
                   image: DecorationImage(
-                    image: AssetImage(_getSecretaryImage(_nameController.text)),
+                    image: AssetImage(_getSecretaryImage(_nameController.text, _voiceGender)),
                     fit: BoxFit.cover,
                     alignment: const Alignment(0, -0.4),
                   ),
                 ),
               ),
               const SizedBox(height: 15),
-              const Text('صوت السكرتيرة (سيدة)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+              Text(
+                'صوت السكرتير ($_voiceGender)',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A)),
+              ),
               const SizedBox(height: 20),
-              const Divider(),
+
+              // جنس الصوت
               const Align(
                 alignment: Alignment.centerRight,
-                child: Text('نوع المستخدم (صاحب الهاتف):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                child: Text('جنس صوت السكرتير:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               ),
               const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
                     child: RadioListTile<String>(
-                      title: const Text('ذكر (يا فندم)'),
+                      title: const Text('راجل 👨', style: TextStyle(fontSize: 14)),
+                      value: 'ذكر',
+                      groupValue: _voiceGender,
+                      onChanged: (v) {
+                        setState(() {
+                          _voiceGender = v ?? 'ذكر';
+                          if (!_getNamesForGender(_voiceGender).contains(_nameController.text)) {
+                            _nameController.text = _voiceGender == 'ذكر' ? 'محمد' : 'سارة';
+                          }
+                        });
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: RadioListTile<String>(
+                      title: const Text('ست 👩', style: TextStyle(fontSize: 14)),
+                      value: 'أنثى',
+                      groupValue: _voiceGender,
+                      onChanged: (v) {
+                        setState(() {
+                          _voiceGender = v ?? 'أنثى';
+                          if (!_getNamesForGender(_voiceGender).contains(_nameController.text)) {
+                            _nameController.text = _voiceGender == 'ذكر' ? 'محمد' : 'سارة';
+                          }
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+
+              const Divider(),
+
+              // نوع المستخدم
+              const Align(
+                alignment: Alignment.centerRight,
+                child: Text('نوعك (صاحب الهاتف):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: RadioListTile<String>(
+                      title: const Text('ذكر (يا فندم)', style: TextStyle(fontSize: 13)),
                       value: 'male',
                       groupValue: _userGender,
                       onChanged: (v) => setState(() => _userGender = v ?? 'male'),
@@ -760,7 +888,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
                   ),
                   Expanded(
                     child: RadioListTile<String>(
-                      title: const Text('أنثى (يا أستاذة)'),
+                      title: const Text('أنثى (يا أستاذة)', style: TextStyle(fontSize: 13)),
                       value: 'female',
                       groupValue: _userGender,
                       onChanged: (v) => setState(() => _userGender = v ?? 'female'),
@@ -768,8 +896,11 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
                   ),
                 ],
               ),
+
               const Divider(),
               const SizedBox(height: 15),
+
+              // اسم السكرتير
               const Align(
                 alignment: Alignment.centerRight,
                 child: Text('اختر اسماً أو اكتب اسماً مخصصاً:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
@@ -777,13 +908,15 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
               const SizedBox(height: 10),
               Wrap(
                 spacing: 8.0,
-                children: _femaleNames.map((name) {
+                runSpacing: 8.0,
+                children: names.map((name) {
+                  final isSelected = _nameController.text == name;
                   return ActionChip(
                     label: Text(name),
-                    backgroundColor: _nameController.text == name ? const Color(0xFFC5A059) : Colors.grey.shade200,
+                    backgroundColor: isSelected ? const Color(0xFFC5A059) : Colors.grey.shade200,
                     labelStyle: TextStyle(
-                      color: _nameController.text == name ? Colors.black : Colors.black87,
-                      fontWeight: _nameController.text == name ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? Colors.black : Colors.black87,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
                     onPressed: () {
                       setState(() {
@@ -798,7 +931,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
                 controller: _nameController,
                 onChanged: (v) => setState(() {}),
                 decoration: InputDecoration(
-                  labelText: 'اسم السكرتيرة',
+                  labelText: 'اسم السكرتير',
                   prefixIcon: const Icon(Icons.badge, color: Color(0xFF1B2A4A)),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
@@ -846,6 +979,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   late String _secretaryName;
   late bool _isUserMale;
 
+  // ✅ متغير لمعرفة حالة التطبيق (مقدمة / خلفية)
+  bool _isInBackground = false;
+
   List<Map<String, dynamic>> _tasks = [];
   List<Map<String, dynamic>> _specialEvents = [];
   Map<String, String> _diaries = {};
@@ -877,7 +1013,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   double _playbackSpeed = 1.0;
   double _ttsVolume = 1.0;
 
-  // ✅ كلمات أيام الأسبوع (نسخة موسعة)
+  // ✅ كلمات أيام الأسبوع
   static const Map<String, List<String>> _dayKeywords = {
     'السبت': [
       'السبت', 'سبت', 'يوم السبت', 'السبت الجاي',
@@ -931,7 +1067,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
+      _isInBackground = false;
       Future.delayed(const Duration(seconds: 2), _checkPendingEventAnnouncements);
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _isInBackground = true;
     }
   }
 
@@ -1077,6 +1216,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
+  // ✅ نسخة محدثة: بتحترم إعداد الهز في الخلفية
   void _initShakeDetector() {
     _accelerometerSub = accelerometerEventStream().listen((AccelerometerEvent event) {
       double gX = event.x / 9.81;
@@ -1086,6 +1226,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       if (gForce > 2.2) {
         final now = DateTime.now();
         if (_lastShake != null && now.difference(_lastShake!) < const Duration(seconds: 3)) return;
+
+        // ✅ لو التطبيق في الخلفية والإعداد مقفول → نتجاهل الهزة
+        if (_isInBackground && !_settings.shakeInBackgroundEnabled) {
+          return;
+        }
+
         _lastShake = now;
         if (!_isListening && !_starting && !_isRecording) _listenVoiceCommand();
       }
@@ -1185,6 +1331,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _settings.greetingEnabled = prefs.getBool('greeting_enabled') ?? true;
     _settings.adhanAlertEnabled = prefs.getBool('adhan_alert_enabled') ?? true;
     _settings.showAboveLockScreen = prefs.getBool('show_above_lock_screen') ?? false;
+    _settings.shakeInBackgroundEnabled = prefs.getBool('shake_in_background') ?? true;
+    _settings.voiceGender = prefs.getString('voice_gender') ?? 'ذكر';
     _playbackVolume = prefs.getDouble('playback_volume') ?? 1.0;
     _playbackSpeed = prefs.getDouble('playback_speed') ?? 1.0;
     _ttsVolume = prefs.getDouble('tts_volume') ?? 1.0;
@@ -1206,6 +1354,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await prefs.setBool('greeting_enabled', _settings.greetingEnabled);
     await prefs.setBool('adhan_alert_enabled', _settings.adhanAlertEnabled);
     await prefs.setBool('show_above_lock_screen', _settings.showAboveLockScreen);
+    await prefs.setBool('shake_in_background', _settings.shakeInBackgroundEnabled);
+    await prefs.setString('voice_gender', _settings.voiceGender);
     await prefs.setDouble('playback_volume', _playbackVolume);
     await prefs.setDouble('playback_speed', _playbackSpeed);
     await prefs.setDouble('tts_volume', _ttsVolume);
@@ -1409,18 +1559,74 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _configureVoiceAndGreet() async {
-    await _tts.setLanguage("ar-SA");
-    await _tts.setPitch(1.20);
-    await _tts.setSpeechRate(_settings.speechRate);
-    await _tts.setVolume(_settings.speechVolume * _ttsVolume);
     if (_settings.greetingEnabled) {
-      await _tts.speak("أهلاً بك $_userTitle. أنا سكرتيرتك $_secretaryName، هُز الهاتف في أي وقت لأكون في خدمتك.");
+      await _tts.speak("أهلاً بك $_userTitle. أنا سكرتيرك $_secretaryName، هُز الهاتف في أي وقت لأكون في خدمتك.");
     }
   }
 
+  // ✅ نسخة محدثة: تختار الصوت حسب الجنس + تدعم Google TTS
   Future<void> _configureVoice() async {
-    await _tts.setLanguage("ar-SA");
-    await _tts.setPitch(1.20);
+    try {
+      // ✅ نحاول نستخدم Google TTS الأول (عنده أصوات أكتر)
+      try {
+        await _tts.setEngine("com.google.android.tts");
+      } catch (_) {
+        // لو مش موجود، نستخدم الافتراضي
+      }
+
+      // ✅ نجيب كل الأصوات العربية
+      final voices = await _tts.getVoices;
+      final arabicVoices = (voices as List).where((v) {
+        final locale = v['locale']?.toString().toLowerCase() ?? '';
+        return locale.startsWith('ar');
+      }).toList();
+
+      if (arabicVoices.isNotEmpty) {
+        final wantMale = _settings.voiceGender == 'ذكر';
+        Map? selectedVoice;
+
+        // ✅ ندور على الصوت المناسب للجنس
+        for (var v in arabicVoices) {
+          final gender = v['gender']?.toString().toLowerCase() ?? '';
+          final isMale = gender.contains('male') || gender == '1';
+          final isFemale = gender.contains('female') || gender == '2';
+
+          if (wantMale && isMale) {
+            selectedVoice = v;
+            break;
+          } else if (!wantMale && isFemale) {
+            selectedVoice = v;
+            break;
+          }
+        }
+
+        if (selectedVoice != null) {
+          // ✅ لقينا الصوت المطلوب
+          await _tts.setVoice({
+            'name': selectedVoice['name'].toString(),
+            'locale': selectedVoice['locale'].toString(),
+          });
+          await _tts.setLanguage(selectedVoice['locale'].toString());
+        } else if (wantMale) {
+          // ✅ لو عايز ذكر ومفيش → استخدم أول صوت متاح
+          await _tts.setVoice({
+            'name': arabicVoices.first['name'].toString(),
+            'locale': arabicVoices.first['locale'].toString(),
+          });
+          await _tts.setLanguage(arabicVoices.first['locale'].toString());
+        } else {
+          // ✅ لو عايز أنثى ومفيش → متعملش setVoice خالص
+          // (عشان نستخدم الافتراضي = ست)
+          await _tts.setLanguage("ar-AE");
+        }
+      } else {
+        await _tts.setLanguage("ar-AE");
+      }
+    } catch (_) {
+      await _tts.setLanguage("ar-AE");
+    }
+
+    await _tts.setPitch(1.0);
     await _tts.setSpeechRate(_settings.speechRate);
     await _tts.setVolume(_settings.speechVolume * _ttsVolume);
     _configureVoiceAndGreet();
@@ -1466,7 +1672,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ استخراج أيام الأسبوع من الأمر
   List<String> _parseCustomDays(String cmd) {
     final days = <String>[];
     _dayKeywords.forEach((dayName, keywords) {
@@ -1477,7 +1682,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return days;
   }
 
-  // ✅ استخراج نوع التكرار
   String _parseRepeatType(String cmd) {
     final customDays = _parseCustomDays(cmd);
     if (customDays.isNotEmpty) return 'مخصص';
@@ -1521,7 +1725,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return 'مرة واحدة';
   }
 
-  // ✅ استخراج نوع التنبيه المستمر
   String _parseIntervalType(String cmd) {
     if (_hasAny(cmd, [
       'بدون تنبيه', 'بدون تنبيهات', 'مش محتاج تنبيه', 'مش محتاجه تنبيه',
@@ -1603,28 +1806,14 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return 'كل 10 ثواني';
   }
 
-  // ✅ عرض النص اللي اتسمع
   Future<void> _processSmartVoiceCommand(String rawCommand) async {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('سمعت: "$rawCommand"'),
-          duration: const Duration(seconds: 8),
-          backgroundColor: Colors.blue.shade800,
-        ),
-      );
-    }
-
     final userTitle = _userTitle;
     final cmd = _norm(rawCommand);
     final nameNorm = _norm(_secretaryName);
-    bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('سكرتيرتي');
+    bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('سكرتيرتي') || cmd.contains('سكرتيري');
 
-    // ═══════════════════════════════════════════
-    // 🔔 كلمات المنبه / التذكير (قايمة موسعة)
-    // ═══════════════════════════════════════════
+    // 🔔 كلمات المنبه / التذكير
     final alarmKeywords = [
-      // ─── فكرني ───
       "فكرني", "فكريني", "فكروني", "فكرنيلى", "فكرنيلي",
       "فكرنى", "تفكرني", "تفكريني", "هتفكرني", "هتفكريني",
       "فكريني ب", "فكرني ب", "فكريني في", "فكرني في",
@@ -1636,12 +1825,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       "ما تنساني", "ماتنساني", "متنساني", "ماتنسانيش", "متنسانيش",
       "ماتنساش", "متنساش", "ما تنساش", "متنساش",
       "ماتنسى", "متنسى", "ما تنسى",
-      // ─── ذكرني ───
       "ذكرني", "ذكريني", "ذكروني", "ذكرنيلى", "ذكرنيلي",
       "ذكرنى", "تذكرني", "تذكريني", "هتذكرني", "هتذكريني",
       "ذكرني ب", "ذكريني ب", "ذكرني في", "ذكريني في",
       "ذكرني على", "ذكريني على",
-      // ─── نبهني ───
       "نبهني", "نبهيني", "نبهوني", "نبّهني", "نبّهيني", "نبهنى", "نبّهنى",
       "نبهنيلى", "نبهنيلي", "نبهينى",
       "تنبهني", "تنبهيني", "هتنبهني", "هتنبهيني",
@@ -1649,7 +1836,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       "نبهني على", "نبهيني على", "نبهني عند",
       "نبهني قبل", "نبهيني قبل",
       "تنبيهي", "تنبيهني", "تنبيهينى",
-      // ─── منبه ───
       "منبه", "منبّه", "منبهني", "منبهلي", "منبهلى", "منبهنى",
       "منبه ل", "منبه على", "منبه في", "منبه عند",
       "منبهة", "المنبه", "المنبّه",
@@ -1659,88 +1845,68 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       "جهزلي منبه", "جهزيلي منبه", "رتبلي منبه", "رتبيلي منبه",
       "دبرلي منبه", "دبريلي منبه",
       "عايز منبه", "عاوز منبه", "عايزة منبه", "عاوزة منبه",
-      // ─── تذكير ───
       "تذكير", "تذكيري", "تذكيرلى", "تذكيرلي",
       "التذكير", "تذكيره", "تذكيرات",
       "حطلي تذكير", "حطلى تذكير", "اعملي تذكير", "اعمللي تذكير",
       "عايز تذكير", "عاوز تذكير",
       "تذكير بكرة", "تذكير النهاردة",
-      // ─── اضبط / ظبط ───
       "اضبطلي", "اظبطلي", "ظبطلي", "ضبطلي",
       "اضبط", "اظبط", "ظبط", "ضبط",
       "اضبطلى", "اظبطلى", "ظبطلى", "ضبطلى",
       "اضبطلي معاد", "اظبطلي معاد", "ظبطلي معاد", "ضبطلي معاد",
       "اضبطلي ميعاد", "اظبطلي ميعاد", "ظبطلي ميعاد", "ضبطلي ميعاد",
       "اضبطلي حاجه", "اظبطلي حاجه", "ظبطلي حاجة", "ضبطلي حاجه",
-      // ─── سجل ───
       "سجل عندك", "سجلي", "سجللى", "سجللي", "سجل لى",
       "سجل عندك حاجه", "سجل عندك حاجة",
       "سجل بكرة", "سجل النهاردة",
       "سجللى معاد", "سجلي معاد", "سجللى ميعاد", "سجلي ميعاد",
-      // ─── حط ───
       "حطلي", "حطلى", "حطني", "حطلى لى",
       "حطلي معاد", "حطلى معاد", "حطلي ميعاد", "حطلى ميعاد",
       "حطلي حاجه", "حطلى حاجة",
-      // ─── اعمل ───
       "اعمللي", "اعملي", "اعمللى", "اعمل لى",
       "اعمللي معاد", "اعملي معاد", "اعمللي ميعاد", "اعملي ميعاد",
       "اعمللي حاجه", "اعملي حاجة",
       "اعمل حساب", "اعملي حساب",
-      // ─── عايز / عاوز ───
       "عايز منبه", "عاوز منبه", "عايزة منبه", "عاوزة منبه",
       "عايزك", "عاوزك", "عايزاك", "عاوزاك",
       "عايزك تفكرني", "عاوزك تفكرني", "عايزاك تفكرني", "عاوزاك تفكرني",
       "عايزك تنبهني", "عاوزك تنبهني", "عايزاك تنبهني", "عاوزاك تنبهني",
       "عايزك تذكرني", "عاوزك تذكرني", "عايزاك تذكرني", "عاوزاك تذكرني",
       "عايزك تصحيني", "عاوزك تصحيني", "عايزاك تصحيني", "عاوزاك تصحيني",
-      // ─── صحيني ───
       "صحيني", "صحيني الصبح", "صحيني بكرة", "صحيني الساعة",
       "صحوني", "صحى", "تصحيني", "هتصحيني",
       "صحيني الصبح بدري", "صحيني بدري", "صحيني في ميعاد",
       "صحيني قبل", "صحيني بعد",
-      // ─── ورايا ───
       "ورايا", "ورايه", "ورايا حاجه", "ورايا حاجة",
       "ورايا مشوار", "ورايا حاجه مهمة",
-      // ─── دبر / رتب / جهز ───
       "دبرلي", "دبريلي", "دبرلى",
       "رتبلي", "رتبيلي", "رتبلى",
       "جهزلي", "جهزيلي", "جهزلى",
       "دبرلي منبه", "دبريلي منبه", "رتبلي معاد", "رتبيلي ميعاد",
       "جهزلي منبه", "جهزيلي منبه",
-      // ─── علّم ───
       "علمني", "علميني", "علملى", "علملي", "علمنى",
       "علمني على", "علميني على", "علمني في",
-      // ─── افتكر ───
       "هتفتكرني", "هتفتكريني",
-      // ─── موعد / ميعاد ───
       "موعد", "ميعاد", "موعدي", "معادى", "الميعاد", "الموعد",
       "حددلي موعد", "حددلي ميعاد", "حددلى معاد", "حددلى ميعاد",
       "حددلي", "حددلى",
       "عندي موعد", "عندي ميعاد", "عندى معاد", "عندى ميعاد",
-      // ─── تنبيهي ───
       "تنبيه", "التنبيه", "تنبيهي", "تنبيهنى",
       "تنبيه بكرة", "تنبيه النهاردة",
-      // ─── نسيان ───
       "هنسى", "هنسي", "هنسى حاجه", "هنسى حاجة",
       "ماتخلنيش انسى", "ماتخلنيش أنسى",
       "متخلنيش انسى", "متخلنيش أنسى",
       "خاف انسى", "خايف انسى", "خايفة انسى",
-      // ─── عايز أفتكر ───
       "عايز افتكر", "عاوز افتكر", "عايزة افتكر", "عاوزة افتكر",
       "عايز افتكر حاجه", "عاوز افتكر حاجة",
-      // ─── جهز نفسك ───
       "جهز نفسك", "جهزي نفسك", "خليك جاهز", "خليكي جاهزة",
-      // ─── مساعدة ───
       "ساعدني", "ساعديني", "ساعدنى",
       "عايز مساعدة", "عاوز مساعدة",
-      // ─── تذكرة ───
       "تذكره", "تذكرة", "تذكره بكرة", "تذكرة بكرة",
-      // ─── عام ───
       "بفكرك", "بتفكرني", "تفتكر", "تفكر",
       "بفكرك على", "بتفكرني على",
       "هتفكرني على", "هتفكرني في",
       "بفكرك بكرة", "بتفكرني بكرة",
-      // ─── صباح / مساء ───
       "صحيني الصبح", "صحيني بالليل", "صحيني الفجر",
       "فكريني الصبح", "فكريني بالليل", "فكريني الفجر",
       "نبهني الصبح", "نبهني بالليل",
@@ -1751,9 +1917,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       return;
     }
 
-    // ═══════════════════════════════════════════
     // 🕌 كلمات الصلاة
-    // ═══════════════════════════════════════════
     final prayerKeywords = [
       "صلوات", "صلاة", "صلاه", "الصلاة", "الصلاه",
       "مواقيت", "مواقيت الصلاة", "ميعاد الصلاة", "موعد الصلاة",
@@ -1763,9 +1927,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       "موعد الاذان", "موعد الأذان",
     ];
 
-    // ═══════════════════════════════════════════
     // 📔 كلمات اليوميات
-    // ═══════════════════════════════════════════
     final diaryKeywords = [
       "يوميات", "يومياتي", "يومياتى", "اليوميات", "مفكرة", "مفكرتي", "مفكرتى",
       "المفكرة", "مذكرة", "مذكرتي", "مذكراتي",
@@ -1773,9 +1935,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       "سجل يومي", "سجل اليوم",
     ];
 
-    // ═══════════════════════════════════════════
     // 🎉 كلمات المناسبات
-    // ═══════════════════════════════════════════
     final eventKeywords = [
       "مناسبات", "مناسباتي", "مناسباتى", "المناسبات", "مناسبة", "مناسبه",
       "عيد", "العيد", "أعياد", "اعياد", "ذكرى", "الذكرى",
@@ -1785,13 +1945,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       "احتفال", "حفلة", "حفله",
     ];
 
-    // ═══════════════════════════════════════════
     // 🎤 كلمات المسجل
-    // ═══════════════════════════════════════════
     final recordKeywords = [
       "مسجل", "المسجل", "تسجيل", "التسجيل", "تسجيلات",
       "سجل صوت", "سجللي صوت", "سجل صوتي",
-      "مذكرات صوتيه", "مذكرات صوتيه",
+      "مذكرات صوتيه",
       "صوتيات", "مقاطع صوتيه",
       "اصوات", "الأصوات",
     ];
@@ -1860,13 +2018,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
     if (scheduled.isBefore(now)) scheduled = scheduled.add(const Duration(days: 1));
 
-    // ✅ استخراج الإعدادات من الأمر الصوتي
     final repeatType = _parseRepeatType(cmd);
     final intervalType = _parseIntervalType(cmd);
     final customDays = _parseCustomDays(cmd);
 
     final strip = <String>{
-      // أوامر المنبه
       'اظبطلي', 'اضبطلي', 'اظبط', 'اضبط', 'ظبط', 'ضبط', 'منبه', 'منبّه',
       'فكرني', 'فكريني', 'ذكرني', 'ذكريني', 'نبهني', 'نبهيني',
       'تذكير', 'سجل', 'عندك', 'ورايا', 'ورايه', 'عايز', 'عاوز',
@@ -1874,27 +2030,22 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       'اعمللي', 'اعملي', 'دبرلي', 'دبريلي', 'رتبلي', 'رتبيلي', 'جهزلي', 'جهزيلي',
       'خلي', 'خليكي', 'فاكرة', 'فاكر', 'بالك',
       'افتكرني', 'افتكريني', 'ابقي', 'ابقى', 'لو سمحت', 'لو',
-      // كلمات الوقت
       'الساعه', 'ساعه', 'الساعة', 'ساعة',
       'الصبح', 'صباحا', 'صباحاً', 'صبحا', 'الفجر', 'فجر',
       'مساء', 'مساءً', 'مساءا', 'بالليل', 'الليل', 'ليلا',
       'الظهر', 'ظهرا', 'العصر', 'عصرا', 'المغرب', 'العشاء', 'العشا',
       'بكره', 'غدا', 'غداً', 'بعد', 'النهاردة', 'النهارده', 'اليوم',
       'ونص', 'وربع', 'وثلث', 'الا ربع', 'إلا ربع',
-      // كلمات التكرار
       'كل يوم', 'يومي', 'يوميا', 'يومياً',
       'كل اسبوع', 'اسبوعي', 'اسبوعيا',
       'كل شهر', 'شهري', 'شهريا',
-      // أيام الأسبوع
       'السبت', 'سبت', 'الاحد', 'الأحد', 'حد',
       'الاتنين', 'الاثنين', 'اتنين', 'التلات', 'الثلاثاء', 'تلات',
       'الاربع', 'الأربعاء', 'اربع', 'الخميس', 'خميس',
       'الجمعه', 'الجمعة', 'جمعه', 'جمعة', 'و',
-      // كلمات التنبيه المستمر
       'كل', 'عشر', 'عشره', 'عشرين', 'تلاتين', 'تلاته', 'ثلاثين',
       'خمس', 'خمسه', 'ثواني', 'ثانيه', 'ثانية', 'دقيقه', 'دقيقة', 'دقيقتين', 'دقايق',
       '10', '20', '30', '3', '5',
-      // حروف
       'يا', 'من فضلك', 'بليز', 'اني', 'ان', 'انى', 'أن',
       'على', 'علي', 'في', 'فى', 'عند', 'عندي', 'عندى',
       'يكون', 'تكون', 'يبقى', 'تبقى', 'مره', 'مرة', 'واحده', 'واحدة', 'بس', 'كفايه', 'كفاية', 'مش محتاج',
@@ -2025,7 +2176,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
-  // ✅ نسخة محدثة: بتتعامل مع "بدون تنبيه" و "مرة واحدة"
   void _startAlarmLoop(String taskTitle, String repeat, String interval, List<String> customDays, DateTime scheduled) {
     final userTitle = _userTitle;
     WakelockPlus.enable();
@@ -2035,9 +2185,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       HapticFeedback.vibrate();
     }
 
-    // ✅ بدون تنبيه → صامت تماماً
-    // ✅ مرة واحدة → يقول مرة واحدة بس
-    // ✅ كل X → يعيد كل X
     if (interval == 'بدون تنبيه') {
       // صامت
     } else {
@@ -2075,7 +2222,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
-  // ✅ نسخة محدثة: متجدولش للسنة الجاية لو التاريخ عدى
   Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
     try {
       final eventDate = DateTime.parse(event['eventDate'].toString());
@@ -2085,12 +2231,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final interval = event['repeatInterval'] ?? 'مرة واحدة';
       final now = DateTime.now();
 
-      // ✅ نحسب التذكير للسنة الحالية فقط
       final eventThisYear = DateTime(now.year, eventDate.month, eventDate.day);
       final reminderDate = eventThisYear.subtract(Duration(days: advanceDays));
       final reminderDateTime = DateTime(reminderDate.year, reminderDate.month, reminderDate.day, reminderHour, reminderMinute);
 
-      // ✅ لو التذكير فات → مفيش جدولة خالص
       if (reminderDateTime.isBefore(now)) {
         return;
       }
@@ -2156,7 +2300,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ نسخة محدثة: "بدون تنبيه" صامت
   Future<void> _showEventReminder(String title, String detail, String interval) async {
     if (_eventDialogShowing) return;
     _eventDialogShowing = true;
@@ -2177,9 +2320,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       HapticFeedback.vibrate();
     }
 
-    // ✅ بدون تنبيه → صامت
-    // ✅ مرة واحدة → يقول مرة واحدة بس
-    // ✅ كل X → يعيد
     if (interval != 'بدون تنبيه') {
       speakAlert();
     }
@@ -2224,7 +2364,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
   }
 
-  // ✅ نسخة محدثة: إعداد "إظهار فوق شاشة القفل"
   void _openSettingsScreen() {
     Navigator.push(
       context,
@@ -2234,7 +2373,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           ttsVolume: _ttsVolume,
           currentSecretaryName: _secretaryName,
           currentIsUserMale: _isUserMale,
-          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock) async {
+          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeBg, voiceGender) async {
             setState(() {
               _settings.defaultReminderHour = hour;
               _settings.defaultReminderMinute = minute;
@@ -2243,10 +2382,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               _settings.adhanAlertEnabled = adhan;
               _ttsVolume = ttsVol;
               _settings.showAboveLockScreen = showLock;
+              _settings.shakeInBackgroundEnabled = shakeBg;
+              _settings.voiceGender = voiceGender;
             });
             await _saveSettings();
             await _scheduleAdhan30Days();
-            // ✅ نطبق إعداد شاشة القفل فوراً
+            await _configureVoice();
             try {
               if (showLock) {
                 await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
@@ -2255,13 +2396,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               }
             } catch (_) {}
           },
-          onSaveSecretary: (name, isUserMale) async {
+          onSaveSecretary: (name, voiceGender) async {
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('secretary_name', name);
-            await prefs.setBool('is_user_male', isUserMale);
+            await prefs.setString('voice_gender', voiceGender);
             setState(() {
               _secretaryName = name;
-              _isUserMale = isUserMale;
+              _settings.voiceGender = voiceGender;
             });
             await _configureVoice();
           },
@@ -2616,10 +2757,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         foregroundColor: Colors.white,
         elevation: 3,
         title: Row(children: [
-          CircleAvatar(radius: 22, backgroundColor: const Color(0xFFC5A059), child: ClipOval(child: Image.asset(_getSecretaryImage(_secretaryName), width: 44, height: 44, fit: BoxFit.cover, alignment: const Alignment(0, -0.3), errorBuilder: (c, e, s) => const Icon(Icons.face_3, color: Colors.white)))),
+          CircleAvatar(radius: 22, backgroundColor: const Color(0xFFC5A059), child: ClipOval(child: Image.asset(_getSecretaryImage(_secretaryName, _settings.voiceGender), width: 44, height: 44, fit: BoxFit.cover, alignment: const Alignment(0, -0.3), errorBuilder: (c, e, s) => const Icon(Icons.face_3, color: Colors.white)))),
           const SizedBox(width: 12),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('السكرتيرة: $_secretaryName', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('السكرتير: $_secretaryName', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const Text('هز الهاتف للتحدث', style: TextStyle(fontSize: 11, color: Colors.white70)),
           ]),
         ]),
@@ -2682,14 +2823,14 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)], begin: Alignment.topRight, end: Alignment.bottomLeft), borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4))]),
           child: Row(children: [
-            Container(width: 70, height: 70, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFFC5A059), width: 2), image: DecorationImage(image: AssetImage(_getSecretaryImage(_secretaryName)), fit: BoxFit.cover, alignment: const Alignment(0, -0.3)))),
+            Container(width: 70, height: 70, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFFC5A059), width: 2), image: DecorationImage(image: AssetImage(_getSecretaryImage(_secretaryName, _settings.voiceGender)), fit: BoxFit.cover, alignment: const Alignment(0, -0.3)))),
             const SizedBox(width: 15),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('مرحباً بك $userTitle! 👋', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
               const SizedBox(height: 4),
               Text('الوقت: $currentTime', style: const TextStyle(fontSize: 13, color: Color(0xFFC5A059), fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
-              const Text('📳 هُز الهاتف أو نادِ باسم السكرتيرة.', style: TextStyle(fontSize: 11, color: Colors.white70)),
+              const Text('📳 هُز الهاتف أو نادِ باسم السكرتير.', style: TextStyle(fontSize: 11, color: Colors.white70)),
             ])),
           ]),
         ),
