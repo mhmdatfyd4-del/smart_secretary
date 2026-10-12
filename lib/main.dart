@@ -1341,7 +1341,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await _tts.speak(text);
   }
 
-  // ✅ دالة الاستماع المبسطة: تستخدم ar-EG مباشرة
   Future<void> _listenVoiceCommand() async {
     if (_isListening) {
       await _speech.stop();
@@ -1360,7 +1359,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _tts.stop();
       if (mounted) setState(() => _isListening = true);
 
-      // ✅ نستخدم ar-EG لأنها المتاحة على الجهاز
       await _speech.listen(
         localeId: "ar-EG",
         listenFor: const Duration(seconds: 20),
@@ -1378,6 +1376,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _processSmartVoiceCommand(String rawCommand) async {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('سمعت: "$rawCommand"'),
+          duration: const Duration(seconds: 8),
+          backgroundColor: Colors.blue.shade800,
+        ),
+      );
+    }
+
     final userTitle = _userTitle;
     final cmd = _norm(rawCommand);
     final nameNorm = _norm(_secretaryName);
