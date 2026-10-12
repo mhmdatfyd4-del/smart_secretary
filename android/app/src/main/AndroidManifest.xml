@@ -10,6 +10,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- ✅ إذن إشعارات ملء الشاشة (عشان الشاشة تنوّر والتابلت مقفول) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- ✅ إذن تشغيل الشاشة -->
+    <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
+
     <application
         android:label="السكرتيرة الذكية"
         android:name="${applicationName}"
@@ -21,6 +26,8 @@
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:windowSoftInputMode="adjustResize">
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
