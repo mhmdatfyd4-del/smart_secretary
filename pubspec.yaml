@@ -31,6 +31,7 @@ dependencies:
 
   # المشاركة
   share_plus: ^7.2.1
+  package_info_plus: ^5.0.1
 
   # المنبه في الخلفية
   android_alarm_manager_plus: ^4.0.8
