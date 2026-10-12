@@ -233,7 +233,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // وقت التذكير الافتراضي
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -262,10 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // مستوى الصوت
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -292,10 +288,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // صوت السكرتيرة (TTS)
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -327,10 +320,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // الجملة الترحيبية
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -342,10 +332,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (v) => setState(() => _greetingEnabled = v),
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // تنبيه الأذان
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -357,10 +344,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (v) => setState(() => _adhanAlertEnabled = v),
             ),
           ),
-
           const SizedBox(height: 30),
-
-          // زر الحفظ
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1B2A4A),
@@ -761,7 +745,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             'تنبيهات الأذان',
             channelDescription: 'تنبيهات مواقيت الصلاة',
             importance: Importance.max,
-            priority: Priority.high,
+            priority: Priority.max,
             playSound: true,
             sound: RawResourceAndroidNotificationSound(sounds[prayer]),
             enableVibration: true,
@@ -769,6 +753,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             autoCancel: false,
             ongoing: true,
             fullScreenIntent: true,
+            visibility: NotificationVisibility.public,
           );
 
           await _notifications.zonedSchedule(
@@ -1317,23 +1302,26 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays);
   }
 
+  // 🔴 الإشعار المحدث: v3 + fullScreenIntent + priority.max + visibility.public
   Future<void> _scheduleBackgroundNotification(String taskTitle, DateTime scheduledDateTime) async {
     final tzTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
     const androidDetails = AndroidNotificationDetails(
-      'secretary_alarm_v2',
-      'منبه السكرتير v2',
+      'secretary_alarm_v3',
+      'منبه السكرتير v3',
       channelDescription: 'تنبيهات المواعيد',
       importance: Importance.max,
-      priority: Priority.high,
+      priority: Priority.max,
       playSound: true,
       enableVibration: true,
       category: AndroidNotificationCategory.alarm,
       autoCancel: false,
       ongoing: true,
+      fullScreenIntent: true,
+      visibility: NotificationVisibility.public,
     );
     const notificationDetails = NotificationDetails(android: androidDetails);
     await _notifications.zonedSchedule(
-      taskTitle.hashCode,
+      taskTitle.hashCode + 1000,
       'تنبيه هام!',
       'حان الآن موعد: $taskTitle',
       tzTime,
@@ -1450,7 +1438,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
   }
 
-  // 🎯 فتح شاشة الإعدادات الكاملة
   void _openSettingsScreen() {
     Navigator.push(
       context,
@@ -1643,7 +1630,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               children: [
                 TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المناسبة')),
                 const SizedBox(height: 10),
-                TextField(controller: detailCtrl, decoration: const InputDecoration(labelText: 'التفاصيل/الاسم')), // <--- التعديل هنا
+                TextField(controller: detailCtrl, decoration: const InputDecoration(labelText: 'التفاصيل/الاسم')),
                 const SizedBox(height: 15),
                 ListTile(contentPadding: EdgeInsets.zero, title: Text('التاريخ: ${DateFormat('yyyy/MM/dd').format(selectedEventDate)}'), trailing: const Icon(Icons.calendar_today, color: Color(0xFF1B2A4A)), onTap: () async {
                   final picked = await showDatePicker(context: context, initialDate: selectedEventDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
