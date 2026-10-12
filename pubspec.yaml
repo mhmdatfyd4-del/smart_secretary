@@ -13,10 +13,10 @@ dependencies:
     sdk: flutter
 
   flutter_tts: ^3.8.5
-  speech_to_text: ^7.0.0
+  speech_to_text: ^6.6.0
   sensors_plus: ^4.0.2
   shared_preferences: ^2.2.2
-  intl: ^0.19.0
+  intl: ^0.18.1
   permission_handler: ^11.0.1
   flutter_local_notifications: ^15.0.1
   timezone: ^0.9.2
@@ -31,7 +31,6 @@ dependencies:
 
   # المشاركة
   share_plus: ^7.2.1
-  package_info_plus: ^5.0.1
 
   # المنبه في الخلفية
   android_alarm_manager_plus: ^4.0.8
