@@ -167,16 +167,25 @@ class AppSettings {
   }
 }
 
+// ═══════════════════════════════════════
+// شاشة الإعدادات (كاملة + قسم السكرتيرة)
+// ═══════════════════════════════════════
 class SettingsScreen extends StatefulWidget {
   final AppSettings settings;
   final double ttsVolume;
+  final String currentSecretaryName;
+  final bool currentIsUserMale;
   final Future<void> Function(int hour, int minute, String voiceLevel, bool greeting, bool adhan, double ttsVol) onSave;
+  final Future<void> Function(String name, bool isUserMale) onSaveSecretary;
 
   const SettingsScreen({
     super.key,
     required this.settings,
     required this.ttsVolume,
+    required this.currentSecretaryName,
+    required this.currentIsUserMale,
     required this.onSave,
+    required this.onSaveSecretary,
   });
 
   @override
@@ -191,6 +200,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _adhanAlertEnabled;
   late double _ttsVolume;
 
+  // ✅ جديد: بيانات السكرتيرة
+  late String _secretaryName;
+  late bool _isUserMale;
+  final TextEditingController _nameController = TextEditingController();
+  static const List<String> _femaleNames = ['سارة', 'مريم', 'ندى', 'نور', 'ياسمين'];
+
   @override
   void initState() {
     super.initState();
@@ -200,6 +215,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _greetingEnabled = widget.settings.greetingEnabled;
     _adhanAlertEnabled = widget.settings.adhanAlertEnabled;
     _ttsVolume = widget.ttsVolume;
+    _secretaryName = widget.currentSecretaryName;
+    _isUserMale = widget.currentIsUserMale;
+    _nameController.text = _secretaryName;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
   }
 
   Future<void> _save() async {
@@ -211,6 +235,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _adhanAlertEnabled,
       _ttsVolume,
     );
+    // ✅ حفظ بيانات السكرتيرة
+    final newName = _nameController.text.trim().isEmpty ? 'سارة' : _nameController.text.trim();
+    await widget.onSaveSecretary(newName, _isUserMale);
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -230,6 +257,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // ═══════ قسم السكرتيرة (جديد) ═══════
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.face_3, color: Color(0xFF1B2A4A), size: 26),
+                      SizedBox(width: 10),
+                      Text('السكرتيرة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFC5A059), width: 3),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8)],
+                        image: DecorationImage(
+                          image: AssetImage(_getSecretaryImage(_nameController.text)),
+                          fit: BoxFit.cover,
+                          alignment: const Alignment(0, -0.4),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  const Text('نوع المستخدم:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: RadioListTile<String>(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('ذكر', style: TextStyle(fontSize: 14)),
+                          value: 'male',
+                          groupValue: _isUserMale ? 'male' : 'female',
+                          onChanged: (v) => setState(() => _isUserMale = v == 'male'),
+                        ),
+                      ),
+                      Expanded(
+                        child: RadioListTile<String>(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('أنثى', style: TextStyle(fontSize: 14)),
+                          value: 'female',
+                          groupValue: _isUserMale ? 'male' : 'female',
+                          onChanged: (v) => setState(() => _isUserMale = v == 'female'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Text('اسم السكرتيرة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8.0,
+                    runSpacing: 8.0,
+                    children: _femaleNames.map((name) {
+                      final isSelected = _nameController.text == name;
+                      return ActionChip(
+                        label: Text(name),
+                        backgroundColor: isSelected ? const Color(0xFFC5A059) : Colors.grey.shade200,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.black : Colors.black87,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _nameController.text = name;
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _nameController,
+                    onChanged: (v) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'اسم السكرتيرة',
+                      prefixIcon: const Icon(Icons.badge, color: Color(0xFF1B2A4A)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // ═══════ وقت التذكير الافتراضي ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -259,6 +385,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // ═══════ مستوى الصوت ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -286,6 +414,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // ═══════ صوت السكرتيرة (TTS Slider) ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -318,6 +448,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // ═══════ الجملة الترحيبية ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -330,6 +462,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // ═══════ تنبيه الأذان ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -342,6 +476,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 30),
+
+          // ═══════ زر الحفظ ═══════
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1B2A4A),
@@ -668,6 +804,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   DateTime _diaryDate = DateTime.now();
   DateTime? _lastShake;
 
+  // ✅ جديد: بيانات السكرتيرة (قابلة للتعديل من الإعدادات)
+  late String _secretaryName;
+  late bool _isUserMale;
+
   List<Map<String, dynamic>> _tasks = [];
   List<Map<String, dynamic>> _specialEvents = [];
   Map<String, String> _diaries = {};
@@ -678,7 +818,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   Timer? _adhanTimer;
   bool _adhanAlerted = false;
 
-  // ✅ متغيرات جديدة لنظام المناسبات
+  // متغيرات نظام المناسبات
   Timer? _eventRepeatTimer;
   bool _eventAnnouncing = false;
   String _eventAnnouncingTitle = '';
@@ -700,12 +840,15 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   double _playbackSpeed = 1.0;
   double _ttsVolume = 1.0;
 
-  String get _userTitle => widget.isUserMale ? "يا فندم" : "يا أستاذة";
+  String get _userTitle => _isUserMale ? "يا فندم" : "يا أستاذة";
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // ✅ نهيئ البيانات من widget
+    _secretaryName = widget.secretaryName;
+    _isUserMale = widget.isUserMale;
     _loadData();
     _loadRecordings();
     _configureVoice();
@@ -713,7 +856,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _initShakeDetector();
     _startAdhanWatcher();
     _scheduleAdhan30Days();
-    // ✅ نتأكد من أي مناسبة معلقة بعد 3 ثواني
     Future.delayed(const Duration(seconds: 3), _checkPendingEventAnnouncements);
   }
 
@@ -726,7 +868,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ نتحقق من أي مناسبة معلقة (الإشعار اشتغل والتطبيق كان مقفول)
+  // ✅ نتحقق من أي مناسبة معلقة
   Future<void> _checkPendingEventAnnouncements() async {
     if (_eventDialogShowing) return;
     final prefs = await SharedPreferences.getInstance();
@@ -744,15 +886,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final nowMillis = DateTime.now().millisecondsSinceEpoch;
       final diff = nowMillis - scheduledMillis;
 
-      // لو لسه ماجاتش → سيبها
       if (diff < 0) return;
-      // لو قديمة أكتر من 10 دقايق → امسحها
       if (diff > 10 * 60 * 1000) {
         await prefs.remove('pending_event_announce');
         return;
       }
 
-      // ✅ جات في آخر 10 دقايق → اتكلم
       await prefs.remove('pending_event_announce');
       final title = data['title'] as String? ?? '';
       final detail = data['detail'] as String? ?? '';
@@ -896,7 +1035,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     });
   }
 
-  // ✅ دالة الأذان المعدّلة: تلغي إشعار اليوم قبل الأذان بدقيقة عشان مايشتغلش مع السكرتيرة
   Future<void> _checkAdhanTime() async {
     if (!_settings.adhanAlertEnabled) return;
     try {
@@ -1210,7 +1348,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await _tts.setSpeechRate(_settings.speechRate);
     await _tts.setVolume(_settings.speechVolume * _ttsVolume);
     if (_settings.greetingEnabled) {
-      await _tts.speak("أهلاً بك $_userTitle. أنا سكرتيرتك ${widget.secretaryName}، هُز الهاتف في أي وقت لأكون في خدمتك.");
+      await _tts.speak("أهلاً بك $_userTitle. أنا سكرتيرتك $_secretaryName، هُز الهاتف في أي وقت لأكون في خدمتك.");
     }
   }
 
@@ -1263,7 +1401,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   Future<void> _processSmartVoiceCommand(String rawCommand) async {
     final userTitle = _userTitle;
     final cmd = _norm(rawCommand);
-    final nameNorm = _norm(widget.secretaryName);
+    final nameNorm = _norm(_secretaryName);
     bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير');
     final alarmKeywords = ["منبه", "فكرني", "ذكرني", "تذكير", "سجل عندك", "ورايا", "صحيني"];
     if (_hasAny(cmd, alarmKeywords)) {
@@ -1337,7 +1475,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
     if (scheduled.isBefore(now)) scheduled = scheduled.add(const Duration(days: 1));
     final strip = <String>{'اظبطلي', 'اضبطلي', 'اظبط', 'اضبط', 'ظبط', 'منبه', 'علي', 'الساعه', 'ساعه', 'فكرني', 'ذكرني', 'تذكير', 'سجل', 'عندك', 'اني', 'ان', 'ورايا', 'عايز', 'عاوز', 'صحيني', 'بكره', 'غدا', 'الصبح', 'صباحا', 'صبحا', 'مساء', 'بالليل', 'الليل', 'ونص', 'وربع', 'وثلث', 'يا', 'لو', 'سمحت'};
-    final nameNorm = _norm(widget.secretaryName);
+    final nameNorm = _norm(_secretaryName);
     final kept = <String>[];
     for (final t in rawCommand.split(RegExp(r'\s+'))) {
       final n = _norm(t);
@@ -1480,7 +1618,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
-  // ✅ جدولة تذكير المناسبة (إشعار + Timer + حفظ pending)
   Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
     try {
       final eventDate = DateTime.parse(event['eventDate'].toString());
@@ -1498,10 +1635,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final reminderDate = eventThisYear.subtract(Duration(days: advanceDays));
       final reminderDateTime = DateTime(reminderDate.year, reminderDate.month, reminderDate.day, reminderHour, reminderMinute);
       if (reminderDateTime.isAfter(now)) {
-        // ✅ إشعار أندرويد (يشتغل حتى لو التطبيق مقفول)
         await _scheduleEventNotification(event, reminderDateTime, interval);
-
-        // ✅ Timer (يشتغل لو التطبيق مفتوح/خلفية)
         final diff = reminderDateTime.difference(now);
         final timer = Timer(diff, () {
           if (mounted) _showEventReminder(event['title'].toString(), event['detail'].toString(), interval);
@@ -1511,7 +1645,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     } catch (_) {}
   }
 
-  // ✅ إشعار المُجدول للمناسبة
   Future<void> _scheduleEventNotification(Map<String, dynamic> event, DateTime fireTime, String interval) async {
     try {
       final eventId = event['title'].toString().hashCode + event['eventDate'].toString().hashCode;
@@ -1542,7 +1675,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       );
 
-      // ✅ نحفظ بيانات الحدث عشان لما التطبيق يفتح، السكرتيرة تتكلم
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pending_event_announce', json.encode({
         'title': event['title'],
@@ -1565,7 +1697,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ عرض تذكير المناسبة (مع التنبيه المستمر)
   Future<void> _showEventReminder(String title, String detail, String interval) async {
     if (_eventDialogShowing) return;
     _eventDialogShowing = true;
@@ -1576,7 +1707,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     HapticFeedback.vibrate();
     WakelockPlus.enable();
 
-    // امسح الـ pending لو لسه موجود
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('pending_event_announce');
@@ -1588,7 +1718,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
     speakAlert();
 
-    // ✅ التنبيه المستمر
     _eventRepeatTimer?.cancel();
     int secs = _getIntervalSeconds(interval);
     if (secs > 0) {
@@ -1629,6 +1758,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
   }
 
+  // ✅ الإعدادات مع بيانات السكرتيرة
   void _openSettingsScreen() {
     Navigator.push(
       context,
@@ -1636,6 +1766,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         builder: (_) => SettingsScreen(
           settings: _settings,
           ttsVolume: _ttsVolume,
+          currentSecretaryName: _secretaryName,
+          currentIsUserMale: _isUserMale,
           onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol) async {
             setState(() {
               _settings.defaultReminderHour = hour;
@@ -1647,6 +1779,18 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             });
             await _saveSettings();
             await _scheduleAdhan30Days();
+          },
+          // ✅ حفظ بيانات السكرتيرة الجديدة
+          onSaveSecretary: (name, isUserMale) async {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('secretary_name', name);
+            await prefs.setBool('is_user_male', isUserMale);
+            setState(() {
+              _secretaryName = name;
+              _isUserMale = isUserMale;
+            });
+            // ✅ إعادة تهيئة الصوت عشان الجملة الترحيبية تتحدث
+            await _configureVoice();
           },
         ),
       ),
@@ -1802,7 +1946,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
-  // ✅ إضافة مناسبة جديدة (مع خيار التنبيه المستمر)
   void _addSpecialEventDialog() {
     TextEditingController titleCtrl = TextEditingController();
     TextEditingController detailCtrl = TextEditingController();
@@ -1870,7 +2013,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
-  // ✅ تعديل مناسبة موجودة
   void _editSpecialEventDialog(int index) {
     final event = _specialEvents[index];
     TextEditingController titleCtrl = TextEditingController(text: event['title'].toString());
@@ -2001,10 +2143,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         foregroundColor: Colors.white,
         elevation: 3,
         title: Row(children: [
-          CircleAvatar(radius: 22, backgroundColor: const Color(0xFFC5A059), child: ClipOval(child: Image.asset(_getSecretaryImage(widget.secretaryName), width: 44, height: 44, fit: BoxFit.cover, alignment: const Alignment(0, -0.3), errorBuilder: (c, e, s) => const Icon(Icons.face_3, color: Colors.white)))),
+          CircleAvatar(radius: 22, backgroundColor: const Color(0xFFC5A059), child: ClipOval(child: Image.asset(_getSecretaryImage(_secretaryName), width: 44, height: 44, fit: BoxFit.cover, alignment: const Alignment(0, -0.3), errorBuilder: (c, e, s) => const Icon(Icons.face_3, color: Colors.white)))),
           const SizedBox(width: 12),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('السكرتيرة: ${widget.secretaryName}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('السكرتيرة: $_secretaryName', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const Text('هز الهاتف للتحدث', style: TextStyle(fontSize: 11, color: Colors.white70)),
           ]),
         ]),
@@ -2067,7 +2209,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)], begin: Alignment.topRight, end: Alignment.bottomLeft), borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4))]),
           child: Row(children: [
-            Container(width: 70, height: 70, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFFC5A059), width: 2), image: DecorationImage(image: AssetImage(_getSecretaryImage(widget.secretaryName)), fit: BoxFit.cover, alignment: const Alignment(0, -0.3)))),
+            Container(width: 70, height: 70, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFFC5A059), width: 2), image: DecorationImage(image: AssetImage(_getSecretaryImage(_secretaryName)), fit: BoxFit.cover, alignment: const Alignment(0, -0.3)))),
             const SizedBox(width: 15),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('مرحباً بك $userTitle! 👋', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
@@ -2159,7 +2301,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return Container(margin: const EdgeInsets.symmetric(vertical: 6), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)]), child: ListTile(leading: Icon(icon, color: const Color(0xFF1B2A4A)), title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)), trailing: Text(time, style: const TextStyle(color: Color(0xFF1B2A4A), fontSize: 16, fontWeight: FontWeight.bold))));
   }
 
-  // ✅ قائمة المناسبات (مع زرار تعديل)
   Widget _buildSpecialEventsTab() {
     return ListView(padding: const EdgeInsets.all(16), children: [
       const Text('المناسبات والتنبيهات:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
