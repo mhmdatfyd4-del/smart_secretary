@@ -27,6 +27,9 @@ final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotifications
 const String _secretaryImagePath = 'assets/secretary.jpg';
 const List<String> _weekDays = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
 
+// ✅ قناة MethodChannel للتحكم في شاشة القفل
+const MethodChannel _lockScreenChannel = MethodChannel('com.example.secretary_app/lock_screen');
+
 const Map<String, String> _secretaryImages = {
   'سارة': 'assets/secretary.jpg',
   'مريم': 'assets/maryam.jpg',
@@ -49,6 +52,16 @@ void main() async {
   bool isFirstTime = prefs.getBool('is_first_time') ?? true;
   String? secretaryName = prefs.getString('secretary_name');
   bool? isUserMale = prefs.getBool('is_user_male');
+  bool showAboveLockScreen = prefs.getBool('show_above_lock_screen') ?? false;
+
+  // ✅ تطبيق إعداد شاشة القفل
+  try {
+    if (showAboveLockScreen) {
+      await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
+    } else {
+      await _lockScreenChannel.invokeMethod('disableShowWhenLocked');
+    }
+  } catch (_) {}
 
   runApp(SecretaryApp(
     isFirstTime: isFirstTime,
@@ -141,6 +154,7 @@ class AppSettings {
   String voiceLevel;
   bool greetingEnabled;
   bool adhanAlertEnabled;
+  bool showAboveLockScreen;
 
   AppSettings({
     this.defaultReminderHour = 18,
@@ -148,6 +162,7 @@ class AppSettings {
     this.voiceLevel = 'عالي',
     this.greetingEnabled = true,
     this.adhanAlertEnabled = true,
+    this.showAboveLockScreen = false,
   });
 
   double get speechRate {
@@ -172,7 +187,7 @@ class SettingsScreen extends StatefulWidget {
   final double ttsVolume;
   final String currentSecretaryName;
   final bool currentIsUserMale;
-  final Future<void> Function(int hour, int minute, String voiceLevel, bool greeting, bool adhan, double ttsVol) onSave;
+  final Future<void> Function(int hour, int minute, String voiceLevel, bool greeting, bool adhan, double ttsVol, bool showLock) onSave;
   final Future<void> Function(String name, bool isUserMale) onSaveSecretary;
 
   const SettingsScreen({
@@ -196,6 +211,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _greetingEnabled;
   late bool _adhanAlertEnabled;
   late double _ttsVolume;
+  late bool _showAboveLockScreen;
 
   late String _secretaryName;
   late bool _isUserMale;
@@ -211,6 +227,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _greetingEnabled = widget.settings.greetingEnabled;
     _adhanAlertEnabled = widget.settings.adhanAlertEnabled;
     _ttsVolume = widget.ttsVolume;
+    _showAboveLockScreen = widget.settings.showAboveLockScreen;
     _secretaryName = widget.currentSecretaryName;
     _isUserMale = widget.currentIsUserMale;
     _nameController.text = _secretaryName;
@@ -230,6 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _greetingEnabled,
       _adhanAlertEnabled,
       _ttsVolume,
+      _showAboveLockScreen,
     );
     final newName = _nameController.text.trim().isEmpty ? 'سارة' : _nameController.text.trim();
     await widget.onSaveSecretary(newName, _isUserMale);
@@ -252,6 +270,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // ═══════ قسم السكرتيرة ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -348,6 +367,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // ═══════ وقت التذكير الافتراضي ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -377,6 +398,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // ═══════ مستوى الصوت ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -404,6 +427,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // ═══════ صوت السكرتيرة ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -436,6 +461,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // ═══════ الجملة الترحيبية ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -448,6 +475,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // ═══════ تنبيه الأذان ═══════
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -459,7 +488,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (v) => setState(() => _adhanAlertEnabled = v),
             ),
           ),
+          const SizedBox(height: 12),
+
+          // ═══════ ✅ جديد: إظهار فوق شاشة القفل ═══════
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: _showAboveLockScreen ? const Color(0xFFC5A059) : Colors.transparent, width: 2),
+            ),
+            child: SwitchListTile(
+              secondary: Icon(Icons.lock_open, color: _showAboveLockScreen ? const Color(0xFFC5A059) : const Color(0xFF1B2A4A), size: 26),
+              title: const Text('إظهار التطبيق فوق شاشة القفل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  _showAboveLockScreen
+                      ? 'التطبيق هيظهر تلقائياً عند التنبيه حتى لو التابلت مقفول'
+                      : 'التطبيق مش هيظهر والتابلت مقفول (أأمن)',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+              value: _showAboveLockScreen,
+              activeColor: const Color(0xFFC5A059),
+              onChanged: (v) => setState(() => _showAboveLockScreen = v),
+            ),
+          ),
           const SizedBox(height: 30),
+
+          // ═══════ زر الحفظ ═══════
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1B2A4A),
@@ -820,6 +877,38 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   double _playbackSpeed = 1.0;
   double _ttsVolume = 1.0;
 
+  // ✅ كلمات أيام الأسبوع (نسخة موسعة)
+  static const Map<String, List<String>> _dayKeywords = {
+    'السبت': [
+      'السبت', 'سبت', 'يوم السبت', 'السبت الجاي',
+      'يوم السبت الجاي', 'السبت اللي جاي',
+    ],
+    'الأحد': [
+      'الاحد', 'الأحد', 'حد', 'يوم الاحد', 'يوم الأحد',
+      'الاحد الجاي', 'يوم الاحد الجاي',
+    ],
+    'الاثنين': [
+      'الاتنين', 'الاثنين', 'اتنين', 'يوم الاتنين', 'يوم الاثنين',
+      'الاتنين الجاي', 'يوم الاتنين الجاي',
+    ],
+    'الثلاثاء': [
+      'التلات', 'الثلاثاء', 'تلات', 'التلاتاء',
+      'يوم التلات', 'يوم الثلاثاء', 'التلات الجاي',
+    ],
+    'الأربعاء': [
+      'الاربع', 'الأربعاء', 'اربع', 'الاربعاء',
+      'يوم الاربع', 'يوم الأربعاء', 'الاربع الجاي',
+    ],
+    'الخميس': [
+      'الخميس', 'خميس', 'يوم الخميس', 'الخميس الجاي',
+      'يوم الخميس الجاي',
+    ],
+    'الجمعة': [
+      'الجمعه', 'الجمعة', 'جمعه', 'جمعة', 'يوم الجمعه', 'يوم الجمعة',
+      'الجمعه الجاي', 'يوم الجمعه الجاي',
+    ],
+  };
+
   String get _userTitle => _isUserMale ? "يا فندم" : "يا أستاذة";
 
   @override
@@ -1068,7 +1157,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         if (t['alarm'] == true && t['scheduled'] != null) {
           final dt = DateTime.tryParse(t['scheduled'].toString());
           if (dt != null && dt.isAfter(DateTime.now())) {
-            _scheduleContinuousAlarm(t['task'].toString(), dt, t['repeat'] ?? 'مرة واحدة', t['repeatInterval'] ?? 'كل 5 دقايق', List<String>.from(t['customDays'] ?? []));
+            _scheduleContinuousAlarm(t['task'].toString(), dt, t['repeat'] ?? 'مرة واحدة', t['repeatInterval'] ?? 'كل 10 ثواني', List<String>.from(t['customDays'] ?? []));
           }
         }
       }
@@ -1095,6 +1184,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _settings.voiceLevel = prefs.getString('voice_level') ?? 'عالي';
     _settings.greetingEnabled = prefs.getBool('greeting_enabled') ?? true;
     _settings.adhanAlertEnabled = prefs.getBool('adhan_alert_enabled') ?? true;
+    _settings.showAboveLockScreen = prefs.getBool('show_above_lock_screen') ?? false;
     _playbackVolume = prefs.getDouble('playback_volume') ?? 1.0;
     _playbackSpeed = prefs.getDouble('playback_speed') ?? 1.0;
     _ttsVolume = prefs.getDouble('tts_volume') ?? 1.0;
@@ -1115,6 +1205,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await prefs.setString('voice_level', _settings.voiceLevel);
     await prefs.setBool('greeting_enabled', _settings.greetingEnabled);
     await prefs.setBool('adhan_alert_enabled', _settings.adhanAlertEnabled);
+    await prefs.setBool('show_above_lock_screen', _settings.showAboveLockScreen);
     await prefs.setDouble('playback_volume', _playbackVolume);
     await prefs.setDouble('playback_speed', _playbackSpeed);
     await prefs.setDouble('tts_volume', _ttsVolume);
@@ -1375,6 +1466,144 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
+  // ✅ استخراج أيام الأسبوع من الأمر
+  List<String> _parseCustomDays(String cmd) {
+    final days = <String>[];
+    _dayKeywords.forEach((dayName, keywords) {
+      if (_hasAny(cmd, keywords)) {
+        days.add(dayName);
+      }
+    });
+    return days;
+  }
+
+  // ✅ استخراج نوع التكرار
+  String _parseRepeatType(String cmd) {
+    final customDays = _parseCustomDays(cmd);
+    if (customDays.isNotEmpty) return 'مخصص';
+
+    if (_hasAny(cmd, [
+      'كل يوم', 'يومي', 'يوميا', 'يومياً',
+      'كل يوم الصبح', 'كل يوم بالليل', 'كل يوم الفجر',
+      'كل يوم المسا', 'كل يوم الصبح بدري',
+      'يوم بيوم', 'كل 24 ساعه', 'كل 24 ساعة',
+      'يوم بعد يوم', 'كل يومين',
+      'دائما', 'دائماً', 'على طول', 'على طول اليوم',
+      'كل يوم واليوم', 'كل يوم ونهار',
+      'كل صباح', 'كل مساء', 'كل ليله', 'كل ليلة',
+      'كل يوم من الايام', 'بشكل يومي',
+    ])) {
+      return 'يومي';
+    }
+
+    if (_hasAny(cmd, [
+      'كل اسبوع', 'كل أسبوع', 'اسبوعي', 'أسبوعي', 'اسبوعيا', 'أسبوعياً',
+      'كل جمعه', 'كل جمعة',
+      'نفس اليوم كل اسبوع', 'كل 7 ايام', 'كل سبعه ايام', 'كل 7 أيام',
+      'كل اسبوع نفس اليوم', 'بشكل اسبوعي', 'بشكل أسبوعي',
+      'اسبوع ورا اسبوع', 'أسبوع ورا أسبوع', 'اسبوع بعد اسبوع',
+    ])) {
+      return 'أسبوعي';
+    }
+
+    if (_hasAny(cmd, [
+      'كل شهر', 'شهري', 'شهريا', 'شهرياً',
+      'كل 30 يوم', 'كل تلاتين يوم', 'كل ثلاثين يوم',
+      'كل شهر نفس اليوم', 'نفس اليوم كل شهر',
+      'كل شهر جديد', 'بشكل شهري',
+      'شهر ورا شهر', 'شهر بعد شهر',
+      'كل اول الشهر', 'كل اول شهر', 'كل أول الشهر',
+      'كل اخره الشهر', 'كل آخر الشهر',
+    ])) {
+      return 'شهري';
+    }
+
+    return 'مرة واحدة';
+  }
+
+  // ✅ استخراج نوع التنبيه المستمر
+  String _parseIntervalType(String cmd) {
+    if (_hasAny(cmd, [
+      'بدون تنبيه', 'بدون تنبيهات', 'مش محتاج تنبيه', 'مش محتاجه تنبيه',
+      'مش عايز تنبيه', 'مش عاوز تنبيه', 'مش عايزة تنبيه', 'مش عاوزة تنبيه',
+      'من غير تنبيه', 'من غير تنبيه مستمر',
+      'بلاش تنبيه', 'بلاش تنبيهات', 'بلاش تنبيه مستمر',
+    ])) {
+      return 'بدون تنبيه';
+    }
+
+    if (_hasAny(cmd, [
+      'مره واحده بس', 'مرة واحدة بس', 'تنبيه واحد بس', 'تنبيه واحده بس',
+      'تنبيه مرة واحدة بس', 'تنبيه مره واحدة',
+      'مش محتاج يتكرر', 'مش محتاجه تتكرر',
+    ])) {
+      return 'مرة واحدة';
+    }
+
+    if (_hasAny(cmd, [
+      'كل 10 ثواني', 'كل عشر ثواني', 'كل عشر ثانيه', 'كل عشره ثواني', 'كل عشره ثانيه',
+      'كل 10 ثانيه', 'كل 10 ثوان', 'كل عشر ثوان',
+    ])) {
+      return 'كل 10 ثواني';
+    }
+
+    if (_hasAny(cmd, [
+      'كل 20 ثانية', 'كل عشرين ثانيه', 'كل عشرين ثواني',
+      'كل 20 ثانيه', 'كل 20 ثواني', 'كل عشرين ثوان',
+    ])) {
+      return 'كل 20 ثانية';
+    }
+
+    if (_hasAny(cmd, [
+      'كل 30 ثانية', 'كل تلاتين ثانيه', 'كل ثلاثين ثانيه', 'كل تلاتين ثواني',
+      'كل 30 ثانيه', 'كل 30 ثواني', 'كل تلاتين ثوان',
+      'نص دقيقه', 'نص دقيقة', 'نصف دقيقه', 'نصف دقيقة',
+    ])) {
+      return 'كل 30 ثانية';
+    }
+
+    if (_hasAny(cmd, [
+      'كل دقيقة', 'كل دقيقه', 'كل 60 ثانيه', 'كل ستين ثانيه',
+      'كل 60 ثانية', 'كل دقيقه بالظبط', 'كل دقيقة بالظبط',
+    ])) {
+      return 'كل دقيقة';
+    }
+
+    if (_hasAny(cmd, [
+      'كل دقيقتين', 'كل 2 دقيقه', 'كل دقيقتان',
+      'كل 120 ثانيه', 'كل 120 ثانية',
+    ])) {
+      return 'كل دقيقتين';
+    }
+
+    if (_hasAny(cmd, [
+      'كل 3 دقايق', 'كل تلات دقايق', 'كل ثلاث دقايق',
+      'كل 3 دقائق', 'كل تلات دقائق',
+      'كل 180 ثانيه', 'كل 180 ثانية',
+    ])) {
+      return 'كل 3 دقايق';
+    }
+
+    if (_hasAny(cmd, [
+      'كل 5 دقايق', 'كل خمس دقايق', 'كل خمسه دقايق',
+      'كل 5 دقائق', 'كل خمس دقائق',
+      'كل 300 ثانيه', 'كل 300 ثانية',
+    ])) {
+      return 'كل 5 دقايق';
+    }
+
+    if (_hasAny(cmd, [
+      'كل 10 دقايق', 'كل عشر دقايق', 'كل عشره دقايق',
+      'كل 10 دقائق', 'كل عشر دقائق',
+      'كل 600 ثانيه', 'كل 600 ثانية',
+    ])) {
+      return 'كل 10 دقايق';
+    }
+
+    return 'كل 10 ثواني';
+  }
+
+  // ✅ عرض النص اللي اتسمع
   Future<void> _processSmartVoiceCommand(String rawCommand) async {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1389,16 +1618,184 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final userTitle = _userTitle;
     final cmd = _norm(rawCommand);
     final nameNorm = _norm(_secretaryName);
-    bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير');
-    final alarmKeywords = ["منبه", "فكرني", "ذكرني", "تذكير", "سجل عندك", "ورايا", "صحيني"];
+    bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('سكرتيرتي');
+
+    // ═══════════════════════════════════════════
+    // 🔔 كلمات المنبه / التذكير (قايمة موسعة)
+    // ═══════════════════════════════════════════
+    final alarmKeywords = [
+      // ─── فكرني ───
+      "فكرني", "فكريني", "فكروني", "فكرنيلى", "فكرنيلي",
+      "فكرنى", "تفكرني", "تفكريني", "هتفكرني", "هتفكريني",
+      "فكريني ب", "فكرني ب", "فكريني في", "فكرني في",
+      "فكريني على", "فكرني على", "فكريني عند",
+      "افتكرني", "افتكريني", "افتكرلي", "افتكرلى", "افتكر", "افتكرنى",
+      "خليك فاكر", "خليك فاكرة", "خليكي فاكرة", "خليكي فاكر",
+      "خلي بالك", "خليكي بالك", "خلى بالك", "خلي بالك من",
+      "خلي بالك على", "خليكي بالك من",
+      "ما تنساني", "ماتنساني", "متنساني", "ماتنسانيش", "متنسانيش",
+      "ماتنساش", "متنساش", "ما تنساش", "متنساش",
+      "ماتنسى", "متنسى", "ما تنسى",
+      // ─── ذكرني ───
+      "ذكرني", "ذكريني", "ذكروني", "ذكرنيلى", "ذكرنيلي",
+      "ذكرنى", "تذكرني", "تذكريني", "هتذكرني", "هتذكريني",
+      "ذكرني ب", "ذكريني ب", "ذكرني في", "ذكريني في",
+      "ذكرني على", "ذكريني على",
+      // ─── نبهني ───
+      "نبهني", "نبهيني", "نبهوني", "نبّهني", "نبّهيني", "نبهنى", "نبّهنى",
+      "نبهنيلى", "نبهنيلي", "نبهينى",
+      "تنبهني", "تنبهيني", "هتنبهني", "هتنبهيني",
+      "نبهني ب", "نبهيني ب", "نبهني في", "نبهيني في",
+      "نبهني على", "نبهيني على", "نبهني عند",
+      "نبهني قبل", "نبهيني قبل",
+      "تنبيهي", "تنبيهني", "تنبيهينى",
+      // ─── منبه ───
+      "منبه", "منبّه", "منبهني", "منبهلي", "منبهلى", "منبهنى",
+      "منبه ل", "منبه على", "منبه في", "منبه عند",
+      "منبهة", "المنبه", "المنبّه",
+      "منبه بكرة", "منبه النهاردة", "منبه النهارده",
+      "اضبطلي منبه", "اظبطلي منبه", "ظبطلي منبه", "ضبطلي منبه",
+      "حطلي منبه", "حطلى منبه", "اعملي منبه", "اعمللي منبه",
+      "جهزلي منبه", "جهزيلي منبه", "رتبلي منبه", "رتبيلي منبه",
+      "دبرلي منبه", "دبريلي منبه",
+      "عايز منبه", "عاوز منبه", "عايزة منبه", "عاوزة منبه",
+      // ─── تذكير ───
+      "تذكير", "تذكيري", "تذكيرلى", "تذكيرلي",
+      "التذكير", "تذكيره", "تذكيرات",
+      "حطلي تذكير", "حطلى تذكير", "اعملي تذكير", "اعمللي تذكير",
+      "عايز تذكير", "عاوز تذكير",
+      "تذكير بكرة", "تذكير النهاردة",
+      // ─── اضبط / ظبط ───
+      "اضبطلي", "اظبطلي", "ظبطلي", "ضبطلي",
+      "اضبط", "اظبط", "ظبط", "ضبط",
+      "اضبطلى", "اظبطلى", "ظبطلى", "ضبطلى",
+      "اضبطلي معاد", "اظبطلي معاد", "ظبطلي معاد", "ضبطلي معاد",
+      "اضبطلي ميعاد", "اظبطلي ميعاد", "ظبطلي ميعاد", "ضبطلي ميعاد",
+      "اضبطلي حاجه", "اظبطلي حاجه", "ظبطلي حاجة", "ضبطلي حاجه",
+      // ─── سجل ───
+      "سجل عندك", "سجلي", "سجللى", "سجللي", "سجل لى",
+      "سجل عندك حاجه", "سجل عندك حاجة",
+      "سجل بكرة", "سجل النهاردة",
+      "سجللى معاد", "سجلي معاد", "سجللى ميعاد", "سجلي ميعاد",
+      // ─── حط ───
+      "حطلي", "حطلى", "حطني", "حطلى لى",
+      "حطلي معاد", "حطلى معاد", "حطلي ميعاد", "حطلى ميعاد",
+      "حطلي حاجه", "حطلى حاجة",
+      // ─── اعمل ───
+      "اعمللي", "اعملي", "اعمللى", "اعمل لى",
+      "اعمللي معاد", "اعملي معاد", "اعمللي ميعاد", "اعملي ميعاد",
+      "اعمللي حاجه", "اعملي حاجة",
+      "اعمل حساب", "اعملي حساب",
+      // ─── عايز / عاوز ───
+      "عايز منبه", "عاوز منبه", "عايزة منبه", "عاوزة منبه",
+      "عايزك", "عاوزك", "عايزاك", "عاوزاك",
+      "عايزك تفكرني", "عاوزك تفكرني", "عايزاك تفكرني", "عاوزاك تفكرني",
+      "عايزك تنبهني", "عاوزك تنبهني", "عايزاك تنبهني", "عاوزاك تنبهني",
+      "عايزك تذكرني", "عاوزك تذكرني", "عايزاك تذكرني", "عاوزاك تذكرني",
+      "عايزك تصحيني", "عاوزك تصحيني", "عايزاك تصحيني", "عاوزاك تصحيني",
+      // ─── صحيني ───
+      "صحيني", "صحيني الصبح", "صحيني بكرة", "صحيني الساعة",
+      "صحوني", "صحى", "تصحيني", "هتصحيني",
+      "صحيني الصبح بدري", "صحيني بدري", "صحيني في ميعاد",
+      "صحيني قبل", "صحيني بعد",
+      // ─── ورايا ───
+      "ورايا", "ورايه", "ورايا حاجه", "ورايا حاجة",
+      "ورايا مشوار", "ورايا حاجه مهمة",
+      // ─── دبر / رتب / جهز ───
+      "دبرلي", "دبريلي", "دبرلى",
+      "رتبلي", "رتبيلي", "رتبلى",
+      "جهزلي", "جهزيلي", "جهزلى",
+      "دبرلي منبه", "دبريلي منبه", "رتبلي معاد", "رتبيلي ميعاد",
+      "جهزلي منبه", "جهزيلي منبه",
+      // ─── علّم ───
+      "علمني", "علميني", "علملى", "علملي", "علمنى",
+      "علمني على", "علميني على", "علمني في",
+      // ─── افتكر ───
+      "هتفتكرني", "هتفتكريني",
+      // ─── موعد / ميعاد ───
+      "موعد", "ميعاد", "موعدي", "معادى", "الميعاد", "الموعد",
+      "حددلي موعد", "حددلي ميعاد", "حددلى معاد", "حددلى ميعاد",
+      "حددلي", "حددلى",
+      "عندي موعد", "عندي ميعاد", "عندى معاد", "عندى ميعاد",
+      // ─── تنبيهي ───
+      "تنبيه", "التنبيه", "تنبيهي", "تنبيهنى",
+      "تنبيه بكرة", "تنبيه النهاردة",
+      // ─── نسيان ───
+      "هنسى", "هنسي", "هنسى حاجه", "هنسى حاجة",
+      "ماتخلنيش انسى", "ماتخلنيش أنسى",
+      "متخلنيش انسى", "متخلنيش أنسى",
+      "خاف انسى", "خايف انسى", "خايفة انسى",
+      // ─── عايز أفتكر ───
+      "عايز افتكر", "عاوز افتكر", "عايزة افتكر", "عاوزة افتكر",
+      "عايز افتكر حاجه", "عاوز افتكر حاجة",
+      // ─── جهز نفسك ───
+      "جهز نفسك", "جهزي نفسك", "خليك جاهز", "خليكي جاهزة",
+      // ─── مساعدة ───
+      "ساعدني", "ساعديني", "ساعدنى",
+      "عايز مساعدة", "عاوز مساعدة",
+      // ─── تذكرة ───
+      "تذكره", "تذكرة", "تذكره بكرة", "تذكرة بكرة",
+      // ─── عام ───
+      "بفكرك", "بتفكرني", "تفتكر", "تفكر",
+      "بفكرك على", "بتفكرني على",
+      "هتفكرني على", "هتفكرني في",
+      "بفكرك بكرة", "بتفكرني بكرة",
+      // ─── صباح / مساء ───
+      "صحيني الصبح", "صحيني بالليل", "صحيني الفجر",
+      "فكريني الصبح", "فكريني بالليل", "فكريني الفجر",
+      "نبهني الصبح", "نبهني بالليل",
+    ];
+
     if (_hasAny(cmd, alarmKeywords)) {
       await _createAlarmFromVoice(rawCommand, cmd);
       return;
     }
-    final prayerKeywords = ["صلوات", "صلاة", "مواقيت", "اذان", "أذان"];
-    final diaryKeywords = ["يوميات", "مفكرة", "تدوين", "خواطر"];
-    final eventKeywords = ["مناسبات", "مناسبة", "عيد", "ذكرى"];
-    final recordKeywords = ["مسجل", "تسجيل", "سجل صوت"];
+
+    // ═══════════════════════════════════════════
+    // 🕌 كلمات الصلاة
+    // ═══════════════════════════════════════════
+    final prayerKeywords = [
+      "صلوات", "صلاة", "صلاه", "الصلاة", "الصلاه",
+      "مواقيت", "مواقيت الصلاة", "ميعاد الصلاة", "موعد الصلاة",
+      "اذان", "أذان", "الأذان", "الاذان",
+      "صلاه الفجر", "صلاة الظهر", "صلاة العصر", "صلاة المغرب", "صلاة العشاء",
+      "الفجر", "الظهر", "العصر", "المغرب", "العشاء",
+      "موعد الاذان", "موعد الأذان",
+    ];
+
+    // ═══════════════════════════════════════════
+    // 📔 كلمات اليوميات
+    // ═══════════════════════════════════════════
+    final diaryKeywords = [
+      "يوميات", "يومياتي", "يومياتى", "اليوميات", "مفكرة", "مفكرتي", "مفكرتى",
+      "المفكرة", "مذكرة", "مذكرتي", "مذكراتي",
+      "تدوين", "خواطر", "خاطرة", "اكتبلي", "اكتبلي اليوميات",
+      "سجل يومي", "سجل اليوم",
+    ];
+
+    // ═══════════════════════════════════════════
+    // 🎉 كلمات المناسبات
+    // ═══════════════════════════════════════════
+    final eventKeywords = [
+      "مناسبات", "مناسباتي", "مناسباتى", "المناسبات", "مناسبة", "مناسبه",
+      "عيد", "العيد", "أعياد", "اعياد", "ذكرى", "الذكرى",
+      "عيد ميلاد", "عيد الميلاد", "أعياد الميلاد", "اعياد الميلاد",
+      "عيد جواز", "عيد زواج", "عيد الزواج",
+      "مناسبة سنوية", "مناسبه سنويه",
+      "احتفال", "حفلة", "حفله",
+    ];
+
+    // ═══════════════════════════════════════════
+    // 🎤 كلمات المسجل
+    // ═══════════════════════════════════════════
+    final recordKeywords = [
+      "مسجل", "المسجل", "تسجيل", "التسجيل", "تسجيلات",
+      "سجل صوت", "سجللي صوت", "سجل صوتي",
+      "مذكرات صوتيه", "مذكرات صوتيه",
+      "صوتيات", "مقاطع صوتيه",
+      "اصوات", "الأصوات",
+    ];
+
     if (_hasAny(cmd, prayerKeywords)) {
       setState(() => _currentIndex = 2);
       await _speak("تم الانتقال لمواقيت الصلاة $userTitle.");
@@ -1416,6 +1813,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speak("تم فتح قسم المسجل $userTitle.");
       return;
     }
+
     if (isCalledByName) {
       await _speak("نعم $userTitle! أنا أسمعك.");
     } else {
@@ -1461,7 +1859,46 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       if (alt.isAfter(now)) scheduled = alt;
     }
     if (scheduled.isBefore(now)) scheduled = scheduled.add(const Duration(days: 1));
-    final strip = <String>{'اظبطلي', 'اضبطلي', 'اظبط', 'اضبط', 'ظبط', 'منبه', 'علي', 'الساعه', 'ساعه', 'فكرني', 'ذكرني', 'تذكير', 'سجل', 'عندك', 'اني', 'ان', 'ورايا', 'عايز', 'عاوز', 'صحيني', 'بكره', 'غدا', 'الصبح', 'صباحا', 'صبحا', 'مساء', 'بالليل', 'الليل', 'ونص', 'وربع', 'وثلث', 'يا', 'لو', 'سمحت'};
+
+    // ✅ استخراج الإعدادات من الأمر الصوتي
+    final repeatType = _parseRepeatType(cmd);
+    final intervalType = _parseIntervalType(cmd);
+    final customDays = _parseCustomDays(cmd);
+
+    final strip = <String>{
+      // أوامر المنبه
+      'اظبطلي', 'اضبطلي', 'اظبط', 'اضبط', 'ظبط', 'ضبط', 'منبه', 'منبّه',
+      'فكرني', 'فكريني', 'ذكرني', 'ذكريني', 'نبهني', 'نبهيني',
+      'تذكير', 'سجل', 'عندك', 'ورايا', 'ورايه', 'عايز', 'عاوز',
+      'صحيني', 'صحوني', 'علمني', 'علميني', 'حطلي', 'حطلى',
+      'اعمللي', 'اعملي', 'دبرلي', 'دبريلي', 'رتبلي', 'رتبيلي', 'جهزلي', 'جهزيلي',
+      'خلي', 'خليكي', 'فاكرة', 'فاكر', 'بالك',
+      'افتكرني', 'افتكريني', 'ابقي', 'ابقى', 'لو سمحت', 'لو',
+      // كلمات الوقت
+      'الساعه', 'ساعه', 'الساعة', 'ساعة',
+      'الصبح', 'صباحا', 'صباحاً', 'صبحا', 'الفجر', 'فجر',
+      'مساء', 'مساءً', 'مساءا', 'بالليل', 'الليل', 'ليلا',
+      'الظهر', 'ظهرا', 'العصر', 'عصرا', 'المغرب', 'العشاء', 'العشا',
+      'بكره', 'غدا', 'غداً', 'بعد', 'النهاردة', 'النهارده', 'اليوم',
+      'ونص', 'وربع', 'وثلث', 'الا ربع', 'إلا ربع',
+      // كلمات التكرار
+      'كل يوم', 'يومي', 'يوميا', 'يومياً',
+      'كل اسبوع', 'اسبوعي', 'اسبوعيا',
+      'كل شهر', 'شهري', 'شهريا',
+      // أيام الأسبوع
+      'السبت', 'سبت', 'الاحد', 'الأحد', 'حد',
+      'الاتنين', 'الاثنين', 'اتنين', 'التلات', 'الثلاثاء', 'تلات',
+      'الاربع', 'الأربعاء', 'اربع', 'الخميس', 'خميس',
+      'الجمعه', 'الجمعة', 'جمعه', 'جمعة', 'و',
+      // كلمات التنبيه المستمر
+      'كل', 'عشر', 'عشره', 'عشرين', 'تلاتين', 'تلاته', 'ثلاثين',
+      'خمس', 'خمسه', 'ثواني', 'ثانيه', 'ثانية', 'دقيقه', 'دقيقة', 'دقيقتين', 'دقايق',
+      '10', '20', '30', '3', '5',
+      // حروف
+      'يا', 'من فضلك', 'بليز', 'اني', 'ان', 'انى', 'أن',
+      'على', 'علي', 'في', 'فى', 'عند', 'عندي', 'عندى',
+      'يكون', 'تكون', 'يبقى', 'تبقى', 'مره', 'مرة', 'واحده', 'واحدة', 'بس', 'كفايه', 'كفاية', 'مش محتاج',
+    };
     final nameNorm = _norm(_secretaryName);
     final kept = <String>[];
     for (final t in rawCommand.split(RegExp(r'\s+'))) {
@@ -1477,21 +1914,44 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     if (cleanTitle.isEmpty) cleanTitle = isWake ? 'الاستيقاظ' : 'مهمة تذكيرية';
     final formattedDate = DateFormat('yyyy-MM-dd').format(scheduled);
     final formattedTime = DateFormat('hh:mm a', 'ar').format(scheduled);
+
     setState(() {
       _selectedDate = scheduled;
       _currentIndex = 0;
-      _tasks.add({'date': formattedDate, 'task': cleanTitle, 'time': formattedTime, 'alarm': true, 'scheduled': scheduled.toIso8601String(), 'repeat': 'مرة واحدة', 'repeatInterval': 'كل 5 دقايق', 'customDays': <String>[]});
+      _tasks.add({
+        'date': formattedDate,
+        'task': cleanTitle,
+        'time': formattedTime,
+        'alarm': true,
+        'scheduled': scheduled.toIso8601String(),
+        'repeat': repeatType,
+        'repeatInterval': intervalType,
+        'customDays': customDays,
+      });
     });
     _saveData();
-    _scheduleContinuousAlarm(cleanTitle, scheduled, 'مرة واحدة', 'كل 5 دقايق', []);
+    _scheduleContinuousAlarm(cleanTitle, scheduled, repeatType, intervalType, customDays);
+
     final h12 = scheduled.hour % 12 == 0 ? 12 : scheduled.hour % 12;
     final minuteText = scheduled.minute > 0 ? ' و ${scheduled.minute} دقيقة' : '';
     final periodText = scheduled.hour >= 12 ? 'مساءً' : 'صباحاً';
-    await _speak("تم التنفيذ $userTitle! تم تسجيل: $cleanTitle، الساعة $h12$minuteText $periodText.");
+    String repeatText = '';
+    if (repeatType != 'مرة واحدة') {
+      repeatText = '، $repeatType';
+      if (repeatType == 'مخصص' && customDays.isNotEmpty) {
+        repeatText += ' (${customDays.join("، ")})';
+      }
+    }
+    String intervalText = '';
+    if (intervalType != 'بدون تنبيه') {
+      intervalText = '، والتنبيه المستمر $intervalType';
+    }
+    await _speak("تم التنفيذ $userTitle! تم تسجيل: $cleanTitle، الساعة $h12$minuteText $periodText$repeatText$intervalText.");
   }
 
   int _getIntervalSeconds(String interval) {
     switch (interval) {
+      case 'مرة واحدة': return 0;
       case 'كل 10 ثواني': return 10;
       case 'كل 20 ثانية': return 20;
       case 'كل 30 ثانية': return 30;
@@ -1565,6 +2025,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
+  // ✅ نسخة محدثة: بتتعامل مع "بدون تنبيه" و "مرة واحدة"
   void _startAlarmLoop(String taskTitle, String repeat, String interval, List<String> customDays, DateTime scheduled) {
     final userTitle = _userTitle;
     WakelockPlus.enable();
@@ -1573,10 +2034,19 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       _speak("حان الآن موعد: $taskTitle");
       HapticFeedback.vibrate();
     }
-    speakAlert();
+
+    // ✅ بدون تنبيه → صامت تماماً
+    // ✅ مرة واحدة → يقول مرة واحدة بس
+    // ✅ كل X → يعيد كل X
+    if (interval == 'بدون تنبيه') {
+      // صامت
+    } else {
+      speakAlert();
+    }
+
     int secs = _getIntervalSeconds(interval);
     Timer? loopTimer;
-    if (secs > 0) {
+    if (secs > 0 && interval != 'مرة واحدة') {
       loopTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
       _activeTimers.add(loopTimer);
     }
@@ -1605,6 +2075,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
+  // ✅ نسخة محدثة: متجدولش للسنة الجاية لو التاريخ عدى
   Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
     try {
       final eventDate = DateTime.parse(event['eventDate'].toString());
@@ -1613,22 +2084,23 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final advanceDays = _getAdvanceDays(event['advanceReminder'] ?? 'قبلها بيوم');
       final interval = event['repeatInterval'] ?? 'مرة واحدة';
       final now = DateTime.now();
-      var targetYear = now.year;
-      var eventThisYear = DateTime(targetYear, eventDate.month, eventDate.day);
-      if (eventThisYear.isBefore(now)) {
-        targetYear++;
-        eventThisYear = DateTime(targetYear, eventDate.month, eventDate.day);
-      }
+
+      // ✅ نحسب التذكير للسنة الحالية فقط
+      final eventThisYear = DateTime(now.year, eventDate.month, eventDate.day);
       final reminderDate = eventThisYear.subtract(Duration(days: advanceDays));
       final reminderDateTime = DateTime(reminderDate.year, reminderDate.month, reminderDate.day, reminderHour, reminderMinute);
-      if (reminderDateTime.isAfter(now)) {
-        await _scheduleEventNotification(event, reminderDateTime, interval);
-        final diff = reminderDateTime.difference(now);
-        final timer = Timer(diff, () {
-          if (mounted) _showEventReminder(event['title'].toString(), event['detail'].toString(), interval);
-        });
-        _activeTimers.add(timer);
+
+      // ✅ لو التذكير فات → مفيش جدولة خالص
+      if (reminderDateTime.isBefore(now)) {
+        return;
       }
+
+      await _scheduleEventNotification(event, reminderDateTime, interval);
+      final diff = reminderDateTime.difference(now);
+      final timer = Timer(diff, () {
+        if (mounted) _showEventReminder(event['title'].toString(), event['detail'].toString(), interval);
+      });
+      _activeTimers.add(timer);
     } catch (_) {}
   }
 
@@ -1684,6 +2156,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
+  // ✅ نسخة محدثة: "بدون تنبيه" صامت
   Future<void> _showEventReminder(String title, String detail, String interval) async {
     if (_eventDialogShowing) return;
     _eventDialogShowing = true;
@@ -1703,11 +2176,17 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       _speak("تنبيه: قربت مناسبة $title. $detail");
       HapticFeedback.vibrate();
     }
-    speakAlert();
+
+    // ✅ بدون تنبيه → صامت
+    // ✅ مرة واحدة → يقول مرة واحدة بس
+    // ✅ كل X → يعيد
+    if (interval != 'بدون تنبيه') {
+      speakAlert();
+    }
 
     _eventRepeatTimer?.cancel();
     int secs = _getIntervalSeconds(interval);
-    if (secs > 0) {
+    if (secs > 0 && interval != 'مرة واحدة') {
       _eventRepeatTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
     }
 
@@ -1745,6 +2224,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
   }
 
+  // ✅ نسخة محدثة: إعداد "إظهار فوق شاشة القفل"
   void _openSettingsScreen() {
     Navigator.push(
       context,
@@ -1754,7 +2234,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           ttsVolume: _ttsVolume,
           currentSecretaryName: _secretaryName,
           currentIsUserMale: _isUserMale,
-          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol) async {
+          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock) async {
             setState(() {
               _settings.defaultReminderHour = hour;
               _settings.defaultReminderMinute = minute;
@@ -1762,9 +2242,18 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               _settings.greetingEnabled = greeting;
               _settings.adhanAlertEnabled = adhan;
               _ttsVolume = ttsVol;
+              _settings.showAboveLockScreen = showLock;
             });
             await _saveSettings();
             await _scheduleAdhan30Days();
+            // ✅ نطبق إعداد شاشة القفل فوراً
+            try {
+              if (showLock) {
+                await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
+              } else {
+                await _lockScreenChannel.invokeMethod('disableShowWhenLocked');
+              }
+            } catch (_) {}
           },
           onSaveSecretary: (name, isUserMale) async {
             final prefs = await SharedPreferences.getInstance();
@@ -1785,10 +2274,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     TextEditingController taskCtrl = TextEditingController();
     TimeOfDay selectedTime = TimeOfDay.now();
     String selectedRepeat = 'مرة واحدة';
-    String selectedInterval = 'كل 5 دقايق';
+    String selectedInterval = 'كل 10 ثواني';
     List<String> selectedDays = [];
     final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'أسبوعي', 'شهري', 'مخصص'];
-    final List<String> intervalOptions = ['بدون تنبيه', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+    final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1826,7 +2315,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 const Divider(),
                 const Align(alignment: Alignment.centerRight, child: Text('التنبيه المستمر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(border: OutlineInputBorder()), items: intervalOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? 'كل 5 دقايق')),
+                DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(border: OutlineInputBorder()), items: intervalOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? 'كل 10 ثواني')),
               ],
             ),
           ),
@@ -1862,10 +2351,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       selectedTime = TimeOfDay(hour: t.hour, minute: t.minute);
     } catch (_) {}
     String selectedRepeat = task['repeat'] ?? 'مرة واحدة';
-    String selectedInterval = task['repeatInterval'] ?? 'كل 5 دقايق';
+    String selectedInterval = task['repeatInterval'] ?? 'كل 10 ثواني';
     List<String> selectedDays = List<String>.from(task['customDays'] ?? []);
     final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'أسبوعي', 'شهري', 'مخصص'];
-    final List<String> intervalOptions = ['بدون تنبيه', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+    final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1903,7 +2392,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 const Divider(),
                 const Align(alignment: Alignment.centerRight, child: Text('التنبيه المستمر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(border: OutlineInputBorder()), items: intervalOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? 'كل 5 دقايق')),
+                DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(border: OutlineInputBorder()), items: intervalOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? 'كل 10 ثواني')),
               ],
             ),
           ),
@@ -1938,7 +2427,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     DateTime selectedEventDate = DateTime.now();
     TimeOfDay reminderTime = TimeOfDay(hour: _settings.defaultReminderHour, minute: _settings.defaultReminderMinute);
     final List<String> reminderOptions = ['في نفس اليوم', 'قبلها بيوم', 'قبلها بـ 3 أيام', 'قبلها بأسبوع', 'قبلها بـ 10 أيام', 'قبلها بشهر'];
-    final List<String> intervalOptions = ['مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+    final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -2015,7 +2504,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
 
     final List<String> reminderOptions = ['في نفس اليوم', 'قبلها بيوم', 'قبلها بـ 3 أيام', 'قبلها بأسبوع', 'قبلها بـ 10 أيام', 'قبلها بشهر'];
-    final List<String> intervalOptions = ['مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+    final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
 
     showDialog(
       context: context,
