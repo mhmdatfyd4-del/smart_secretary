@@ -167,9 +167,6 @@ class AppSettings {
   }
 }
 
-// ═══════════════════════════════════════
-// شاشة الإعدادات (كاملة)
-// ═══════════════════════════════════════
 class SettingsScreen extends StatefulWidget {
   final AppSettings settings;
   final double ttsVolume;
@@ -410,22 +407,16 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
   bool _agreed = false;
   bool _isRequesting = false;
 
-  // ✅ نطلب كل الأذونات المطلوبة مرة واحدة
   Future<void> _requestPermissions() async {
     setState(() => _isRequesting = true);
 
-    // 1️⃣ إذن الميكروفون (للسكرتيرة)
     await Permission.microphone.request();
-
-    // 2️⃣ إذن الإشعارات (عشان صوت الأذان والتذكيرات)
     await Permission.notification.request();
 
-    // 3️⃣ إذن المنبهات الدقيقة (Exact Alarm) - مهم لجدولة الأذان بدقة
     if (await Permission.scheduleExactAlarm.isDenied) {
       await Permission.scheduleExactAlarm.request();
     }
 
-    // 4️⃣ إذن تجاهل تحسين البطارية - يخلي التطبيق شغال في الخلفية
     if (await Permission.ignoreBatteryOptimizations.isDenied) {
       await Permission.ignoreBatteryOptimizations.request();
     }
@@ -665,7 +656,7 @@ class MainDashboard extends StatefulWidget {
   State<MainDashboard> createState() => _MainDashboardState();
 }
 
-class _MainDashboardState extends State<MainDashboard> with SingleTickerProviderStateMixin {
+class _MainDashboardState extends State<MainDashboard> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final FlutterTts _tts = FlutterTts();
   final stt.SpeechToText _speech = stt.SpeechToText();
 
@@ -687,6 +678,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   Timer? _adhanTimer;
   bool _adhanAlerted = false;
 
+  // ✅ متغيرات جديدة لنظام المناسبات
+  Timer? _eventRepeatTimer;
+  bool _eventAnnouncing = false;
+  String _eventAnnouncingTitle = '';
+  String _eventAnnouncingDetail = '';
+  bool _eventDialogShowing = false;
+
   final AudioRecorder _audioRecorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isRecording = false;
@@ -707,16 +705,66 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadData();
     _loadRecordings();
     _configureVoice();
     _initSpeech();
     _initShakeDetector();
     _startAdhanWatcher();
-    _scheduleAdhan30Days(); // ✅ 30 يوم
+    _scheduleAdhan30Days();
+    // ✅ نتأكد من أي مناسبة معلقة بعد 3 ثواني
+    Future.delayed(const Duration(seconds: 3), _checkPendingEventAnnouncements);
   }
 
-  // ✅ دالة تحوّل اسم الصلاة العربي للمفتاح الإنجليزي (نفس المستخدم في الجدولة)
+  // ✅ لما التطبيق يرجع للمقدمة، نتأكد من المناسبات المعلقة
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      Future.delayed(const Duration(seconds: 2), _checkPendingEventAnnouncements);
+    }
+  }
+
+  // ✅ نتحقق من أي مناسبة معلقة (الإشعار اشتغل والتطبيق كان مقفول)
+  Future<void> _checkPendingEventAnnouncements() async {
+    if (_eventDialogShowing) return;
+    final prefs = await SharedPreferences.getInstance();
+    final pendingStr = prefs.getString('pending_event_announce');
+    if (pendingStr == null) return;
+
+    try {
+      final data = json.decode(pendingStr) as Map<String, dynamic>;
+      final scheduledMillis = data['scheduledMillis'] as int?;
+      if (scheduledMillis == null) {
+        await prefs.remove('pending_event_announce');
+        return;
+      }
+
+      final nowMillis = DateTime.now().millisecondsSinceEpoch;
+      final diff = nowMillis - scheduledMillis;
+
+      // لو لسه ماجاتش → سيبها
+      if (diff < 0) return;
+      // لو قديمة أكتر من 10 دقايق → امسحها
+      if (diff > 10 * 60 * 1000) {
+        await prefs.remove('pending_event_announce');
+        return;
+      }
+
+      // ✅ جات في آخر 10 دقايق → اتكلم
+      await prefs.remove('pending_event_announce');
+      final title = data['title'] as String? ?? '';
+      final detail = data['detail'] as String? ?? '';
+      final interval = data['interval'] as String? ?? 'مرة واحدة';
+
+      if (title.isNotEmpty && mounted) {
+        _showEventReminder(title, detail, interval);
+      }
+    } catch (_) {}
+  }
+
+  // ✅ دالة تحوّل اسم الصلاة العربي للمفتاح الإنجليزي
   String _prayerKey(String arabicName) {
     switch (arabicName) {
       case 'الفجر': return 'fajr';
@@ -731,11 +779,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   // 🕌 جدولة تنبيهات الأذان لـ 30 يوم
   Future<void> _scheduleAdhan30Days() async {
     try {
-      // ✅ نحفظ تاريخ بداية الجدولة عشان نعرف رقم اليوم الحالي
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('adhan_schedule_start_date', DateTime.now().toIso8601String());
 
-      // إلغاء كل الإشعارات القديمة (30 يوم × 5 صلوات)
       for (int day = 0; day < 30; day++) {
         for (final prayer in ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']) {
           await _notifications.cancel((day * 10) + prayer.hashCode);
@@ -850,7 +896,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     });
   }
 
-  // ✅ الدالة المعدّلة: تلغي إشعار اليوم قبل الأذان بدقيقة عشان مايشتغلش مع السكرتيرة
+  // ✅ دالة الأذان المعدّلة: تلغي إشعار اليوم قبل الأذان بدقيقة عشان مايشتغلش مع السكرتيرة
   Future<void> _checkAdhanTime() async {
     if (!_settings.adhanAlertEnabled) return;
     try {
@@ -866,7 +912,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         'العشاء': times['isha'] ?? '',
       };
 
-      // ✅ نحسب رقم اليوم الحالي من تاريخ بداية الجدولة
       final prefs = await SharedPreferences.getInstance();
       final startDateStr = prefs.getString('adhan_schedule_start_date');
       int dayOffset = 0;
@@ -882,7 +927,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           final prayerStr = DateFormat('HH:mm').format(prayerDateTime);
           final oneMinBeforeStr = DateFormat('HH:mm').format(prayerDateTime.subtract(const Duration(minutes: 1)));
 
-          // ✅ قبل الأذان بدقيقة: نلغي إشعار اليوم الحالي (عشان مايشتغلش مع السكرتيرة)
           if (oneMinBeforeStr == currentTime && dayOffset >= 0 && dayOffset < 30) {
             final key = _prayerKey(entry.key);
             if (key.isNotEmpty) {
@@ -890,7 +934,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             }
           }
 
-          // ✅ في وقت الأذان: السكرتيرة تتكلم
           if (prayerStr == currentTime && !_adhanAlerted) {
             _adhanAlerted = true;
             await _speak("حان الآن موعد أذان ${entry.key}");
@@ -1144,6 +1187,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _eventRepeatTimer?.cancel();
     _accelerometerSub?.cancel();
     _adhanTimer?.cancel();
     _recordingTimer?.cancel();
@@ -1435,12 +1480,14 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
-  void _scheduleEventReminder(Map<String, dynamic> event) {
+  // ✅ جدولة تذكير المناسبة (إشعار + Timer + حفظ pending)
+  Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
     try {
       final eventDate = DateTime.parse(event['eventDate'].toString());
       final reminderHour = event['reminderHour'] ?? _settings.defaultReminderHour;
       final reminderMinute = event['reminderMinute'] ?? _settings.defaultReminderMinute;
       final advanceDays = _getAdvanceDays(event['advanceReminder'] ?? 'قبلها بيوم');
+      final interval = event['repeatInterval'] ?? 'مرة واحدة';
       final now = DateTime.now();
       var targetYear = now.year;
       var eventThisYear = DateTime(targetYear, eventDate.month, eventDate.day);
@@ -1451,12 +1498,58 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final reminderDate = eventThisYear.subtract(Duration(days: advanceDays));
       final reminderDateTime = DateTime(reminderDate.year, reminderDate.month, reminderDate.day, reminderHour, reminderMinute);
       if (reminderDateTime.isAfter(now)) {
+        // ✅ إشعار أندرويد (يشتغل حتى لو التطبيق مقفول)
+        await _scheduleEventNotification(event, reminderDateTime, interval);
+
+        // ✅ Timer (يشتغل لو التطبيق مفتوح/خلفية)
         final diff = reminderDateTime.difference(now);
         final timer = Timer(diff, () {
-          if (mounted) _showEventReminder(event['title'].toString(), event['detail'].toString());
+          if (mounted) _showEventReminder(event['title'].toString(), event['detail'].toString(), interval);
         });
         _activeTimers.add(timer);
       }
+    } catch (_) {}
+  }
+
+  // ✅ إشعار المُجدول للمناسبة
+  Future<void> _scheduleEventNotification(Map<String, dynamic> event, DateTime fireTime, String interval) async {
+    try {
+      final eventId = event['title'].toString().hashCode + event['eventDate'].toString().hashCode;
+      final tzTime = tz.TZDateTime.from(fireTime, tz.local);
+
+      const androidDetails = AndroidNotificationDetails(
+        'event_channel_v1',
+        'تنبيهات المناسبات',
+        channelDescription: 'تنبيهات المناسبات السنوية',
+        importance: Importance.max,
+        priority: Priority.max,
+        playSound: true,
+        enableVibration: true,
+        category: AndroidNotificationCategory.alarm,
+        autoCancel: false,
+        ongoing: true,
+        fullScreenIntent: true,
+        visibility: NotificationVisibility.public,
+      );
+
+      await _notifications.zonedSchedule(
+        eventId,
+        '🎉 تذكير بمناسبة',
+        'قربت مناسبة: ${event['title']}',
+        tzTime,
+        const NotificationDetails(android: androidDetails),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      );
+
+      // ✅ نحفظ بيانات الحدث عشان لما التطبيق يفتح، السكرتيرة تتكلم
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('pending_event_announce', json.encode({
+        'title': event['title'],
+        'detail': event['detail'],
+        'interval': interval,
+        'scheduledMillis': fireTime.millisecondsSinceEpoch,
+      }));
     } catch (_) {}
   }
 
@@ -1472,11 +1565,41 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  void _showEventReminder(String title, String detail) {
+  // ✅ عرض تذكير المناسبة (مع التنبيه المستمر)
+  Future<void> _showEventReminder(String title, String detail, String interval) async {
+    if (_eventDialogShowing) return;
+    _eventDialogShowing = true;
+    _eventAnnouncing = true;
+    _eventAnnouncingTitle = title;
+    _eventAnnouncingDetail = detail;
+
     HapticFeedback.vibrate();
-    _speak("تنبيه: قربت مناسبة $title. $detail");
+    WakelockPlus.enable();
+
+    // امسح الـ pending لو لسه موجود
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('pending_event_announce');
+    } catch (_) {}
+
+    void speakAlert() {
+      _speak("تنبيه: قربت مناسبة $title. $detail");
+      HapticFeedback.vibrate();
+    }
+    speakAlert();
+
+    // ✅ التنبيه المستمر
+    _eventRepeatTimer?.cancel();
+    int secs = _getIntervalSeconds(interval);
+    if (secs > 0) {
+      _eventRepeatTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
+    }
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1B2A4A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1486,7 +1609,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
             onPressed: () {
+              _eventRepeatTimer?.cancel();
               _tts.stop();
+              WakelockPlus.disable();
+              _eventAnnouncing = false;
+              _eventDialogShowing = false;
               Navigator.pop(ctx);
             },
             child: const Text('تمام', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -1519,7 +1646,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               _ttsVolume = ttsVol;
             });
             await _saveSettings();
-            await _scheduleAdhan30Days(); // ✅ 30 يوم
+            await _scheduleAdhan30Days();
           },
         ),
       ),
@@ -1675,13 +1802,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
+  // ✅ إضافة مناسبة جديدة (مع خيار التنبيه المستمر)
   void _addSpecialEventDialog() {
     TextEditingController titleCtrl = TextEditingController();
     TextEditingController detailCtrl = TextEditingController();
     String selectedAdvanceReminder = 'قبلها بيوم';
+    String selectedInterval = 'مرة واحدة';
     DateTime selectedEventDate = DateTime.now();
     TimeOfDay reminderTime = TimeOfDay(hour: _settings.defaultReminderHour, minute: _settings.defaultReminderMinute);
     final List<String> reminderOptions = ['في نفس اليوم', 'قبلها بيوم', 'قبلها بـ 3 أيام', 'قبلها بأسبوع', 'قبلها بـ 10 أيام', 'قبلها بشهر'];
+    final List<String> intervalOptions = ['مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1704,7 +1834,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                   final picked = await showTimePicker(context: context, initialTime: reminderTime);
                   if (picked != null) setStateSB(() => reminderTime = picked);
                 }),
+                const SizedBox(height: 8),
                 DropdownButtonFormField<String>(value: selectedAdvanceReminder, decoration: const InputDecoration(labelText: 'التذكير المسبق', border: OutlineInputBorder()), items: reminderOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedAdvanceReminder = val ?? selectedAdvanceReminder)),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(labelText: 'التنبيه المستمر', border: OutlineInputBorder()), items: intervalOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? 'مرة واحدة')),
               ],
             ),
           ),
@@ -1714,10 +1847,97 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
               onPressed: () {
                 if (titleCtrl.text.isNotEmpty) {
-                  final newEvent = {'title': titleCtrl.text, 'detail': detailCtrl.text.isEmpty ? 'مناسبة سنوية' : detailCtrl.text, 'advanceReminder': selectedAdvanceReminder, 'eventDate': selectedEventDate.toIso8601String(), 'reminderHour': reminderTime.hour, 'reminderMinute': reminderTime.minute};
+                  final newEvent = {
+                    'title': titleCtrl.text,
+                    'detail': detailCtrl.text.isEmpty ? 'مناسبة سنوية' : detailCtrl.text,
+                    'advanceReminder': selectedAdvanceReminder,
+                    'eventDate': selectedEventDate.toIso8601String(),
+                    'reminderHour': reminderTime.hour,
+                    'reminderMinute': reminderTime.minute,
+                    'repeatInterval': selectedInterval,
+                  };
                   setState(() => _specialEvents.add(newEvent));
                   _saveData();
                   _scheduleEventReminder(newEvent);
+                  Navigator.pop(ctx);
+                }
+              },
+              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ✅ تعديل مناسبة موجودة
+  void _editSpecialEventDialog(int index) {
+    final event = _specialEvents[index];
+    TextEditingController titleCtrl = TextEditingController(text: event['title'].toString());
+    TextEditingController detailCtrl = TextEditingController(text: event['detail'].toString());
+    String selectedAdvanceReminder = event['advanceReminder'] ?? 'قبلها بيوم';
+    String selectedInterval = event['repeatInterval'] ?? 'مرة واحدة';
+
+    DateTime selectedEventDate = DateTime.now();
+    try {
+      selectedEventDate = DateTime.parse(event['eventDate'].toString());
+    } catch (_) {}
+
+    TimeOfDay reminderTime = TimeOfDay(
+      hour: event['reminderHour'] ?? _settings.defaultReminderHour,
+      minute: event['reminderMinute'] ?? _settings.defaultReminderMinute,
+    );
+
+    final List<String> reminderOptions = ['في نفس اليوم', 'قبلها بيوم', 'قبلها بـ 3 أيام', 'قبلها بأسبوع', 'قبلها بـ 10 أيام', 'قبلها بشهر'];
+    final List<String> intervalOptions = ['مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateSB) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          title: const Text('تعديل المناسبة', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المناسبة')),
+                const SizedBox(height: 10),
+                TextField(controller: detailCtrl, decoration: const InputDecoration(labelText: 'التفاصيل/الاسم')),
+                const SizedBox(height: 15),
+                ListTile(contentPadding: EdgeInsets.zero, title: Text('التاريخ: ${DateFormat('yyyy/MM/dd').format(selectedEventDate)}'), trailing: const Icon(Icons.calendar_today, color: Color(0xFF1B2A4A)), onTap: () async {
+                  final picked = await showDatePicker(context: context, initialDate: selectedEventDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
+                  if (picked != null) setStateSB(() => selectedEventDate = picked);
+                }),
+                ListTile(contentPadding: EdgeInsets.zero, title: Text('وقت التذكير: ${reminderTime.format(context)}'), trailing: const Icon(Icons.access_time, color: Color(0xFF1B2A4A)), onTap: () async {
+                  final picked = await showTimePicker(context: context, initialTime: reminderTime);
+                  if (picked != null) setStateSB(() => reminderTime = picked);
+                }),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(value: selectedAdvanceReminder, decoration: const InputDecoration(labelText: 'التذكير المسبق', border: OutlineInputBorder()), items: reminderOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedAdvanceReminder = val ?? selectedAdvanceReminder)),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(labelText: 'التنبيه المستمر', border: OutlineInputBorder()), items: intervalOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? 'مرة واحدة')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+              onPressed: () {
+                if (titleCtrl.text.isNotEmpty) {
+                  final updatedEvent = {
+                    'title': titleCtrl.text,
+                    'detail': detailCtrl.text.isEmpty ? 'مناسبة سنوية' : detailCtrl.text,
+                    'advanceReminder': selectedAdvanceReminder,
+                    'eventDate': selectedEventDate.toIso8601String(),
+                    'reminderHour': reminderTime.hour,
+                    'reminderMinute': reminderTime.minute,
+                    'repeatInterval': selectedInterval,
+                  };
+                  setState(() => _specialEvents[index] = updatedEvent);
+                  _saveData();
+                  _scheduleEventReminder(updatedEvent);
                   Navigator.pop(ctx);
                 }
               },
@@ -1939,6 +2159,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return Container(margin: const EdgeInsets.symmetric(vertical: 6), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)]), child: ListTile(leading: Icon(icon, color: const Color(0xFF1B2A4A)), title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)), trailing: Text(time, style: const TextStyle(color: Color(0xFF1B2A4A), fontSize: 16, fontWeight: FontWeight.bold))));
   }
 
+  // ✅ قائمة المناسبات (مع زرار تعديل)
   Widget _buildSpecialEventsTab() {
     return ListView(padding: const EdgeInsets.all(16), children: [
       const Text('المناسبات والتنبيهات:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
@@ -1950,7 +2171,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       if (_specialEvents.isEmpty)
         Container(padding: const EdgeInsets.all(30), child: Column(children: [Icon(Icons.stars, size: 50, color: Colors.grey.shade400), const SizedBox(height: 8), const Text('لا توجد مناسبات', style: TextStyle(color: Colors.grey, fontSize: 14))]))
       else
-        ..._specialEvents.map((e) {
+        ..._specialEvents.asMap().entries.map((entry) {
+          final i = entry.key;
+          final e = entry.value;
           final eventDate = DateTime.tryParse(e['eventDate'] ?? '') ?? DateTime.now();
           final now = DateTime.now();
           final thisYear = DateTime(now.year, eventDate.month, eventDate.day);
@@ -1958,15 +2181,19 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           final nextOccurrence = thisYear.isAfter(now) ? thisYear : nextYear;
           final remaining = _formatRemaining(nextOccurrence);
           final reminderTime = '${(e['reminderHour'] ?? 18).toString().padLeft(2, '0')}:${(e['reminderMinute'] ?? 0).toString().padLeft(2, '0')}';
+          final repeatInterval = e['repeatInterval'] ?? 'مرة واحدة';
           return Container(
             margin: const EdgeInsets.symmetric(vertical: 5),
             decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.amber.shade300)),
             child: ListTile(
               leading: const Icon(Icons.stars, color: Color(0xFFC5A059), size: 28),
               title: Text(e['title'].toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('${e['detail']} • ${DateFormat('yyyy/MM/dd').format(eventDate)}\nالتذكير: ${e['advanceReminder']} الساعة $reminderTime • $remaining'),
+              subtitle: Text('${e['detail']} • ${DateFormat('yyyy/MM/dd').format(eventDate)}\nالتذكير: ${e['advanceReminder']} الساعة $reminderTime • $remaining\nالتنبيه المستمر: $repeatInterval'),
               isThreeLine: true,
-              trailing: IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () { setState(() => _specialEvents.remove(e)); _saveData(); }),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _editSpecialEventDialog(i)),
+                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () { setState(() => _specialEvents.removeAt(i)); _saveData(); }),
+              ]),
             ),
           );
         }),
