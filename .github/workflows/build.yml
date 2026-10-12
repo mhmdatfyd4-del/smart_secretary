@@ -22,7 +22,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.5'
+          flutter-version: '3.19.6'
           channel: 'stable'
           cache: true
 
@@ -31,6 +31,11 @@ jobs:
 
       - name: Generate missing Android files
         run: flutter create . --platforms=android --org com.example --project-name secretary_app
+
+      - name: Update Gradle to 8.0
+        run: |
+          sed -i 's|distributionUrl=.*gradle-.*-all.zip|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.0-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
+          cat android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Build APK
         run: flutter build apk --release
