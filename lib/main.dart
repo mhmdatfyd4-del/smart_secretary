@@ -39,15 +39,6 @@ String _getSecretaryImage(String name) {
   return _secretaryImages[name] ?? 'assets/secretary.jpg';
 }
 
-// ✅ دالة تفتح إعدادات التطبيق لتفعيل إذن إشعارات ملء الشاشة
-Future<void> _requestFullScreenIntentPermission() async {
-  if (Platform.isAndroid) {
-    try {
-      await openAppSettings();
-    } catch (_) {}
-  }
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ar');
@@ -58,15 +49,6 @@ void main() async {
   bool isFirstTime = prefs.getBool('is_first_time') ?? true;
   String? secretaryName = prefs.getString('secretary_name');
   bool? isUserMale = prefs.getBool('is_user_male');
-
-  // ✅ نطلب الإذن مرة واحدة فقط بعد إعداد التطبيق لأول مرة
-  if (!isFirstTime) {
-    bool askedBefore = prefs.getBool('asked_fullscreen_permission') ?? false;
-    if (!askedBefore) {
-      await _requestFullScreenIntentPermission();
-      await prefs.setBool('asked_fullscreen_permission', true);
-    }
-  }
 
   runApp(SecretaryApp(
     isFirstTime: isFirstTime,
@@ -426,11 +408,30 @@ class TermsAndPermissionsScreen extends StatefulWidget {
 
 class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
   bool _agreed = false;
+  bool _isRequesting = false;
 
+  // ✅ نطلب كل الأذونات المطلوبة مرة واحدة
   Future<void> _requestPermissions() async {
+    setState(() => _isRequesting = true);
+
+    // 1️⃣ إذن الميكروفون (للسكرتيرة)
     await Permission.microphone.request();
+
+    // 2️⃣ إذن الإشعارات (عشان صوت الأذان والتذكيرات)
     await Permission.notification.request();
+
+    // 3️⃣ إذن المنبهات الدقيقة (Exact Alarm) - مهم لجدولة الأذان بدقة
+    if (await Permission.scheduleExactAlarm.isDenied) {
+      await Permission.scheduleExactAlarm.request();
+    }
+
+    // 4️⃣ إذن تجاهل تحسين البطارية - يخلي التطبيق شغال في الخلفية
+    if (await Permission.ignoreBatteryOptimizations.isDenied) {
+      await Permission.ignoreBatteryOptimizations.request();
+    }
+
     if (mounted) {
+      setState(() => _isRequesting = false);
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupSecretaryScreen()));
     }
   }
@@ -471,6 +472,10 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
                       Text('• التنبيهات والإشعارات: لإطلاق المنبه الصوتي والتذكير المسبق بالمناسبات.', style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 5),
                       Text('• مستشعرات الحركة: للتعرف على هز الجهاز وتفعيل المساعد مباشرة.', style: TextStyle(fontSize: 14, height: 1.6)),
+                      SizedBox(height: 5),
+                      Text('• المنبهات الدقيقة: لضبط مواقيت الأذان بدقة.', style: TextStyle(fontSize: 14, height: 1.6)),
+                      SizedBox(height: 5),
+                      Text('• تجاهل تحسين البطارية: ليعمل التطبيق في الخلفية بدون توقف.', style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 15),
                       Text('جميع البيانات محفوظة بأمان محلياً على جهازك.', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey)),
                     ],
@@ -492,8 +497,10 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
                 minimumSize: const Size.fromHeight(52),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              onPressed: _agreed ? _requestPermissions : null,
-              child: const Text('متابعة وإعطاء الأذونات', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+              onPressed: (_agreed && !_isRequesting) ? _requestPermissions : null,
+              child: _isRequesting
+                  ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                  : const Text('متابعة وإعطاء الأذونات', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
             )
           ],
         ),
@@ -647,7 +654,6 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
     );
   }
 }
-
 // 3. اللوحة الرئيسية
 class MainDashboard extends StatefulWidget {
   final String secretaryName;
@@ -707,13 +713,30 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _initSpeech();
     _initShakeDetector();
     _startAdhanWatcher();
-    _scheduleAdhan7Days();
+    _scheduleAdhan30Days(); // ✅ 30 يوم
   }
 
-  // 🕌 جدولة تنبيهات الأذان لـ 7 أيام
-  Future<void> _scheduleAdhan7Days() async {
+  // ✅ دالة تحوّل اسم الصلاة العربي للمفتاح الإنجليزي (نفس المستخدم في الجدولة)
+  String _prayerKey(String arabicName) {
+    switch (arabicName) {
+      case 'الفجر': return 'fajr';
+      case 'الظهر': return 'dhuhr';
+      case 'العصر': return 'asr';
+      case 'المغرب': return 'maghrib';
+      case 'العشاء': return 'isha';
+      default: return '';
+    }
+  }
+
+  // 🕌 جدولة تنبيهات الأذان لـ 30 يوم
+  Future<void> _scheduleAdhan30Days() async {
     try {
-      for (int day = 0; day < 7; day++) {
+      // ✅ نحفظ تاريخ بداية الجدولة عشان نعرف رقم اليوم الحالي
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('adhan_schedule_start_date', DateTime.now().toIso8601String());
+
+      // إلغاء كل الإشعارات القديمة (30 يوم × 5 صلوات)
+      for (int day = 0; day < 30; day++) {
         for (final prayer in ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']) {
           await _notifications.cancel((day * 10) + prayer.hashCode);
         }
@@ -737,7 +760,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
       final now = DateTime.now();
 
-      for (int day = 0; day < 7; day++) {
+      for (int day = 0; day < 30; day++) {
         final targetDate = now.add(Duration(days: day));
 
         final coordinates = Coordinates(30.0444, 31.2357);
@@ -827,12 +850,14 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     });
   }
 
+  // ✅ الدالة المعدّلة: تلغي إشعار اليوم قبل الأذان بدقيقة عشان مايشتغلش مع السكرتيرة
   Future<void> _checkAdhanTime() async {
     if (!_settings.adhanAlertEnabled) return;
     try {
       final times = await _calculatePrayerTimes();
       final now = DateTime.now();
       final currentTime = DateFormat('HH:mm').format(now);
+
       final Map<String, String> prayerMap = {
         'الفجر': times['fajr'] ?? '',
         'الظهر': times['dhuhr'] ?? '',
@@ -840,10 +865,32 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         'المغرب': times['maghrib'] ?? '',
         'العشاء': times['isha'] ?? '',
       };
+
+      // ✅ نحسب رقم اليوم الحالي من تاريخ بداية الجدولة
+      final prefs = await SharedPreferences.getInstance();
+      final startDateStr = prefs.getString('adhan_schedule_start_date');
+      int dayOffset = 0;
+      if (startDateStr != null) {
+        final startDate = DateTime.parse(startDateStr);
+        dayOffset = now.difference(startDate).inDays;
+      }
+
       for (final entry in prayerMap.entries) {
         try {
           final prayerTime = DateFormat('hh:mm a', 'ar').parse(entry.value);
-          final prayerStr = DateFormat('HH:mm').format(DateTime(now.year, now.month, now.day, prayerTime.hour, prayerTime.minute));
+          final prayerDateTime = DateTime(now.year, now.month, now.day, prayerTime.hour, prayerTime.minute);
+          final prayerStr = DateFormat('HH:mm').format(prayerDateTime);
+          final oneMinBeforeStr = DateFormat('HH:mm').format(prayerDateTime.subtract(const Duration(minutes: 1)));
+
+          // ✅ قبل الأذان بدقيقة: نلغي إشعار اليوم الحالي (عشان مايشتغلش مع السكرتيرة)
+          if (oneMinBeforeStr == currentTime && dayOffset >= 0 && dayOffset < 30) {
+            final key = _prayerKey(entry.key);
+            if (key.isNotEmpty) {
+              await _notifications.cancel((dayOffset * 10) + key.hashCode);
+            }
+          }
+
+          // ✅ في وقت الأذان: السكرتيرة تتكلم
           if (prayerStr == currentTime && !_adhanAlerted) {
             _adhanAlerted = true;
             await _speak("حان الآن موعد أذان ${entry.key}");
@@ -1320,7 +1367,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays);
   }
 
-  // 🔴 الإشعار المحدث: v3 + fullScreenIntent + priority.max + visibility.public
   Future<void> _scheduleBackgroundNotification(String taskTitle, DateTime scheduledDateTime) async {
     final tzTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
     const androidDetails = AndroidNotificationDetails(
@@ -1473,7 +1519,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               _ttsVolume = ttsVol;
             });
             await _saveSettings();
-            await _scheduleAdhan7Days();
+            await _scheduleAdhan30Days(); // ✅ 30 يوم
           },
         ),
       ),
