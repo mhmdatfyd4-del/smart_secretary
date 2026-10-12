@@ -167,9 +167,6 @@ class AppSettings {
   }
 }
 
-// ═══════════════════════════════════════
-// شاشة الإعدادات (كاملة + قسم السكرتيرة)
-// ═══════════════════════════════════════
 class SettingsScreen extends StatefulWidget {
   final AppSettings settings;
   final double ttsVolume;
@@ -1344,7 +1341,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await _tts.speak(text);
   }
 
-  // ✅ دالة معدلة: تكتشف اللغة العربية المتاحة على الجهاز تلقائياً
+  // ✅ دالة معدلة: تعرض اللغات المتاحة على الشاشة (بدل الكونسول)
   Future<void> _listenVoiceCommand() async {
     if (_isListening) {
       await _speech.stop();
@@ -1359,45 +1356,102 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         await _speak("لا أستطيع الوصول للميكروفون $_userTitle.");
         return;
       }
-      await _tts.stop();
-      if (mounted) setState(() => _isListening = true);
 
-      // ✅ نكتشف اللغة العربية المتاحة على الجهاز
-      String arabicLocale = "ar-SA";
+      // ✅ نعرض اللغات المتاحة على الشاشة (بدل الكونسول)
       try {
         final locales = await _speech.locales();
-        final availableArabic = locales
+        final allLocales = locales.map((l) => '${l.localeId} (${l.name})').toList();
+        final arabicLocales = locales
             .where((l) => l.localeId.toLowerCase().startsWith('ar'))
             .map((l) => l.localeId)
             .toList();
-        print('✅ Arabic locales available: $availableArabic');
-        if (availableArabic.isNotEmpty) {
-          if (availableArabic.any((l) => l.toLowerCase().contains('sa'))) {
-            arabicLocale = availableArabic.firstWhere((l) => l.toLowerCase().contains('sa'));
-          } else if (availableArabic.any((l) => l.toLowerCase().contains('eg'))) {
-            arabicLocale = availableArabic.firstWhere((l) => l.toLowerCase().contains('eg'));
-          } else {
-            arabicLocale = availableArabic.first;
-          }
-        } else {
-          print('⚠️ مفيش عربي متاح، اللغات المتاحة: ${locales.map((l) => l.localeId).toList()}');
-        }
-      } catch (e) {
-        print('خطأ في جلب اللغات: $e');
-      }
 
-      print('🎤 Using locale: $arabicLocale');
-      await _speech.listen(
-        localeId: arabicLocale,
-        listenFor: const Duration(seconds: 20),
-        pauseFor: const Duration(seconds: 4),
-        onResult: (val) {
-          if (val.finalResult) {
-            if (mounted) setState(() => _isListening = false);
-            _processSmartVoiceCommand(val.recognizedWords);
+        if (!mounted) return;
+
+        // ✅ نعرض Alert فيه اللغات
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            title: const Text('🌐 اللغات المتاحة على الجهاز', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: arabicLocales.isEmpty ? Colors.red.shade50 : Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      arabicLocales.isEmpty
+                          ? '❌ مفيش عربي متاح!\nلازم تنزّل حزمة اللغة العربية.'
+                          : '✅ اللغات العربية المتاحة:\n${arabicLocales.join('\n')}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: arabicLocales.isEmpty ? Colors.red : Colors.green.shade800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  const Text('📋 كل اللغات المتاحة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 5),
+                  Text(
+                    allLocales.isEmpty ? 'مفيش لغات متاحة!' : allLocales.join('\n'),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('تمام'),
+              ),
+            ],
+          ),
+        );
+
+        // ✅ نكمل الاستماع بعد ما يتقفل الـ Alert
+        String arabicLocale = "ar-SA";
+        if (arabicLocales.isNotEmpty) {
+          if (arabicLocales.any((l) => l.toLowerCase().contains('sa'))) {
+            arabicLocale = arabicLocales.firstWhere((l) => l.toLowerCase().contains('sa'));
+          } else if (arabicLocales.any((l) => l.toLowerCase().contains('eg'))) {
+            arabicLocale = arabicLocales.firstWhere((l) => l.toLowerCase().contains('eg'));
+          } else {
+            arabicLocale = arabicLocales.first;
           }
-        },
-      );
+        }
+
+        await _tts.stop();
+        if (mounted) setState(() => _isListening = true);
+        await _speech.listen(
+          localeId: arabicLocale,
+          listenFor: const Duration(seconds: 20),
+          pauseFor: const Duration(seconds: 4),
+          onResult: (val) {
+            if (val.finalResult) {
+              if (mounted) setState(() => _isListening = false);
+              _processSmartVoiceCommand(val.recognizedWords);
+            }
+          },
+        );
+      } catch (e) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('❌ خطأ'),
+            content: Text('حصل خطأ:\n$e'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('تمام')),
+            ],
+          ),
+        );
+      }
     } finally {
       _starting = false;
     }
