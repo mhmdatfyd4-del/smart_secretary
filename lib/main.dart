@@ -66,7 +66,6 @@ void main() async {
   tz.initializeTimeZones();
   await _initNotifications();
 
-  // ✅ تهيئة TTS مرة واحدة بس في البداية
   try {
     await _appTts.setEngine("com.google.android.tts");
     await Future.delayed(const Duration(milliseconds: 300));
@@ -1238,7 +1237,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
 }
 
 // ═══════════════════════════════════════
-// VoicePickerDialog — يستخدم _appTts العالمي
+// VoicePickerDialog
 // ═══════════════════════════════════════
 class VoicePickerDialog extends StatefulWidget {
   final String gender;
@@ -1414,7 +1413,6 @@ class MainDashboard extends StatefulWidget {
 }
 
 class _MainDashboardState extends State<MainDashboard> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  // ✅ يستخدم _appTts العالمي
   FlutterTts get _tts => _appTts;
 
   final stt.SpeechToText _speech = stt.SpeechToText();
@@ -1431,13 +1429,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   late bool _isUserMale;
 
   bool _isInBackground = false;
+  bool _batteryDialogShown = false;
 
   List<Map<String, dynamic>> _tasks = [];
   List<Map<String, dynamic>> _specialEvents = [];
   Map<String, String> _diaries = {};
   AppSettings _settings = AppSettings();
 
-  // ✅ Set بدل List مع cleanup
   final Set<Timer> _activeTimers = {};
   StreamSubscription? _accelerometerSub;
   Timer? _adhanTimer;
@@ -1476,7 +1474,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   String get _secTitle => _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
   String get _secWord => _settings.voiceGender == 'ذكر' ? 'سكرتيرك' : 'سكرتيرتك';
 
-  // ✅ صيغ ذكية حسب نوع المستخدم
   String get _pronoun => _isUserMale ? "وانت" : "وانتي";
   String get _takeCareWord => _isUserMale ? "خد" : "خدي";
   String get _readyWord => _settings.voiceGender == 'ذكر' ? "جاهز" : "جاهزة";
@@ -1489,11 +1486,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     WidgetsBinding.instance.addObserver(this);
     _secretaryName = widget.secretaryName;
     _isUserMale = widget.isUserMale;
-    // ✅ ننتظر loadData قبل configureVoice
     _initAll();
   }
 
-  // ✅ ترتيب التهيئة الصح
   Future<void> _initAll() async {
     await _loadData();
     await _loadRecordings();
@@ -1503,6 +1498,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _startAdhanWatcher();
     _scheduleAdhan30Days();
     Future.delayed(const Duration(seconds: 3), _checkPendingEventAnnouncements);
+    // 🆕 نتحقق من المنبه المعلّق
+    Future.delayed(const Duration(seconds: 2), _checkPendingAlarm);
+    // 🆕 نتحقق من إذن البطارية
+    Future.delayed(const Duration(seconds: 4), _checkBatteryOptimization);
   }
 
   @override
@@ -1510,10 +1509,107 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       _isInBackground = false;
+      // 🆕 نتحقق من المنبه المعلّق فوراً
+      Future.delayed(const Duration(milliseconds: 500), _checkPendingAlarm);
       Future.delayed(const Duration(seconds: 2), _checkPendingEventAnnouncements);
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
       _isInBackground = true;
     }
+  }
+
+  // ═══════════════════════════════════════
+  // 🆕 فحص إذن البطارية + تنبيه المستخدم
+  // ═══════════════════════════════════════
+  Future<void> _checkBatteryOptimization() async {
+    if (_batteryDialogShown) return;
+    try {
+      final isIgnoring = await Permission.ignoreBatteryOptimizations.isGranted;
+      if (isIgnoring) return;
+
+      _batteryDialogShown = true;
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          title: const Row(children: [
+            Icon(Icons.battery_alert, color: Colors.orange, size: 28),
+            SizedBox(width: 10),
+            Text('⚠️ تنبيه مهم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ]),
+          content: const Text(
+            'عشان المنبه يشتغل والتابلت مقفول، محتاج تسمح للتطبيق '
+            'يشتغل في الخلفية.\n\n'
+            'اضغط "السماح" عشان تفتح الإعدادات وتوافق.',
+            style: TextStyle(fontSize: 14, height: 1.6),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('بعدين'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  await Permission.ignoreBatteryOptimizations.request();
+                } catch (_) {}
+              },
+              child: const Text('السماح', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {}
+  }
+
+  // ═══════════════════════════════════════
+  // 🆕 فحص المنبه المعلّق (لما التطبيق يفتح والتابلت مقفول)
+  // ═══════════════════════════════════════
+  Future<void> _checkPendingAlarm() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingStr = prefs.getString('pending_alarm');
+      if (pendingStr == null) return;
+
+      final data = json.decode(pendingStr) as Map<String, dynamic>;
+      final scheduledMillis = data['scheduledMillis'] as int?;
+      final title = data['title'] as String? ?? '';
+      final repeat = data['repeat'] as String? ?? 'مرة واحدة';
+      final interval = data['interval'] as String? ?? 'بدون تنبيه';
+      final customDays = List<String>.from(data['customDays'] ?? []);
+
+      if (scheduledMillis == null || title.isEmpty) {
+        await prefs.remove('pending_alarm');
+        return;
+      }
+
+      final nowMillis = DateTime.now().millisecondsSinceEpoch;
+      final diff = nowMillis - scheduledMillis;
+
+      // لو فات أكتر من 5 دقايق → امسحه
+      if (diff > 5 * 60 * 1000) {
+        await prefs.remove('pending_alarm');
+        return;
+      }
+
+      // لو لسه في المستقبل بأكتر من دقيقة → سيبها
+      if (diff < -60 * 1000) return;
+
+      // ✅ الوقت صح! شغّل المنبه
+      await prefs.remove('pending_alarm');
+      if (mounted) {
+        _startAlarmLoop(
+          title,
+          repeat,
+          interval,
+          customDays,
+          DateTime.fromMillisecondsSinceEpoch(scheduledMillis),
+        );
+      }
+    } catch (_) {}
   }
 
   Future<void> _checkPendingEventAnnouncements() async {
@@ -1976,7 +2072,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     super.dispose();
   }
 
-  // ✅ إعداد الصوت (مع skipGreeting)
   Future<void> _configureVoice({bool skipGreeting = false}) async {
     try {
       await _tts.setLanguage("ar-EG");
@@ -2116,126 +2211,106 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   // ═══════════════════════════════════════
-  // 🆕 الردود الاجتماعية — موسّعة + صيغ ذكية
+  // 🆕 الردود الاجتماعية
   // ═══════════════════════════════════════
   Future<bool> _handleSocialReply(String cmd) async {
     final userTitle = _userTitle;
 
-    // ═══ 1. صباح الخير ═══
     if (_hasAny(cmd, ['صباح الخير', 'صباح النور', 'صباح الفل', 'صباح الفل والياسمين', 'صباحو', 'صباح النور والسرور', 'صبح صباح الخير'])) {
       await _speak("صباح النور والسرور $userTitle ☀️");
       return true;
     }
 
-    // ═══ 2. مساء الخير ═══
     if (_hasAny(cmd, ['مساء الخير', 'مساء النور', 'مساء الفل', 'مساء الفل والياسمين', 'مسائو', 'مسا الخير'])) {
       await _speak("مساء النور والفل والياسمين $userTitle 🌙");
       return true;
     }
 
-    // ═══ 3. عاملة ايه / أخبارك / كيف الحال ═══
     if (_hasAny(cmd, ['عامله ايه', 'عاملة ايه', 'اخبارك ايه', 'اخبارك', 'أخبارك', 'ازيك', 'ازيك يا سكرتير', 'ازيك يا سكرتيرة', 'عامل ايه', 'كيف حالك', 'كيف الحال', 'ايه الاخبار', 'إيه الأخبار', 'الدنيا عاملة ايه', 'اخبارك ايه يا سكرتير', 'اخبارك ايه يا سكرتيرة'])) {
       await _speak("الحمد لله بخير، دايماً في خدمتك $userTitle 💛");
       return true;
     }
 
-    // ═══ 4. شكراً ═══
     if (_hasAny(cmd, ['شكرا', 'شكراً', 'متشكر', 'متشكرة', 'مشكور', 'مشكورة', 'تسلم', 'تسلمي', 'ربنا يخليك', 'ربنا يخليكي', 'ميرسي', 'ميرسى', 'ثانكس'])) {
       await _speak("العفو $userTitle، ده واجبي 🙏");
       return true;
     }
 
-    // ═══ 5. تصبح على خير ═══
     if (_hasAny(cmd, ['تصبح على خير', 'تصبحى على خير', 'تصبحي على خير', 'تصبحوا على خير', 'ليلتك سعيدة', 'ليلة سعيدة', 'طيبة ومساء الفل'])) {
       await _speak("$_pronoun من أهله $userTitle، تصبح على خير 🌙");
       return true;
     }
 
-    // ═══ 6. وحشتني ═══
     if (_hasAny(cmd, ['وحشتني', 'وحشتينى', 'وحشني', 'اشتقتلك', 'اشتقت لك', 'مشتاقلك', 'مشتاقة لك'])) {
       await _speak("$_pronoun كمان وحشتني $userTitle، أنا $_readyWord لأي خدمة 💛");
       return true;
     }
 
-    // ═══ 7. اسمك ايه ═══
     if (_hasAny(cmd, ['اسمك ايه', 'اسمك إيه', 'اسمك ايش', 'اسمك من فضلك', 'انت مين', 'انتي مين', 'مين انت', 'مين انتي', 'اسمك إيه يا سكرتير', 'اسمك إيه يا سكرتيرة'])) {
       await _speak("اسمي $_secretaryName، $_secTitle الشخصي بتاعك، تحت أمرك $userTitle");
       return true;
     }
 
-    // ═══ 8. بتعمل ايه ═══
     if (_hasAny(cmd, ['بتعمل ايه', 'بتعملي ايه', 'بتعمل إيه', 'بتعملى ايه', 'بتشتغل ايه', 'بتشغلي ايه', 'مشغول بايه', 'مشغولة بايه', 'بتعمل ايه دلوقتي'])) {
       await _speak("بستنى أوامرك $userTitle 👌");
       return true;
     }
 
-    // ═══ 9. تعبان ═══
     if (_hasAny(cmd, ['تعبان', 'تعبانة', 'مش كويس', 'مش كويسة', 'مضايق', 'مضايقة', 'زعلان', 'زعلانة', 'حزين', 'حزينة', 'تعبان شويه', 'مش قادر'])) {
       await _speak("ألف سلامة عليك $userTitle، $_takeCareWord بالك من نفسك 💚");
       return true;
     }
 
-    // ═══ 10. مبسوط / فرحان ═══
     if (_hasAny(cmd, ['مبسوط', 'مبسوطة', 'فرحان', 'فرحانة', 'سعيد', 'سعيدة', 'الحمد لله مبسوط', 'الحمد لله مبسوطة', 'فرحان انهاردة'])) {
       await _speak("وأنا كمان $_happyWord ليك $userTitle 😊");
       return true;
     }
 
-    // ═══ 11. تمام / ماشي / اوكي ═══
     if (_hasAny(cmd, ['تمام', 'ماشي', 'اوكي', 'أوكي', 'ok', 'طيب', 'حاضر', 'خلاص كده'])) {
       await _speak("تمام $userTitle 👌");
       return true;
     }
 
-    // ═══ 12. بحبك ═══
     if (_hasAny(cmd, ['بحبك', 'احبك', 'أحبك', 'بعشقك', 'انتي حبيبتي'])) {
       await _speak("وأنا كمان بحبك $userTitle 💛");
       return true;
     }
 
-    // ═══ 13. سلام / باي ═══
     if (_hasAny(cmd, ['سلام عليكم', 'السلام عليكم', 'باي', 'يلا سلام', 'أشوفك بعدين', 'اشوفك بعدين', 'مع السلامة', 'سلام'])) {
       await _speak("وعليكم السلام ورحمة الله وبركاته $userTitle 🌟");
       return true;
     }
 
-    // ═══ 14. يلا / بسرعة ═══
     if (_hasAny(cmd, ['يلا', 'يالا', 'بسرعة', 'بسرعه', 'حالا', 'حالاً', 'دلوقتي', 'حالا يلا'])) {
       await _speak("حاضر $userTitle، أنا في الخدمة 🏃");
       return true;
     }
 
-    // ═══ 15. أنت موجود / معايا ═══
     if (_hasAny(cmd, ['انت موجود', 'انتي موجودة', 'معايا', 'سامعني', 'سامعانى', 'سامعاني', 'سامعنى'])) {
       await _speak("أيوة $userTitle، أنا $_listenWord وأنا في الخدمة 👂");
       return true;
     }
 
-    // ═══ 16. يلا نبدأ ═══
     if (_hasAny(cmd, ['يلا نبدأ', 'نبدأ', 'هيا نبدأ', 'هيا بنا', 'هيا بنا نبدأ', 'يلا نشوف'])) {
       await _speak("تمام $userTitle، أنا $_secTitle الشخصي بتاعك، قولي عايز إيه وأنا أنفذ");
       return true;
     }
 
-    // ═══ 17. صحة / أيوة / نعم ═══
     if (_hasAny(cmd, ['صحة', 'أيوة', 'ايوه', 'ايوة', 'نعم', 'اه', 'آه', 'ايوه كده'])) {
       await _speak("في الخدمة $userTitle 👌");
       return true;
     }
 
-    // ═══ 18. ممكن أسألك ═══
     if (_hasAny(cmd, ['ممكن اسألك', 'ممكن أسألك', 'ممكن اسالك', 'ممكن أسألك سؤال', 'عندي سؤال'])) {
       await _speak("اتفضل $userTitle، أنا في الخدمة");
       return true;
     }
 
-    // ═══ 19. عايز حاجة / عايز أطلب حاجة ═══
     if (_hasAny(cmd, ['عايز حاجه', 'عايز حاجة', 'عايزة حاجه', 'عايزة حاجة', 'عندي طلب', 'عايز اطلب حاجه'])) {
       await _speak("اتفضل $userTitle، قوللي وأنا أنفذ");
       return true;
     }
 
-    // ═══ 20. ربنا يكرمك / ربنا يسعدك ═══
     if (_hasAny(cmd, ['ربنا يكرمك', 'ربنا يسعدك', 'ربنا يحفظك', 'ربنا يوفقك', 'ربنا يخليك ليا'])) {
       await _speak("وربنا يكرمك $userTitle، ده من فضل ربنا 💛");
       return true;
@@ -2244,9 +2319,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return false;
   }
 
-  // ═══════════════════════════════════════
-  // parse helpers
-  // ═══════════════════════════════════════
   List<String> _parseCustomDays(String cmd) {
     final days = <String>[];
     _dayKeywords.forEach((dayName, keywords) {
@@ -2298,68 +2370,44 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final nameNorm = _norm(_secretaryName);
     bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('يا سكرتيرة');
 
-    // ✅ الأول: نشوف لو جملة اجتماعية
     if (await _handleSocialReply(cmd)) return;
 
-    // ✅ قائمة موسّعة: المنبه (مذكر + مؤنث)
     final alarmKeywords = [
-      // فكر / فكري
       "فكرني", "فكريني", "فكروني", "فكرنى", "تفكرني", "تفكريني", "هتفكرني", "هتفكريني",
       "افتكرني", "افتكريني", "افتكرلي", "افتكرى لي", "هفتكرك",
-      // ذكر / ذكري
       "ذكرني", "ذكريني", "ذكروني", "ذكرنى", "تذكرني", "تذكريني", "هتذكرني", "هتذكريني",
-      // نبه / نبهي
       "نبهني", "نبهيني", "نبهوني", "نبهنى", "تنبهني", "تنبهيني", "تنبيهي", "تنبيهني",
       "منبه", "منبّه", "منبهني", "منبهلي", "منبهيلي", "المنبه", "نبّهني",
-      // ظبط / ظبطي
       "اضبطلي", "اظبطلي", "اضبطيلي", "اظبطيلي", "ظبطلي", "ظبطيلي",
       "ضبطلي", "ضبطيلي", "اضبط", "اظبط", "اضبطي", "اظبطي", "ظبط", "ظبطي",
       "ضبط", "ضبطي", "اضبطيلى",
-      // سجل / سجلي
       "سجل عندك", "سجلي عندك", "سجللي", "سجليلي", "سجللى", "سجلى لى",
-      // حط / حطي
       "حطلي", "حطلى", "حطيلي", "حطى لي", "حطني", "حطيني",
-      // اعمل / اعملي
       "اعمللي", "اعمليلي", "اعمللى", "اعملى لي", "اعملني", "اعمليني", "اعمليلى",
-      // عايز / عايزة
       "عايز", "عاوز", "عايزة", "عاوزة", "عايزك", "عاوزك", "عايزاك", "عاوزاك",
       "عايز افتكر", "عاوز افتكر", "عايزة افتكر", "عاوزة افتكر",
       "عايز منبه", "عاوز منبه", "عايزة منبه", "عاوزة منبه",
       "عايز تذكير", "عاوز تذكير", "عايزة تذكير", "عاوزة تذكير",
       "عايز اضبط", "عايزة اضبط", "عاوز اضبط", "عاوزة اضبط",
-      // صحى / صحيني
       "صحيني", "صحيني الصبح", "صحيني بكرة", "صحوني", "صحى", "تصحيني",
       "صحي", "صحيلي", "أصحى", "صيحيني", "صحيلى",
-      // ورايا
       "ورايا", "ورايه", "ورايا حاجه", "ورايا حاجة", "وراك", "وراك حاجة",
       "ورايا حاجه مهمه", "ورايا حاجة مهمة",
-      // دبر / دبري
       "دبرلي", "دبريلي", "دبرلى", "دبرى لي",
-      // رتب / رتبي
       "رتبلي", "رتبيلي", "رتبلى", "رتبى لي",
-      // جهز / جهزي
       "جهزلي", "جهزيلي", "جهزلى", "جهزى لي",
-      // علم / علمي
       "علمني", "علميني",
-      // خلي بالك
       "خلي بالك", "خليكي بالك", "خد بالك", "خدي بالك",
-      // ماتنساش
       "ما تنساني", "ماتنساني", "متنساني", "ماتنسانيش", "متنسانيش",
       "ماتنساش", "متنساش", "ماتنساشي", "متنساشي",
       "ماتنسى", "متنسى", "ماتنسيش", "متنسيش",
-      // مواعيد
       "موعد", "ميعاد", "موعدي", "ميعادي", "حددلي موعد", "حددلي ميعاد",
       "حدديلي موعد", "حدديلي ميعاد",
-      // تنبيه
       "تنبيه", "التنبيه", "هنسى", "هنسي", "هنساه",
       "خايف أنسى", "خايفة أنسى", "خايف انسى", "خايفة انسى",
-      // جهز نفسك
       "جهز نفسك", "خليك جاهز", "خليكي جاهزة",
-      // ساعد
       "ساعدني", "ساعديني", "تساعدني", "تساعديني",
-      // تذكرة
       "تذكره", "تذكرة", "تذكيري", "تذكيرى",
-      // بفكرك
       "بفكرك", "بتفكرني", "تفتكر", "تفكر",
     ];
 
@@ -2368,7 +2416,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       return;
     }
 
-    // ✅ قائمة التعديل
     final editKeywords = [
       "عدل", "عدلي", "عدللي", "عدليلي", "تعدل", "تعدلي",
       "تعديل", "تعديلي", "أعدل", "اعدل",
@@ -2378,7 +2425,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       "حرك", "حركي", "أخر", "أخري",
     ];
 
-    // ✅ قائمة المسح
     final deleteKeywords = [
       "امسح", "امسحي", "امسحلي", "امسحيلي", "أمسح", "أمسحي",
       "مسح", "مسحي", "مسحلي", "مسحيلي",
@@ -2410,7 +2456,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final eventKeywords = ["مناسبات", "مناسباتي", "المناسبات", "مناسبة", "مناسبه",
       "عيد", "العيد", "أعياد", "اعياد", "ذكرى", "الذكرى", "احتفال", "حفلة"];
 
-    // ✅ قوائم موسّعة للمسجل
     final openRecorderKeywords = [
       "افتح المسجل", "افتح مسجل", "افتحلي المسجل", "افتحي المسجل", "افتحيلى المسجل",
       "المسجل", "مسجل", "المسجل الصوتي",
@@ -2520,7 +2565,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ═══ دوال تعديل/مسح بالصوت (هنجيها في الجزء 3) ═══
   Future<void> _deleteTaskByVoice(String cmd) async {
     await _speak("خاصية المسح بالصوت هتشتغل في التحديث الجاي");
   }
@@ -2572,7 +2616,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final intervalType = _parseIntervalType(cmd);
     final customDays = _parseCustomDays(cmd);
 
-    // ✅ strip موسّع بصيغ المذكر والمؤنث
     final strip = <String>{
       'اظبطلي', 'اضبطلي', 'اظبطيلي', 'اضبطيلي', 'اظبط', 'اضبط', 'اظبطي', 'اضبطي',
       'ظبط', 'ضبط', 'ظبطي', 'ضبطي', 'ظبطلي', 'ضبطلي', 'ظبطيلي', 'ضبطيلي',
@@ -2606,7 +2649,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     };
     final nameNorm = _norm(_secretaryName);
     final kept = <String>[];
-    // ✅ نتتبع هل شلنا الساعة اللي اتحددت ولا لأ
     bool hourTokenRemoved = false;
     for (final t in rawCommand.split(RegExp(r'\s+'))) {
       final n = _norm(t);
@@ -2614,7 +2656,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       if (strip.contains(n) || n == nameNorm) continue;
       if (afterTomorrow && n == 'بعد') continue;
       if (RegExp(r'^\d{1,2}(:\d{2})?$').hasMatch(n)) continue;
-      // ✅ نشيل كلمة الساعة بس مرة واحدة
       if (!hourTokenRemoved && _hourWords.containsKey(n)) {
         hourTokenRemoved = true;
         continue;
@@ -2671,11 +2712,19 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
+  // ✅ معدّلة: late final Timer
   void _scheduleContinuousAlarm(String taskTitle, DateTime scheduledDateTime, String repeat, String interval, List<String> customDays) {
     Duration difference = scheduledDateTime.difference(DateTime.now());
     if (difference.isNegative) return;
-    _scheduleBackgroundNotification(taskTitle, scheduledDateTime);
-    Timer timer = Timer(difference, () {
+    _scheduleBackgroundNotification(
+      taskTitle,
+      scheduledDateTime,
+      repeat: repeat,
+      interval: interval,
+      customDays: customDays,
+    );
+    late final Timer timer;
+    timer = Timer(difference, () {
       _activeTimers.remove(timer);
       if (mounted) _startAlarmLoop(taskTitle, repeat, interval, customDays, scheduledDateTime);
     });
@@ -2705,8 +2754,14 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays);
   }
 
-  // ✅ v4 بدل v3
-  Future<void> _scheduleBackgroundNotification(String taskTitle, DateTime scheduledDateTime) async {
+  // ✅ معدّلة: تحفظ pending_alarm
+  Future<void> _scheduleBackgroundNotification(
+    String taskTitle,
+    DateTime scheduledDateTime, {
+    String repeat = 'مرة واحدة',
+    String interval = 'بدون تنبيه',
+    List<String> customDays = const [],
+  }) async {
     final tzTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
     const androidDetails = AndroidNotificationDetails(
       'secretary_alarm_v4',
@@ -2732,6 +2787,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
     );
+
+    // 🆕 نحفظ pending_alarm
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pending_alarm', json.encode({
+      'title': taskTitle,
+      'scheduledMillis': scheduledDateTime.millisecondsSinceEpoch,
+      'repeat': repeat,
+      'interval': interval,
+      'customDays': customDays,
+    }));
   }
 
   void _startAlarmLoop(String taskTitle, String repeat, String interval, List<String> customDays, DateTime scheduled) {
@@ -2779,7 +2844,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
-  // ═══ باقي الدوال هتيجي في الجزء 3 ═══
   Future<Map<String, String>> _calculatePrayerTimes() async {
     try {
       final coordinates = Coordinates(30.0444, 31.2357);
@@ -2798,6 +2862,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     // ═══════════════════════════════════════
   // Events Reminders
   // ═══════════════════════════════════════
+  // ✅ معدّلة: late final Timer
   Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
     try {
       final eventDate = DateTime.parse(event['eventDate'].toString());
@@ -2815,7 +2880,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
       await _scheduleEventNotification(event, reminderDateTime, interval);
       final diff = reminderDateTime.difference(now);
-      final timer = Timer(diff, () {
+
+      late final Timer timer;
+      timer = Timer(diff, () {
         _activeTimers.remove(timer);
         if (mounted) _showEventReminder(event['title'].toString(), event['detail'].toString(), interval);
       });
@@ -2865,7 +2932,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ إصلاح _eventDialogShowing مع finally
   Future<void> _showEventReminder(String title, String detail, String interval) async {
     if (_eventDialogShowing) return;
     _eventDialogShowing = true;
@@ -2974,7 +3040,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         ),
       ),
     ).then((_) {
-      // ✅ بعد الرجوع: نعيد تحميل الصوت بدون ترحيب
       _configureVoice(skipGreeting: true);
     });
   }
@@ -3303,10 +3368,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   Widget build(BuildContext context) {
     final List<Widget> screens = [_buildCalendarAndTasksTab(), _buildDiariesTab(), _buildPrayerTimesTab(), _buildSpecialEventsTab(), _buildRecorderTab()];
 
-    // ✅ الزرار العائم (FAB)
     Widget? fab;
     if (_isRecording) {
-      // 🔴 زر إيقاف التسجيل
       fab = FloatingActionButton.extended(
         onPressed: _stopRecording,
         backgroundColor: Colors.red,
