@@ -29,6 +29,8 @@ final FlutterTts _appTts = FlutterTts();
 const List<String> _weekDays = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
 
 const MethodChannel _lockScreenChannel = MethodChannel('com.example.secretary_app/lock_screen');
+const MethodChannel _settingsChannel = MethodChannel('com.example.secretary_app/settings');
+const MethodChannel _nativeAlarmChannel = MethodChannel('com.example.secretary_app/native_alarm');
 
 const Map<String, String> _maleNamesMap = {
   'محمد': 'assets/mohamed.jpg',
@@ -354,7 +356,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (result != null) {
         await prefs.setString(key, result['name']!);
         await prefs.setString(localeKey, result['locale']!);
-        try { await _appTts.stop(); } catch (_) {}
         if (!mounted) return;
         setState(() {
           if (gender == 'ذكر') _maleVoiceName = result['name'];
@@ -825,6 +826,9 @@ class SecretaryApp extends StatelessWidget {
   }
 }
 
+// ═══════════════════════════════════════
+// TermsAndPermissionsScreen
+// ═══════════════════════════════════════
 class TermsAndPermissionsScreen extends StatefulWidget {
   const TermsAndPermissionsScreen({super.key});
   @override
@@ -838,15 +842,24 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
   Future<void> _requestPermissions() async {
     setState(() => _isRequesting = true);
 
+    // 1. المايكروفون
     await Permission.microphone.request();
-    await Permission.notification.request();
+    await Future.delayed(const Duration(milliseconds: 500));
 
+    // 2. الإشعارات
+    await Permission.notification.request();
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // 3. المنبهات الدقيقة
     if (await Permission.scheduleExactAlarm.isDenied) {
       await Permission.scheduleExactAlarm.request();
+      await Future.delayed(const Duration(seconds: 1));
     }
 
+    // 4. إذن البطارية
     if (await Permission.ignoreBatteryOptimizations.isDenied) {
       await Permission.ignoreBatteryOptimizations.request();
+      await Future.delayed(const Duration(milliseconds: 500));
     }
 
     final micGranted = await Permission.microphone.isGranted;
@@ -880,12 +893,56 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
       return;
     }
 
+    // 5. إشعارات ملء الشاشة
+    await _askFullScreenIntent();
+
     if (mounted) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const SetupSecretaryScreen()),
       );
     }
+  }
+
+  Future<void> _askFullScreenIntent() async {
+    try {
+      final isAllowed = await _settingsChannel.invokeMethod('isFullScreenIntentAllowed');
+      if (isAllowed == true) return;
+
+      if (!mounted) return;
+      final userAgreed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          title: const Row(children: [
+            Icon(Icons.fullscreen, color: Color(0xFF1B2A4A), size: 28),
+            SizedBox(width: 10),
+            Text('إشعارات ملء الشاشة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ]),
+          content: const Text(
+            'عشان المنبه يشتغل والتابلت مقفول، محتاج تفعّل "إشعارات ملء الشاشة" للتطبيق.\n\n'
+            'اضغط "الإعدادات" عشان تفتح الصفحة، وبعدين فعّل الخيار.',
+            style: TextStyle(fontSize: 14, height: 1.6),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('الإعدادات', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+
+      if (userAgreed == true) {
+        await _settingsChannel.invokeMethod('openFullScreenIntentSettings');
+      }
+    } catch (_) {}
   }
 
   @override
@@ -928,6 +985,8 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
                       Text('• المنبهات الدقيقة: لضبط مواقيت الأذان بدقة.', style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 5),
                       Text('• تجاهل تحسين البطارية: ليعمل التطبيق في الخلفية بدون توقف.', style: TextStyle(fontSize: 14, height: 1.6)),
+                      SizedBox(height: 5),
+                      Text('• إشعارات ملء الشاشة: لظهور التنبيهات والتابلت مقفول.', style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 15),
                       Text('جميع البيانات محفوظة بأمان محلياً على جهازك.', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey)),
                     ],
@@ -961,6 +1020,9 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
   }
 }
 
+// ═══════════════════════════════════════
+// SetupSecretaryScreen
+// ═══════════════════════════════════════
 class SetupSecretaryScreen extends StatefulWidget {
   const SetupSecretaryScreen({super.key});
   @override
@@ -1038,7 +1100,6 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
       if (result != null) {
         await prefs.setString(key, result['name']!);
         await prefs.setString(localeKey, result['locale']!);
-        try { await _appTts.stop(); } catch (_) {}
         if (!mounted) return;
         setState(() => _savedVoiceName = result['name']);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2131,10 +2192,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await prefs.setString(key, result['name']!);
       await prefs.setString(localeKey, result['locale']!);
 
-      try {
-        await _tts.stop();
-      } catch (_) {}
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('✅ تم حفظ الصوت: ${result['name']}')),
@@ -2469,7 +2526,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     if (await _handleSocialReply(cmd)) return;
 
-    // ═══ أوامر اليوميات ═══
     if ((cmd.contains('اقرا') || cmd.contains('اقرالي') || cmd.contains('اقرأيلي')) && cmd.contains('يوميات')) {
       final key = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final diary = _diaries[key];
@@ -2726,9 +2782,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     if (matches.length == 1) {
       final task = matches.first;
+      final taskTitle = task['task'].toString();
       setState(() => _tasks.remove(task));
       _saveData();
-      await _speak("تم مسح موعد ${task['task']} $userTitle");
+      await _cancelNativeAlarm(taskTitle);
+      await _speak("تم مسح موعد $taskTitle $userTitle");
     } else {
       await _speak("لقيت ${matches.length} مواعيد بالاسم ده $userTitle، حدد أكتر");
     }
@@ -2909,9 +2967,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
+  // ✅ مع Native Alarm
   void _scheduleContinuousAlarm(String taskTitle, DateTime scheduledDateTime, String repeat, String interval, List<String> customDays) {
     Duration difference = scheduledDateTime.difference(DateTime.now());
     if (difference.isNegative) return;
+
     _scheduleBackgroundNotification(
       taskTitle,
       scheduledDateTime,
@@ -2919,12 +2979,33 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       interval: interval,
       customDays: customDays,
     );
+
+    _scheduleNativeAlarm(taskTitle, scheduledDateTime);
+
     late final Timer timer;
     timer = Timer(difference, () {
       _activeTimers.remove(timer);
       if (mounted) _startAlarmLoop(taskTitle, repeat, interval, customDays, scheduledDateTime);
     });
     _activeTimers.add(timer);
+  }
+
+  Future<void> _scheduleNativeAlarm(String taskTitle, DateTime scheduledDateTime) async {
+    try {
+      await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
+        'id': taskTitle.hashCode + 5000,
+        'title': taskTitle,
+        'timestamp': scheduledDateTime.millisecondsSinceEpoch,
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _cancelNativeAlarm(String taskTitle) async {
+    try {
+      await _nativeAlarmChannel.invokeMethod('cancelAlarm', {
+        'id': taskTitle.hashCode + 5000,
+      });
+    } catch (_) {}
   }
 
   void _rescheduleRepeating(String taskTitle, String repeat, String interval, List<String> customDays, DateTime lastScheduled) {
@@ -3003,7 +3084,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }));
   }
 
-  // ✅ زر خلاص يمسح الموعد لو مرة واحدة
+  // ✅ زر خلاص يمسح الموعد لو مرة واحدة + يلغي Native
   void _startAlarmLoop(String taskTitle, String repeat, String interval, List<String> customDays, DateTime scheduled) {
     final userTitle = _userTitle;
     WakelockPlus.enable();
@@ -3047,6 +3128,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                   setState(() => _tasks.removeAt(idx));
                   _saveData();
                 }
+                _cancelNativeAlarm(taskTitle);
                 SharedPreferences.getInstance().then((prefs) {
                   prefs.remove('pending_alarm');
                 });
@@ -3206,9 +3288,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
+  // ✅ مع _cancelNativeAlarm
   void _deleteTask(int index) {
+    final taskTitle = _tasks[index]['task'].toString();
     setState(() => _tasks.removeAt(index));
     _saveData();
+    _cancelNativeAlarm(taskTitle);
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
   }
 
