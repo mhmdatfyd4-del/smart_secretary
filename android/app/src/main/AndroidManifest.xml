@@ -10,8 +10,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- ✅ إذن إشعارات ملء الشاشة -->
+    <!-- ✅ إشعارات ملء الشاشة -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- ✅ تجاهل تحسين البطارية -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:label="السكرتيرة الذكية"
