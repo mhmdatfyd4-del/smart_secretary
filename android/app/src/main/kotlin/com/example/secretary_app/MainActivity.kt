@@ -1,19 +1,27 @@
 package com.example.secretary_app
 
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.example.secretary_app/lock_screen"
+    private val LOCK_CHANNEL = "com.example.secretary_app/lock_screen"
+    private val SETTINGS_CHANNEL = "com.example.secretary_app/settings"
+    private val ALARM_CHANNEL = "com.example.secretary_app/native_alarm"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+        // قناة شاشة القفل
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LOCK_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "enableShowWhenLocked" -> {
                     enableShowWhenLocked()
@@ -26,6 +34,98 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // قناة الإعدادات
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SETTINGS_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "openFullScreenIntentSettings" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
+                            intent.data = Uri.parse("package:$packageName")
+                            startActivity(intent)
+                        } else {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                            intent.data = Uri.parse("package:$packageName")
+                            startActivity(intent)
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        try {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                            intent.data = Uri.parse("package:$packageName")
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (e2: Exception) {
+                            result.success(false)
+                        }
+                    }
+                }
+                "isFullScreenIntentAllowed" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+                            result.success(nm.canUseFullScreenIntent())
+                        } else {
+                            result.success(true)
+                        }
+                    } catch (e: Exception) {
+                        result.success(true)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // قناة المنبه Native
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ALARM_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "scheduleAlarm" -> {
+                    val id = call.argument<Int>("id") ?: 0
+                    val title = call.argument<String>("title") ?: ""
+                    val timestamp = call.argument<Long>("timestamp") ?: 0L
+                    scheduleAlarm(id, title, timestamp)
+                    result.success(true)
+                }
+                "cancelAlarm" -> {
+                    val id = call.argument<Int>("id") ?: 0
+                    cancelAlarm(id)
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun scheduleAlarm(id: Int, title: String, timestamp: Long) {
+        val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, AlarmReceiver::class.java).apply {
+            putExtra("title", title)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, id, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (alarmManager.canScheduleExactAlarms()) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timestamp, pendingIntent)
+            } else {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timestamp, pendingIntent)
+            }
+        } else {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timestamp, pendingIntent)
+        }
+    }
+
+    private fun cancelAlarm(id: Int) {
+        val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, AlarmReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, id, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
     }
 
     private fun enableShowWhenLocked() {
