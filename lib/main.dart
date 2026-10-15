@@ -60,15 +60,26 @@ List<String> _getNamesForGender(String voiceGender) {
   return voiceGender == 'ذكر' ? _maleNamesMap.keys.toList() : _femaleNamesMap.keys.toList();
 }
 
+// ✅ دالة معالجة إجراءات الإشعارات (زر إلغاء)
+@pragma('vm:entry-point')
+void _notificationTapBackground(NotificationResponse response) {
+  if (response.actionId == 'cancel_alarm') {
+    // هيتنفذ لما المستخدم يدوس "إلغاء" في الإشعار
+    // هنوقف الصوت
+    _appTts.stop();
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ar');
   tz.initializeTimeZones();
   await _initNotifications();
 
+  // ✅ تهيئة اللغة فقط (بدون setEngine — عشان منع التعليق)
   try {
-    await _appTts.setEngine("com.google.android.tts");
-    await Future.delayed(const Duration(milliseconds: 300));
+    await _appTts.setLanguage("ar-EG");
+    await Future.delayed(const Duration(milliseconds: 200));
   } catch (_) {}
 
   final prefs = await SharedPreferences.getInstance();
@@ -94,7 +105,9 @@ void main() async {
 
 Future<void> _initNotifications() async {
   const AndroidInitializationSettings androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const InitializationSettings initSettings = InitializationSettings(android: androidInit);
+  const InitializationSettings initSettings = InitializationSettings(
+    android: androidInit,
+  );
   await _notifications.initialize(initSettings);
 }
 
@@ -211,7 +224,7 @@ class AppSettings {
 }
 
 // ═══════════════════════════════════════
-// SettingsScreen
+// SettingsScreen (مع _pickVoiceFor المبسطة)
 // ═══════════════════════════════════════
 class SettingsScreen extends StatefulWidget {
   final AppSettings settings;
@@ -310,13 +323,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  // ✅ _pickVoiceFor المبسطة (بدون _configureVoice)
   Future<void> _pickVoiceFor(String gender) async {
     if (_isPickingVoice) return;
     setState(() => _isPickingVoice = true);
 
     try {
       await _appTts.stop();
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 200));
 
       List<Map<String, String>> voices = [];
       try {
@@ -786,7 +800,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
-
 class SecretaryApp extends StatelessWidget {
   final bool isFirstTime;
   final String? savedName;
@@ -826,6 +839,9 @@ class SecretaryApp extends StatelessWidget {
   }
 }
 
+// ═══════════════════════════════════════
+// TermsAndPermissionsScreen — مع إذن البطارية + إشعارات ملء الشاشة
+// ═══════════════════════════════════════
 class TermsAndPermissionsScreen extends StatefulWidget {
   const TermsAndPermissionsScreen({super.key});
   @override
@@ -839,20 +855,33 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
   Future<void> _requestPermissions() async {
     setState(() => _isRequesting = true);
 
+    // 1. إذن المايكروفون
     await Permission.microphone.request();
+
+    // 2. إذن الإشعارات
     await Permission.notification.request();
 
+    // 3. إذن المنبهات الدقيقة
     if (await Permission.scheduleExactAlarm.isDenied) {
       await Permission.scheduleExactAlarm.request();
     }
 
+    // 4. إذن تجاهل تحسين البطارية
     if (await Permission.ignoreBatteryOptimizations.isDenied) {
       await Permission.ignoreBatteryOptimizations.request();
     }
 
+    // 5. فتح إعدادات "إشعارات ملء الشاشة" (أندرويد 14+)
+    try {
+      await openAppSettings();
+    } catch (_) {}
+
     if (mounted) {
       setState(() => _isRequesting = false);
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupSecretaryScreen()));
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const SetupSecretaryScreen()),
+      );
     }
   }
 
@@ -871,7 +900,9 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
           children: [
             const Icon(Icons.verified_user_sharp, size: 80, color: Color(0xFF1B2A4A)),
             const SizedBox(height: 15),
-            const Text('مرحباً بك في نظام السكرتير الشخصي الذكي', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+            const Text('مرحباً بك في نظام السكرتير الشخصي الذكي',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
             const SizedBox(height: 15),
             Expanded(
               child: Container(
@@ -885,19 +916,29 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('يتطلب تشغيل السكرتير الذكي الأذونات التالية:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      Text('يتطلب تشغيل السكرتير الذكي الأذونات التالية:',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                       SizedBox(height: 10),
-                      Text('• المايكروفون: للاستجابة عند الهز أو المناداة باسم السكرتير.', style: TextStyle(fontSize: 14, height: 1.6)),
+                      Text('• المايكروفون: للاستجابة عند الهز أو المناداة باسم السكرتير.',
+                          style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 5),
-                      Text('• التنبيهات والإشعارات: لإطلاق المنبه الصوتي والتذكير المسبق بالمناسبات.', style: TextStyle(fontSize: 14, height: 1.6)),
+                      Text('• التنبيهات والإشعارات: لإطلاق المنبه الصوتي والتذكير المسبق بالمناسبات.',
+                          style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 5),
-                      Text('• مستشعرات الحركة: للتعرف على هز الجهاز وتفعيل المساعد مباشرة.', style: TextStyle(fontSize: 14, height: 1.6)),
+                      Text('• مستشعرات الحركة: للتعرف على هز الجهاز وتفعيل المساعد مباشرة.',
+                          style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 5),
-                      Text('• المنبهات الدقيقة: لضبط مواقيت الأذان بدقة.', style: TextStyle(fontSize: 14, height: 1.6)),
+                      Text('• المنبهات الدقيقة: لضبط مواقيت الأذان بدقة.',
+                          style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 5),
-                      Text('• تجاهل تحسين البطارية: ليعمل التطبيق في الخلفية بدون توقف.', style: TextStyle(fontSize: 14, height: 1.6)),
+                      Text('• تجاهل تحسين البطارية: ليعمل التطبيق في الخلفية بدون توقف.',
+                          style: TextStyle(fontSize: 14, height: 1.6)),
+                      SizedBox(height: 5),
+                      Text('• إشعارات ملء الشاشة: لظهور التنبيهات والتابلت مقفول.',
+                          style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 15),
-                      Text('جميع البيانات محفوظة بأمان محلياً على جهازك.', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey)),
+                      Text('جميع البيانات محفوظة بأمان محلياً على جهازك.',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey)),
                     ],
                   ),
                 ),
@@ -906,8 +947,13 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
             const SizedBox(height: 10),
             Row(
               children: [
-                Checkbox(value: _agreed, activeColor: const Color(0xFF1B2A4A), onChanged: (v) => setState(() => _agreed = v ?? false)),
-                const Expanded(child: Text('أوافق على الشروط والأذونات المطلوبة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                Checkbox(
+                    value: _agreed,
+                    activeColor: const Color(0xFF1B2A4A),
+                    onChanged: (v) => setState(() => _agreed = v ?? false)),
+                const Expanded(
+                    child: Text('أوافق على الشروط والأذونات المطلوبة',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
               ],
             ),
             const SizedBox(height: 10),
@@ -919,8 +965,12 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
               ),
               onPressed: (_agreed && !_isRequesting) ? _requestPermissions : null,
               child: _isRequesting
-                  ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                  : const Text('متابعة وإعطاء الأذونات', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                  ? const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                  : const Text('متابعة وإعطاء الأذونات',
+                      style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
             )
           ],
         ),
@@ -928,8 +978,9 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
     );
   }
 }
+
 // ═══════════════════════════════════════
-// SetupSecretaryScreen
+// SetupSecretaryScreen — مع _pickVoice المبسطة
 // ═══════════════════════════════════════
 class SetupSecretaryScreen extends StatefulWidget {
   const SetupSecretaryScreen({super.key});
@@ -963,13 +1014,14 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
     setState(() => _savedVoiceName = prefs.getString(key));
   }
 
+  // ✅ _pickVoice المبسطة (بدون _configureVoice)
   Future<void> _pickVoice() async {
     if (_isPickingVoice) return;
     setState(() => _isPickingVoice = true);
 
     try {
       await _appTts.stop();
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 200));
 
       List<Map<String, String>> voices = [];
       try {
@@ -1065,7 +1117,8 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
                   image: DecorationImage(
                     image: AssetImage(_getSecretaryImage(_nameController.text, _voiceGender)),
-                    fit: BoxFit.cover, alignment: const Alignment(0, -0.4),
+                    fit: BoxFit.cover,
+                    alignment: const Alignment(0, -0.4),
                   ),
                 ),
               ),
@@ -1073,7 +1126,6 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
               Text('صوت $secTitle ($_voiceGender)',
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
               const SizedBox(height: 20),
-
               const Align(
                 alignment: Alignment.centerRight,
                 child: Text('تحديد نوع السكرتير:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
@@ -1117,7 +1169,6 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 5),
               InkWell(
                 onTap: _isPickingVoice ? null : _pickVoice,
@@ -1157,7 +1208,6 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-
               const Divider(),
               const Align(
                 alignment: Alignment.centerRight,
@@ -1184,10 +1234,8 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
                   ),
                 ],
               ),
-
               const Divider(),
               const SizedBox(height: 15),
-
               const Align(
                 alignment: Alignment.centerRight,
                 child: Text('اختر اسماً أو اكتب اسماً مخصصاً:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
@@ -1226,7 +1274,8 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: _saveAndContinue,
-                child: const Text('دخول لوحة التحكم', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                child: const Text('دخول لوحة التحكم',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               )
             ],
           ),
@@ -1237,7 +1286,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
 }
 
 // ═══════════════════════════════════════
-// VoicePickerDialog
+// VoicePickerDialog — مع _testVoice المبسطة
 // ═══════════════════════════════════════
 class VoicePickerDialog extends StatefulWidget {
   final String gender;
@@ -1269,16 +1318,15 @@ class _VoicePickerDialogState extends State<VoicePickerDialog> {
     _selectedLocale = widget.initialLocale;
   }
 
+  // ✅ _testVoice المبسطة (بدون setLanguage)
   Future<void> _testVoice(String name, String locale) async {
     if (_isTesting) return;
     setState(() => _isTesting = true);
     try {
       await _appTts.stop();
-      await Future.delayed(const Duration(milliseconds: 100));
-      await _appTts.setLanguage(locale);
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 300));
       await _appTts.setVoice({'name': name, 'locale': locale});
-      await Future.delayed(const Duration(milliseconds: 150));
+      await Future.delayed(const Duration(milliseconds: 200));
       await _appTts.setSpeechRate(0.48);
       await _appTts.setVolume(1.0);
       await _appTts.speak(widget.gender == 'ذكر'
@@ -1360,8 +1408,7 @@ class _VoicePickerDialogState extends State<VoicePickerDialog> {
                       title: Text(name,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight:
-                                isSelected ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                           )),
                       subtitle: Text('اللغة: $locale',
                           style: const TextStyle(fontSize: 10, color: Colors.grey)),
@@ -1398,7 +1445,6 @@ class _VoicePickerDialogState extends State<VoicePickerDialog> {
     );
   }
 }
-
 // ═══════════════════════════════════════
 // MainDashboard
 // ═══════════════════════════════════════
@@ -1498,9 +1544,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _startAdhanWatcher();
     _scheduleAdhan30Days();
     Future.delayed(const Duration(seconds: 3), _checkPendingEventAnnouncements);
-    // 🆕 نتحقق من المنبه المعلّق
     Future.delayed(const Duration(seconds: 2), _checkPendingAlarm);
-    // 🆕 نتحقق من إذن البطارية
     Future.delayed(const Duration(seconds: 4), _checkBatteryOptimization);
   }
 
@@ -1509,7 +1553,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       _isInBackground = false;
-      // 🆕 نتحقق من المنبه المعلّق فوراً
       Future.delayed(const Duration(milliseconds: 500), _checkPendingAlarm);
       Future.delayed(const Duration(seconds: 2), _checkPendingEventAnnouncements);
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
@@ -1518,7 +1561,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   // ═══════════════════════════════════════
-  // 🆕 فحص إذن البطارية + تنبيه المستخدم
+  // فحص إذن البطارية
   // ═══════════════════════════════════════
   Future<void> _checkBatteryOptimization() async {
     if (_batteryDialogShown) return;
@@ -1566,7 +1609,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   // ═══════════════════════════════════════
-  // 🆕 فحص المنبه المعلّق (لما التطبيق يفتح والتابلت مقفول)
+  // فحص المنبه المعلّق
   // ═══════════════════════════════════════
   Future<void> _checkPendingAlarm() async {
     try {
@@ -1589,16 +1632,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final nowMillis = DateTime.now().millisecondsSinceEpoch;
       final diff = nowMillis - scheduledMillis;
 
-      // لو فات أكتر من 5 دقايق → امسحه
       if (diff > 5 * 60 * 1000) {
         await prefs.remove('pending_alarm');
         return;
       }
 
-      // لو لسه في المستقبل بأكتر من دقيقة → سيبها
       if (diff < -60 * 1000) return;
 
-      // ✅ الوقت صح! شغّل المنبه
       await prefs.remove('pending_alarm');
       if (mounted) {
         _startAlarmLoop(
@@ -2135,7 +2175,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     if (_isListening || _isRecording) return;
 
     await _tts.stop();
-    await Future.delayed(const Duration(milliseconds: 100));
+    await Future.delayed(const Duration(milliseconds: 200));
 
     final voices = await _getArabicVoices();
     if (!mounted) return;
@@ -2160,7 +2200,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     if (result != null) {
       await prefs.setString(key, result['name']!);
       await prefs.setString(localeKey, result['locale']!);
+
+      await Future.delayed(const Duration(milliseconds: 400));
+
       await _configureVoice(skipGreeting: true);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('✅ تم حفظ الصوت: ${result['name']}')),
@@ -2211,108 +2255,248 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   // ═══════════════════════════════════════
-  // 🆕 الردود الاجتماعية
+  // 🆕 الردود الاجتماعية (35+ حالة، 100+ تنويع)
   // ═══════════════════════════════════════
   Future<bool> _handleSocialReply(String cmd) async {
     final userTitle = _userTitle;
+    final secTitle = _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
 
-    if (_hasAny(cmd, ['صباح الخير', 'صباح النور', 'صباح الفل', 'صباح الفل والياسمين', 'صباحو', 'صباح النور والسرور', 'صبح صباح الخير'])) {
+    // 1. صباح الخير
+    if (_hasAny(cmd, ['صباح الخير', 'صباح النور', 'صباح الفل', 'صباحو', 'صباح النور والسرور', 'صبح صباح الخير', 'صباح الخيرات'])) {
       await _speak("صباح النور والسرور $userTitle ☀️");
       return true;
     }
+    if (_hasAny(cmd, ['صباح الفل والياسمين', 'صباح الورد', 'صباح العسل'])) {
+      await _speak("صباح الفل والياسمين والورد $userTitle 🌸");
+      return true;
+    }
 
-    if (_hasAny(cmd, ['مساء الخير', 'مساء النور', 'مساء الفل', 'مساء الفل والياسمين', 'مسائو', 'مسا الخير'])) {
+    // 2. مساء الخير
+    if (_hasAny(cmd, ['مساء الخير', 'مساء النور', 'مساء الفل', 'مسائو', 'مسا الخير', 'مساء الخيرات'])) {
       await _speak("مساء النور والفل والياسمين $userTitle 🌙");
       return true;
     }
 
-    if (_hasAny(cmd, ['عامله ايه', 'عاملة ايه', 'اخبارك ايه', 'اخبارك', 'أخبارك', 'ازيك', 'ازيك يا سكرتير', 'ازيك يا سكرتيرة', 'عامل ايه', 'كيف حالك', 'كيف الحال', 'ايه الاخبار', 'إيه الأخبار', 'الدنيا عاملة ايه', 'اخبارك ايه يا سكرتير', 'اخبارك ايه يا سكرتيرة'])) {
+    // 3. السؤال عن الحال
+    if (_hasAny(cmd, ['عامله ايه', 'عاملة ايه', 'اخبارك ايه', 'اخبارك', 'أخبارك', 'ازيك', 'عامل ايه', 'كيف حالك', 'كيف الحال', 'ايه الاخبار', 'إيه الأخبار', 'الدنيا عاملة ايه'])) {
       await _speak("الحمد لله بخير، دايماً في خدمتك $userTitle 💛");
       return true;
     }
+    if (_hasAny(cmd, ['عامل ايه في الدنيا', 'اخبار الدنيا', 'الدنيا ايه'])) {
+      await _speak("الحمد لله، الدنيا تمام. وبيك $userTitle أكثر 💛");
+      return true;
+    }
 
-    if (_hasAny(cmd, ['شكرا', 'شكراً', 'متشكر', 'متشكرة', 'مشكور', 'مشكورة', 'تسلم', 'تسلمي', 'ربنا يخليك', 'ربنا يخليكي', 'ميرسي', 'ميرسى', 'ثانكس'])) {
+    // 4. الشكر
+    if (_hasAny(cmd, ['شكرا', 'شكراً', 'متشكر', 'متشكرة', 'مشكور', 'مشكورة', 'ربنا يخليك', 'ربنا يخليكي', 'ميرسي', 'ميرسى', 'ثانكس'])) {
       await _speak("العفو $userTitle، ده واجبي 🙏");
       return true;
     }
-
-    if (_hasAny(cmd, ['تصبح على خير', 'تصبحى على خير', 'تصبحي على خير', 'تصبحوا على خير', 'ليلتك سعيدة', 'ليلة سعيدة', 'طيبة ومساء الفل'])) {
-      await _speak("$_pronoun من أهله $userTitle، تصبح على خير 🌙");
+    if (_hasAny(cmd, ['تسلم', 'تسلمي', 'تسلم ايدك', 'تسلم إيدك'])) {
+      await _speak("ربنا يسلمك $userTitle، تحت أمرك دايماً 🙏");
       return true;
     }
 
+    // 5. تصبح على خير
+    if (_hasAny(cmd, ['تصبح على خير', 'تصبحى على خير', 'تصبحي على خير', 'تصبحوا على خير', 'ليلتك سعيدة', 'ليلة سعيدة'])) {
+      await _speak("$_pronoun من أهله $userTitle، تصبح على خير 🌙");
+      return true;
+    }
     if (_hasAny(cmd, ['وحشتني', 'وحشتينى', 'وحشني', 'اشتقتلك', 'اشتقت لك', 'مشتاقلك', 'مشتاقة لك'])) {
       await _speak("$_pronoun كمان وحشتني $userTitle، أنا $_readyWord لأي خدمة 💛");
       return true;
     }
 
-    if (_hasAny(cmd, ['اسمك ايه', 'اسمك إيه', 'اسمك ايش', 'اسمك من فضلك', 'انت مين', 'انتي مين', 'مين انت', 'مين انتي', 'اسمك إيه يا سكرتير', 'اسمك إيه يا سكرتيرة'])) {
-      await _speak("اسمي $_secretaryName، $_secTitle الشخصي بتاعك، تحت أمرك $userTitle");
+    // 6. اسمك ايه
+    if (_hasAny(cmd, ['اسمك ايه', 'اسمك إيه', 'اسمك ايش', 'انت مين', 'انتي مين', 'مين انت', 'مين انتي'])) {
+      await _speak("اسمي $_secretaryName، $secTitle الشخصي بتاعك، تحت أمرك $userTitle");
       return true;
     }
 
-    if (_hasAny(cmd, ['بتعمل ايه', 'بتعملي ايه', 'بتعمل إيه', 'بتعملى ايه', 'بتشتغل ايه', 'بتشغلي ايه', 'مشغول بايه', 'مشغولة بايه', 'بتعمل ايه دلوقتي'])) {
+    // 7. بتعمل ايه
+    if (_hasAny(cmd, ['بتعمل ايه', 'بتعملي ايه', 'بتعمل إيه', 'بتشتغل ايه', 'بتشغلي ايه', 'مشغول بايه', 'مشغولة بايه'])) {
       await _speak("بستنى أوامرك $userTitle 👌");
       return true;
     }
 
-    if (_hasAny(cmd, ['تعبان', 'تعبانة', 'مش كويس', 'مش كويسة', 'مضايق', 'مضايقة', 'زعلان', 'زعلانة', 'حزين', 'حزينة', 'تعبان شويه', 'مش قادر'])) {
+    // 8. تعبان / زعلان
+    if (_hasAny(cmd, ['تعبان', 'تعبانة', 'مش كويس', 'مش كويسة', 'مضايق', 'مضايقة', 'زعلان', 'زعلانة', 'حزين', 'حزينة', 'مش قادر', 'مش قادرة'])) {
       await _speak("ألف سلامة عليك $userTitle، $_takeCareWord بالك من نفسك 💚");
       return true;
     }
 
-    if (_hasAny(cmd, ['مبسوط', 'مبسوطة', 'فرحان', 'فرحانة', 'سعيد', 'سعيدة', 'الحمد لله مبسوط', 'الحمد لله مبسوطة', 'فرحان انهاردة'])) {
+    // 9. مبسوط / فرحان
+    if (_hasAny(cmd, ['مبسوط', 'مبسوطة', 'فرحان', 'فرحانة', 'سعيد', 'سعيدة', 'الحمد لله مبسوط'])) {
       await _speak("وأنا كمان $_happyWord ليك $userTitle 😊");
       return true;
     }
 
+    // 10. تمام / ماشي
     if (_hasAny(cmd, ['تمام', 'ماشي', 'اوكي', 'أوكي', 'ok', 'طيب', 'حاضر', 'خلاص كده'])) {
       await _speak("تمام $userTitle 👌");
       return true;
     }
 
-    if (_hasAny(cmd, ['بحبك', 'احبك', 'أحبك', 'بعشقك', 'انتي حبيبتي'])) {
+    // 11. بحبك
+    if (_hasAny(cmd, ['بحبك', 'احبك', 'أحبك', 'بعشقك'])) {
       await _speak("وأنا كمان بحبك $userTitle 💛");
       return true;
     }
 
-    if (_hasAny(cmd, ['سلام عليكم', 'السلام عليكم', 'باي', 'يلا سلام', 'أشوفك بعدين', 'اشوفك بعدين', 'مع السلامة', 'سلام'])) {
+    // 12. سلام / باي
+    if (_hasAny(cmd, ['سلام عليكم', 'السلام عليكم', 'باي', 'يلا سلام', 'مع السلامة', 'سلام'])) {
       await _speak("وعليكم السلام ورحمة الله وبركاته $userTitle 🌟");
       return true;
     }
+    if (_hasAny(cmd, ['أشوفك بعدين', 'اشوفك بعدين', 'يلا باي', 'في رعاية الله'])) {
+      await _speak("في رعاية الله $userTitle، أنا هنا لو احتجتني 🌟");
+      return true;
+    }
 
-    if (_hasAny(cmd, ['يلا', 'يالا', 'بسرعة', 'بسرعه', 'حالا', 'حالاً', 'دلوقتي', 'حالا يلا'])) {
+    // 13. يلا / بسرعة
+    if (_hasAny(cmd, ['يلا', 'يالا', 'بسرعة', 'بسرعه', 'حالا', 'حالاً', 'دلوقتي'])) {
       await _speak("حاضر $userTitle، أنا في الخدمة 🏃");
       return true;
     }
 
-    if (_hasAny(cmd, ['انت موجود', 'انتي موجودة', 'معايا', 'سامعني', 'سامعانى', 'سامعاني', 'سامعنى'])) {
+    // 14. أنت موجود
+    if (_hasAny(cmd, ['انت موجود', 'انتي موجودة', 'معايا', 'سامعني', 'سامعاني', 'سامعنى'])) {
       await _speak("أيوة $userTitle، أنا $_listenWord وأنا في الخدمة 👂");
       return true;
     }
 
-    if (_hasAny(cmd, ['يلا نبدأ', 'نبدأ', 'هيا نبدأ', 'هيا بنا', 'هيا بنا نبدأ', 'يلا نشوف'])) {
-      await _speak("تمام $userTitle، أنا $_secTitle الشخصي بتاعك، قولي عايز إيه وأنا أنفذ");
+    // 15. يلا نبدأ
+    if (_hasAny(cmd, ['يلا نبدأ', 'نبدأ', 'هيا نبدأ', 'هيا بنا', 'يلا نشوف'])) {
+      await _speak("تمام $userTitle، أنا $secTitle الشخصي بتاعك، قولي عايز إيه وأنا أنفذ");
       return true;
     }
 
-    if (_hasAny(cmd, ['صحة', 'أيوة', 'ايوه', 'ايوة', 'نعم', 'اه', 'آه', 'ايوه كده'])) {
+    // 16. صحة / أيوة
+    if (_hasAny(cmd, ['صحة', 'أيوة', 'ايوه', 'ايوة', 'نعم', 'اه', 'آه'])) {
       await _speak("في الخدمة $userTitle 👌");
       return true;
     }
 
-    if (_hasAny(cmd, ['ممكن اسألك', 'ممكن أسألك', 'ممكن اسالك', 'ممكن أسألك سؤال', 'عندي سؤال'])) {
+    // 17. ممكن أسألك
+    if (_hasAny(cmd, ['ممكن اسألك', 'ممكن أسألك', 'عندي سؤال', 'عندي استفسار'])) {
       await _speak("اتفضل $userTitle، أنا في الخدمة");
       return true;
     }
 
-    if (_hasAny(cmd, ['عايز حاجه', 'عايز حاجة', 'عايزة حاجه', 'عايزة حاجة', 'عندي طلب', 'عايز اطلب حاجه'])) {
+    // 18. عايز حاجة
+    if (_hasAny(cmd, ['عايز حاجه', 'عايز حاجة', 'عايزة حاجه', 'عايزة حاجة', 'عندي طلب'])) {
       await _speak("اتفضل $userTitle، قوللي وأنا أنفذ");
       return true;
     }
 
+    // 19. ربنا يكرمك
     if (_hasAny(cmd, ['ربنا يكرمك', 'ربنا يسعدك', 'ربنا يحفظك', 'ربنا يوفقك', 'ربنا يخليك ليا'])) {
       await _speak("وربنا يكرمك $userTitle، ده من فضل ربنا 💛");
+      return true;
+    }
+
+    // 20. زهقان
+    if (_hasAny(cmd, ['زهقان', 'زهقانة', 'مليت', 'حاسس بالوحدة'])) {
+      await _speak("ما تزعلش $userTitle، أنا معاك. قولي نحجز موعد أو نلعب لعبة؟");
+      return true;
+    }
+
+    // 21. جعان / عطشان
+    if (_hasAny(cmd, ['جعان', 'جعانة', 'عطشان', 'عطشانة', 'عايز اكل', 'عايزة اكل'])) {
+      await _speak("خد بالك من نفسك $userTitle، متسيبش نفسك من غير أكل 💚");
+      return true;
+    }
+
+    // 22. نايم / صاحي
+    if (_hasAny(cmd, ['نايم', 'نايمة', 'صاحي', 'صاحية', 'قايم من النوم'])) {
+      if (cmd.contains('صاحي') || cmd.contains('صاحية') || cmd.contains('قايم')) {
+        await _speak("صباح الخير $userTitle، دايماً نشيط 🌟");
+      } else {
+        await _speak("خد راحتك $userTitle، أنا هسيبك تنام 😴");
+      }
+      return true;
+    }
+
+    // 23. الجو
+    if (_hasAny(cmd, ['الجو حلو', 'الجو جميل', 'الجو حر', 'الجو برد'])) {
+      await _speak("الجو دايماً حلو معاك $userTitle 🌤️");
+      return true;
+    }
+
+    // 24. أهلاً
+    if (_hasAny(cmd, ['اهلا', 'أهلاً', 'مرحبا', 'هاي', 'hello', 'hi'])) {
+      await _speak("أهلاً بيك $userTitle، نورت 🌟");
+      return true;
+    }
+
+    // 25. مبروك
+    if (_hasAny(cmd, ['مبروك', 'ألف مبروك', 'الف مبروك'])) {
+      await _speak("الله يبارك فيك $userTitle، عقبال كل حاجة حلوة 🎉");
+      return true;
+    }
+
+    // 26. سلامتك
+    if (_hasAny(cmd, ['سلامتك', 'الف سلامة', 'ألف سلامة'])) {
+      await _speak("الله يسلمك $userTitle 💚");
+      return true;
+    }
+
+    // 27. عندك شغل
+    if (_hasAny(cmd, ['عندك شغل', 'عندك حاجة', 'مشغول', 'مشغولة'])) {
+      await _speak("لأ $userTitle، فاضي ليك دايماً 👌");
+      return true;
+    }
+
+    // 28. يلا ننام
+    if (_hasAny(cmd, ['يلا ننام', 'خلاص هننام', 'هنام'])) {
+      await _speak("تصبح على خير $userTitle، أحلام سعيدة 🌙");
+      return true;
+    }
+
+    // 29. يلا نصحي
+    if (_hasAny(cmd, ['يلا نصحي', 'خلص نوم', 'قوم اصحي'])) {
+      await _speak("صباح الخير $userTitle، يومك سعيد ☀️");
+      return true;
+    }
+
+    // 30. كلمني
+    if (_hasAny(cmd, ['كلمني', 'اتكلم', 'قولي حاجة', 'اشغلني'])) {
+      await _speak("أنا معاك $userTitle، سامعك. قولي عايز تعمل إيه؟");
+      return true;
+    }
+
+    // 31. نكتة
+    if (_hasAny(cmd, ['نكته', 'نكتة', 'ضحكني', 'قولي نكته'])) {
+      await _speak("مرة واحد راح للدكتور قاله يا دكتور أنا حاسس إني ستارة، قاله انتشر يا ابني 😂");
+      return true;
+    }
+
+    // 32. الساعة كام
+    if (_hasAny(cmd, ['الساعه كام', 'الساعة كام', 'الوقت ايه', 'الساعة كم'])) {
+      final now = DateTime.now();
+      final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
+      final period = now.hour >= 12 ? 'مساءً' : 'صباحاً';
+      await _speak("الساعة $hour $period $userTitle");
+      return true;
+    }
+
+    // 33. التاريخ
+    if (_hasAny(cmd, ['التاريخ ايه', 'تاريخ اليوم', 'اليوم كام', 'انهاردة كام'])) {
+      final now = DateTime.now();
+      final date = DateFormat('dd MMMM yyyy', 'ar').format(now);
+      await _speak("التاريخ اليوم $date $userTitle");
+      return true;
+    }
+
+    // 34. بلاش شكر
+    if (_hasAny(cmd, ['مش محتاج تشكرني', 'بلاش شكر', 'مش عايز شكر'])) {
+      await _speak("تمام $userTitle، تحت أمرك دايماً 💛");
+      return true;
+    }
+
+    // 35. خلاص
+    if (_hasAny(cmd, ['خلاص', 'كفاية', 'كفايه', 'بس كده'])) {
+      await _speak("تمام $userTitle، تحت أمرك في أي وقت 👌");
       return true;
     }
 
@@ -2362,7 +2546,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   // ═══════════════════════════════════════
-  // 🎯 processSmartVoiceCommand
+  // processSmartVoiceCommand
   // ═══════════════════════════════════════
   Future<void> _processSmartVoiceCommand(String rawCommand) async {
     final userTitle = _userTitle;
@@ -2371,6 +2555,34 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('يا سكرتيرة');
 
     if (await _handleSocialReply(cmd)) return;
+
+    // ═══ أوامر اليوميات ═══
+    if ((cmd.contains('اقرا') || cmd.contains('اقرالي') || cmd.contains('اقرأيلي')) && cmd.contains('يوميات')) {
+      final key = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final diary = _diaries[key];
+      if (diary == null || diary.isEmpty) {
+        await _speak("مفيش يوميات مكتوبة النهاردة $userTitle");
+      } else {
+        await _speak("يومياتك النهاردة: $diary");
+      }
+      return;
+    }
+    if (cmd.contains('اكتب') && cmd.contains('يوميات')) {
+      if (mounted) _openDiaryPage(DateTime.now());
+      await _speak("اتفضل $userTitle، اكتب يومياتك");
+      return;
+    }
+    if (cmd.contains('امسح') && cmd.contains('يوميات')) {
+      final key = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      if (_diaries.containsKey(key)) {
+        setState(() => _diaries.remove(key));
+        _saveData();
+        await _speak("تم مسح يوميات النهاردة $userTitle");
+      } else {
+        await _speak("مفيش يوميات النهاردة $userTitle");
+      }
+      return;
+    }
 
     final alarmKeywords = [
       "فكرني", "فكريني", "فكروني", "فكرنى", "تفكرني", "تفكريني", "هتفكرني", "هتفكريني",
@@ -2565,12 +2777,85 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
+  // ═══════════════════════════════════════
+  // حذف بالصوت
+  // ═══════════════════════════════════════
   Future<void> _deleteTaskByVoice(String cmd) async {
-    await _speak("خاصية المسح بالصوت هتشتغل في التحديث الجاي");
+    final userTitle = _userTitle;
+
+    final nameNorm = _norm(_secretaryName);
+    String searchTerm = cmd;
+    final deleteWords = ['امسح', 'امسحي', 'احذف', 'احذفي', 'شيل', 'شيلي', 'الغي', 'الغى', 'الغيلي', 'مسح', 'حذف', 'كانسل', 'كنسل', 'المنبه', 'منبه'];
+    for (final w in deleteWords) {
+      searchTerm = searchTerm.replaceAll(_norm(w), '');
+    }
+    searchTerm = searchTerm.replaceAll(nameNorm, '').trim();
+
+    if (searchTerm.isEmpty) {
+      await _speak("قوللي أمسح أي موعد $userTitle");
+      return;
+    }
+
+    final matches = _tasks.where((t) {
+      final taskName = _norm(t['task'].toString());
+      return taskName.contains(searchTerm) || searchTerm.contains(taskName);
+    }).toList();
+
+    if (matches.isEmpty) {
+      await _speak("مفيش موعد بالاسم ده $userTitle");
+      return;
+    }
+
+    if (matches.length == 1) {
+      final task = matches.first;
+      setState(() {
+        _tasks.remove(task);
+      });
+      _saveData();
+      await _speak("تم مسح موعد ${task['task']} $userTitle");
+    } else {
+      await _speak("لقيت ${matches.length} مواعيد بالاسم ده $userTitle، حدد أكتر");
+    }
   }
 
+  // ═══════════════════════════════════════
+  // تعديل بالصوت
+  // ═══════════════════════════════════════
   Future<void> _editTaskByVoice(String cmd) async {
-    await _speak("خاصية التعديل بالصوت هتشتغل في التحديث الجاي");
+    final userTitle = _userTitle;
+
+    final nameNorm = _norm(_secretaryName);
+    String searchTerm = cmd;
+    final editWords = ['عدل', 'عدلي', 'غير', 'غيري', 'بدل', 'بدلي', 'تعديل', 'تغيير'];
+    for (final w in editWords) {
+      searchTerm = searchTerm.replaceAll(_norm(w), '');
+    }
+    searchTerm = searchTerm.replaceAll(nameNorm, '').trim();
+
+    if (searchTerm.isEmpty) {
+      await _speak("قوللي أعدل أي موعد $userTitle");
+      return;
+    }
+
+    final matches = _tasks.where((t) {
+      final taskName = _norm(t['task'].toString());
+      return taskName.contains(searchTerm) || searchTerm.contains(taskName);
+    }).toList();
+
+    if (matches.isEmpty) {
+      await _speak("مفيش موعد بالاسم ده $userTitle");
+      return;
+    }
+
+    if (matches.length == 1) {
+      final index = _tasks.indexOf(matches.first);
+      if (mounted) {
+        _editTaskDialog(index);
+        await _speak("هيظهرلك الموعد $userTitle، عدل زي ما تحب");
+      }
+    } else {
+      await _speak("لقيت ${matches.length} مواعيد $userTitle، حدد أكتر");
+    }
   }
 
   Future<void> _createAlarmFromVoice(String rawCommand, String cmd) async {
@@ -2712,7 +2997,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ معدّلة: late final Timer
   void _scheduleContinuousAlarm(String taskTitle, DateTime scheduledDateTime, String repeat, String interval, List<String> customDays) {
     Duration difference = scheduledDateTime.difference(DateTime.now());
     if (difference.isNegative) return;
@@ -2754,7 +3038,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays);
   }
 
-  // ✅ معدّلة: تحفظ pending_alarm
+  // ✅ v4 + زر إلغاء
   Future<void> _scheduleBackgroundNotification(
     String taskTitle,
     DateTime scheduledDateTime, {
@@ -2776,6 +3060,14 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       ongoing: true,
       fullScreenIntent: true,
       visibility: NotificationVisibility.public,
+      actions: <AndroidNotificationAction>[
+        AndroidNotificationAction(
+          'cancel_alarm',
+          'إلغاء',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
+      ],
     );
     const notificationDetails = NotificationDetails(android: androidDetails);
     await _notifications.zonedSchedule(
@@ -2788,7 +3080,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
     );
 
-    // 🆕 نحفظ pending_alarm
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('pending_alarm', json.encode({
       'title': taskTitle,
@@ -2843,26 +3134,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       ),
     );
   }
-
-  Future<Map<String, String>> _calculatePrayerTimes() async {
-    try {
-      final coordinates = Coordinates(30.0444, 31.2357);
-      final date = DateComponents.from(DateTime.now());
-      final params = CalculationMethod.egyptian.getParameters();
-      params.madhab = Madhab.shafi;
-      final prayerTimes = PrayerTimes(coordinates, date, params);
-      final format = DateFormat('hh:mm a', 'ar');
-      return {'fajr': format.format(prayerTimes.fajr), 'sunrise': format.format(prayerTimes.sunrise), 'dhuhr': format.format(prayerTimes.dhuhr), 'asr': format.format(prayerTimes.asr), 'maghrib': format.format(prayerTimes.maghrib), 'isha': format.format(prayerTimes.isha)};
-    } catch (e) {
-      final format = DateFormat('hh:mm a', 'ar');
-      final now = DateTime.now();
-      return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
-    }
-  }
     // ═══════════════════════════════════════
   // Events Reminders
   // ═══════════════════════════════════════
-  // ✅ معدّلة: late final Timer
   Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
     try {
       final eventDate = DateTime.parse(event['eventDate'].toString());
@@ -3361,9 +3635,22 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     )));
   }
 
-  // ═══════════════════════════════════════
-  // build() — مع زر إيقاف التسجيل العائم
-  // ═══════════════════════════════════════
+  Future<Map<String, String>> _calculatePrayerTimes() async {
+    try {
+      final coordinates = Coordinates(30.0444, 31.2357);
+      final date = DateComponents.from(DateTime.now());
+      final params = CalculationMethod.egyptian.getParameters();
+      params.madhab = Madhab.shafi;
+      final prayerTimes = PrayerTimes(coordinates, date, params);
+      final format = DateFormat('hh:mm a', 'ar');
+      return {'fajr': format.format(prayerTimes.fajr), 'sunrise': format.format(prayerTimes.sunrise), 'dhuhr': format.format(prayerTimes.dhuhr), 'asr': format.format(prayerTimes.asr), 'maghrib': format.format(prayerTimes.maghrib), 'isha': format.format(prayerTimes.isha)};
+    } catch (e) {
+      final format = DateFormat('hh:mm a', 'ar');
+      final now = DateTime.now();
+      return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<Widget> screens = [_buildCalendarAndTasksTab(), _buildDiariesTab(), _buildPrayerTimesTab(), _buildSpecialEventsTab(), _buildRecorderTab()];
