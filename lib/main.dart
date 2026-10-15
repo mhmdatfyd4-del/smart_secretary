@@ -1263,7 +1263,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
 }
 
 // ═══════════════════════════════════════
-// VoicePickerDialog — مع awaitSpeakCompletion
+// VoicePickerDialog — بدون awaitSpeakCompletion
 // ═══════════════════════════════════════
 class VoicePickerDialog extends StatefulWidget {
   final String gender;
@@ -1293,7 +1293,6 @@ class _VoicePickerDialogState extends State<VoicePickerDialog> {
     super.initState();
     _selected = widget.initialVoiceName;
     _selectedLocale = widget.initialLocale;
-    _appTts.awaitSpeakCompletion(true);
   }
 
   Future<void> _testVoice(String name, String locale) async {
@@ -1311,7 +1310,6 @@ class _VoicePickerDialogState extends State<VoicePickerDialog> {
       await _appTts.speak(widget.gender == 'ذكر'
           ? "مرحباً، أنا سكرتيرك الشخصي"
           : "مرحباً، أنا سكرتيرتك الشخصية");
-      await Future.delayed(const Duration(milliseconds: 200));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1623,7 +1621,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ v2 + audioAttributesUsage
+  // ✅ قناة الأذان v3
   Future<void> _scheduleAdhan30Days() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -1665,8 +1663,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           if (prayerTime.isBefore(now)) continue;
 
           final androidDetails = AndroidNotificationDetails(
-            'adhan_channel_v2',
-            'تنبيهات الأذان v2',
+            'adhan_channel_v3',
+            'تنبيهات الأذان v3',
             channelDescription: 'تنبيهات مواقيت الصلاة',
             importance: Importance.max,
             priority: Priority.max,
@@ -2364,7 +2362,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return false;
   }
 
-  // ✅ دالة تحليل تاريخ اليوميات
   DateTime? _parseDiaryDate(String cmd) {
     final now = DateTime.now();
 
@@ -2953,7 +2950,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays);
   }
 
-  // ✅ v5 + audioAttributesUsage
+  // ✅ قناة المنبه v6
   Future<void> _scheduleBackgroundNotification(
     String taskTitle,
     DateTime scheduledDateTime, {
@@ -2963,8 +2960,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }) async {
     final tzTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
     const androidDetails = AndroidNotificationDetails(
-      'secretary_alarm_v5',
-      'منبه السكرتير v5',
+      'secretary_alarm_v6',
+      'منبه السكرتير v6',
       channelDescription: 'تنبيهات المواعيد',
       importance: Importance.max,
       priority: Priority.max,
@@ -3044,7 +3041,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               WakelockPlus.disable();
               Navigator.pop(ctx);
 
-              // ✅ لو مرة واحدة → امسح الموعد
               if (repeat == 'مرة واحدة') {
                 final idx = _tasks.indexWhere((t) => t['task'] == taskTitle);
                 if (idx != -1) {
