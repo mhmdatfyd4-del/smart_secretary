@@ -14,11 +14,13 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     private var pendingText: String? = null
 
     companion object {
-        const val CHANNEL_ID = "secretary_native_alarm_v1"
+        const val CHANNEL_ID = "secretary_native_alarm_v2"
         const val NOTIF_ID = 99001
         const val EXTRA_TITLE = "title"
+        const val EXTRA_PREFIX = "prefix"
         const val ACTION_START = "com.example.secretary_app.START_ALARM"
         const val ACTION_STOP = "com.example.secretary_app.STOP_ALARM"
+        const val DEFAULT_PREFIX = "حان الآن موعد: "
     }
 
     override fun onCreate() {
@@ -34,14 +36,29 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         }
 
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: return START_NOT_STICKY
+        val prefix = intent?.getStringExtra(EXTRA_PREFIX) ?: DEFAULT_PREFIX
 
         val notification = buildNotification(title)
-        startForeground(NOTIF_ID, notification)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                startForeground(
+                    NOTIF_ID,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } catch (e: Exception) {
+                startForeground(NOTIF_ID, notification)
+            }
+        } else {
+            startForeground(NOTIF_ID, notification)
+        }
 
         if (isTtsReady) {
-            speak(title)
+            speak(prefix, title)
         } else {
-            pendingText = title
+            pendingText = "$prefix|$title"
         }
 
         return START_NOT_STICKY
@@ -51,11 +68,14 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "منبه السكرتير (Native)",
-                NotificationManager.IMPORTANCE_HIGH
+                "منبه السكرتير (خلفية)",
+                NotificationManager.IMPORTANCE_MIN
             ).apply {
-                description = "تنبيهات المنبه في الخلفية"
+                description = "تشغيل صوت المنبه في الخلفية"
                 setSound(null, null)
+                enableLights(false)
+                enableVibration(false)
+                setShowBadge(false)
             }
             val nm = getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(channel)
@@ -63,36 +83,22 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun buildNotification(title: String): Notification {
-        val stopIntent = Intent(this, AlarmService::class.java).apply {
-            action = ACTION_STOP
-        }
-        val stopPending = PendingIntent.getService(
-            this, 1, stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val openIntent = packageManager.getLaunchIntentForPackage(packageName)
-        val openPending = PendingIntent.getActivity(
-            this, 2, openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("تنبيه هام!")
-            .setContentText("حان الآن موعد: $title")
+            .setContentTitle("تشغيل التنبيه")
+            .setContentText(title)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
-            .setContentIntent(openPending)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "إيقاف", stopPending)
+            .setSilent(true)
+            .setShowWhen(false)
             .build()
     }
 
-    private fun speak(text: String) {
-        val toSay = "حان الآن موعد: $text"
+    private fun speak(prefix: String, text: String) {
+        val toSay = "$prefix$text"
         tts?.setLanguage(Locale("ar"))
-        tts?.setSpeechRate(0.48f)
+        tts?.setSpeechRate(1.0f)
         tts?.setPitch(1.0f)
         tts?.speak(toSay, TextToSpeech.QUEUE_FLUSH, null, "alarm_${System.currentTimeMillis()}")
     }
@@ -101,7 +107,10 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         if (status == TextToSpeech.SUCCESS) {
             isTtsReady = true
             pendingText?.let {
-                speak(it)
+                val parts = it.split("|", limit = 2)
+                if (parts.size == 2) {
+                    speak(parts[0], parts[1])
+                }
                 pendingText = null
             }
         }
