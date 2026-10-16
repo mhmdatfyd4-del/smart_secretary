@@ -3,6 +3,7 @@ package com.example.secretary_app
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -16,10 +17,12 @@ class MainActivity : FlutterActivity() {
     private val LOCK_CHANNEL = "com.example.secretary_app/lock_screen"
     private val SETTINGS_CHANNEL = "com.example.secretary_app/settings"
     private val ALARM_CHANNEL = "com.example.secretary_app/native_alarm"
+    private val SOUND_CHANNEL = "com.example.secretary_app/sounds"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        // قناة شاشة القفل
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LOCK_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "enableShowWhenLocked" -> {
@@ -34,6 +37,7 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // قناة الإعدادات
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SETTINGS_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "openFullScreenIntentSettings" -> {
@@ -75,6 +79,7 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // قناة المنبه Native
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ALARM_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "scheduleAlarm" -> {
@@ -88,6 +93,53 @@ class MainActivity : FlutterActivity() {
                 "cancelAlarm" -> {
                     val id = call.argument<Int>("id") ?: 0
                     cancelAlarm(id)
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // قناة الأصوات
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SOUND_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getAvailableSounds" -> {
+                    val sounds = mutableListOf<Map<String, String>>()
+                    val types = listOf(
+                        RingtoneManager.TYPE_ALARM to "منبه",
+                        RingtoneManager.TYPE_NOTIFICATION to "إشعار",
+                        RingtoneManager.TYPE_RINGTONE to "رنين"
+                    )
+                    for ((type, prefix) in types) {
+                        try {
+                            val manager = RingtoneManager(this)
+                            manager.setType(type)
+                            val cursor = manager.cursor
+                            while (cursor.moveToNext()) {
+                                val title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX)
+                                val uri = cursor.getString(RingtoneManager.URI_COLUMN_INDEX)
+                                val id = cursor.getString(RingtoneManager.ID_COLUMN_INDEX)
+                                sounds.add(mapOf(
+                                    "title" to "$prefix: $title",
+                                    "uri" to "$uri/$id"
+                                ))
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    result.success(sounds)
+                }
+                "previewSound" -> {
+                    val uriStr = call.argument<String>("uri") ?: ""
+                    try {
+                        val ringtone = RingtoneManager.getRingtone(this, Uri.parse(uriStr))
+                        ringtone?.play()
+                    } catch (_: Exception) {}
+                    result.success(true)
+                }
+                "stopPreview" -> {
+                    try {
+                        val defaultUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                        RingtoneManager.getRingtone(this, defaultUri)?.stop()
+                    } catch (_: Exception) {}
                     result.success(true)
                 }
                 else -> result.notImplemented()
