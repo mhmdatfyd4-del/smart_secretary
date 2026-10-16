@@ -3,6 +3,7 @@ package com.example.secretary_app
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
@@ -18,6 +19,9 @@ class MainActivity : FlutterActivity() {
     private val SETTINGS_CHANNEL = "com.example.secretary_app/settings"
     private val ALARM_CHANNEL = "com.example.secretary_app/native_alarm"
     private val SOUND_CHANNEL = "com.example.secretary_app/sounds"
+
+    private var previewPlayer: MediaPlayer? = null
+    private var previewRingtone: android.media.Ringtone? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -104,6 +108,35 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "getAvailableSounds" -> {
                     val sounds = mutableListOf<Map<String, String>>()
+
+                    // ✅ الأصوات المخصصة (من res/raw)
+                    val customSounds = listOf(
+                        "alarm_scary1" to "😱 مرعب 1",
+                        "alarm_scary2" to "👻 مرعب 2",
+                        "alarm_iphone" to "📱 iPhone",
+                        "alarm_famous1" to "⭐ مشهور 1",
+                        "alarm_famous2" to "⭐ مشهور 2",
+                        "alarm_loud1" to "🔊 صحيان قوي 1",
+                        "alarm_loud2" to "🔊 صحيان قوي 2"
+                    )
+
+                    for ((fileName, displayName) in customSounds) {
+                        try {
+                            val resId = resources.getIdentifier(fileName, "raw", packageName)
+                            if (resId != 0) {
+                                val mp = MediaPlayer.create(this, resId)
+                                val duration = mp?.duration ?: 5000
+                                mp?.release()
+                                sounds.add(mapOf(
+                                    "title" to displayName,
+                                    "uri" to "raw://$fileName",
+                                    "duration" to duration.toString()
+                                ))
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    // ✅ أصوات الجهاز
                     val types = listOf(
                         RingtoneManager.TYPE_ALARM to "منبه",
                         RingtoneManager.TYPE_NOTIFICATION to "إشعار",
@@ -120,31 +153,65 @@ class MainActivity : FlutterActivity() {
                                 val id = cursor.getString(RingtoneManager.ID_COLUMN_INDEX)
                                 sounds.add(mapOf(
                                     "title" to "$prefix: $title",
-                                    "uri" to "$uri/$id"
+                                    "uri" to "$uri/$id",
+                                    "duration" to "0"  // نجهلها للأصوات من الجهاز
                                 ))
                             }
                         } catch (_: Exception) {}
                     }
+
                     result.success(sounds)
                 }
                 "previewSound" -> {
                     val uriStr = call.argument<String>("uri") ?: ""
                     try {
-                        val ringtone = RingtoneManager.getRingtone(this, Uri.parse(uriStr))
-                        ringtone?.play()
+                        // ✅ نوقف أي معاينة سابقة
+                        previewPlayer?.release()
+                        previewPlayer = null
+                        previewRingtone?.stop()
+                        previewRingtone = null
+
+                        if (uriStr.startsWith("raw://")) {
+                            // صوت مخصص من التطبيق
+                            val fileName = uriStr.replace("raw://", "")
+                            val resId = resources.getIdentifier(fileName, "raw", packageName)
+                            if (resId != 0) {
+                                previewPlayer = MediaPlayer.create(this, resId)
+                                previewPlayer?.start()
+                                previewPlayer?.setOnCompletionListener {
+                                    it.release()
+                                    previewPlayer = null
+                                }
+                            }
+                        } else {
+                            // صوت من الجهاز
+                            previewRingtone = RingtoneManager.getRingtone(this, Uri.parse(uriStr))
+                            previewRingtone?.play()
+                        }
                     } catch (_: Exception) {}
                     result.success(true)
                 }
                 "stopPreview" -> {
                     try {
-                        val defaultUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                        RingtoneManager.getRingtone(this, defaultUri)?.stop()
+                        previewPlayer?.stop()
+                        previewPlayer?.release()
+                        previewPlayer = null
+                        previewRingtone?.stop()
+                        previewRingtone = null
                     } catch (_: Exception) {}
                     result.success(true)
                 }
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun onDestroy() {
+        try {
+            previewPlayer?.release()
+            previewRingtone?.stop()
+        } catch (_: Exception) {}
+        super.onDestroy()
     }
 
     private fun scheduleAlarm(id: Int, title: String, timestamp: Long, prefix: String) {
