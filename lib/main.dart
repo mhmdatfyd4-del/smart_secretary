@@ -3866,13 +3866,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
 
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateSB) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          title: Text(
-            taskIndex == null ? 'إضافة موعد ليوم $day' : 'تعديل موعد $day',
+await showDialog(       // ← ضيف await هنا
+  context: context,
+  builder: (ctx) => StatefulBuilder(
+    builder: (context, setStateSB) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      title: Text(
+        taskIndex == null ? 'إضافة موعد ليوم $day' : 'تعديل موعد $day',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           content: SingleChildScrollView(
