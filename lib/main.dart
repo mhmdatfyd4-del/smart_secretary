@@ -203,9 +203,9 @@ class AppSettings {
 
   double get speechRate {
     switch (voiceLevel) {
-      case 'منخفض': return 0.75;
-      case 'متوسط': return 0.9;
-      default: return 1.0;
+      case 'منخفض': return 0.45;
+      case 'متوسط': return 0.65;
+      default: return 0.85;
     }
   }
 
