@@ -20,7 +20,6 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // قناة شاشة القفل
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LOCK_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "enableShowWhenLocked" -> {
@@ -35,7 +34,6 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // قناة الإعدادات
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SETTINGS_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "openFullScreenIntentSettings" -> {
@@ -77,14 +75,14 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // قناة المنبه Native
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ALARM_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "scheduleAlarm" -> {
                     val id = call.argument<Int>("id") ?: 0
                     val title = call.argument<String>("title") ?: ""
                     val timestamp = call.argument<Long>("timestamp") ?: 0L
-                    scheduleAlarm(id, title, timestamp)
+                    val prefix = call.argument<String>("prefix") ?: AlarmService.DEFAULT_PREFIX
+                    scheduleAlarm(id, title, timestamp, prefix)
                     result.success(true)
                 }
                 "cancelAlarm" -> {
@@ -97,10 +95,11 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun scheduleAlarm(id: Int, title: String, timestamp: Long) {
+    private fun scheduleAlarm(id: Int, title: String, timestamp: Long, prefix: String) {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, AlarmReceiver::class.java).apply {
             putExtra("title", title)
+            putExtra("prefix", prefix)
         }
         val pendingIntent = PendingIntent.getBroadcast(
             this, id, intent,
