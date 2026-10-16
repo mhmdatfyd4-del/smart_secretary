@@ -31,6 +31,7 @@ const List<String> _weekDays = ['السبت', 'الأحد', 'الاثنين', '�
 const MethodChannel _lockScreenChannel = MethodChannel('com.example.secretary_app/lock_screen');
 const MethodChannel _settingsChannel = MethodChannel('com.example.secretary_app/settings');
 const MethodChannel _nativeAlarmChannel = MethodChannel('com.example.secretary_app/native_alarm');
+const MethodChannel _soundChannel = MethodChannel('com.example.secretary_app/sounds');
 
 const Map<String, String> _maleNamesMap = {
   'محمد': 'assets/mohamed.jpg',
@@ -59,6 +60,18 @@ String _getSecretaryImage(String name, String voiceGender) {
 
 List<String> _getNamesForGender(String voiceGender) {
   return voiceGender == 'ذكر' ? _maleNamesMap.keys.toList() : _femaleNamesMap.keys.toList();
+}
+
+// ✅ دالة مساعدة: تحديد نوع الصوت (raw أو URI)
+AndroidNotificationSound? _getNotificationSound(String? soundUri) {
+  if (soundUri == null || soundUri.isEmpty || soundUri == 'default') {
+    return null;
+  }
+  if (soundUri.startsWith('raw://')) {
+    final fileName = soundUri.replaceFirst('raw://', '');
+    return RawResourceAndroidNotificationSound(fileName);
+  }
+  return UriAndroidNotificationSound(soundUri);
 }
 
 void main() async {
@@ -194,11 +207,12 @@ class AppSettings {
     this.defaultInterval = 'كل 10 ثواني',
   });
 
+  // ✅ سرعة عادية (بدل البطيئة)
   double get speechRate {
     switch (voiceLevel) {
-      case 'منخفض': return 0.35;
-      case 'متوسط': return 0.42;
-      default: return 0.48;
+      case 'منخفض': return 0.75;
+      case 'متوسط': return 0.9;
+      default: return 1.0;
     }
   }
 
@@ -211,6 +225,147 @@ class AppSettings {
   }
 }
 
+// ═══════════════════════════════════════
+// 🎵 SoundPickerDialog
+// ═══════════════════════════════════════
+class SoundPickerDialog extends StatefulWidget {
+  final String? currentUri;
+
+  const SoundPickerDialog({super.key, this.currentUri});
+
+  @override
+  State<SoundPickerDialog> createState() => _SoundPickerDialogState();
+}
+
+class _SoundPickerDialogState extends State<SoundPickerDialog> {
+  List<Map<String, String>> _sounds = [];
+  String? _selected;
+  bool _isLoading = true;
+  String? _previewingUri;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.currentUri ?? 'default';
+    _loadSounds();
+  }
+
+  Future<void> _loadSounds() async {
+    try {
+      final result = await _soundChannel.invokeMethod('getAvailableSounds');
+      if (result is List) {
+        _sounds = result.map((e) => Map<String, String>.from(e as Map)).toList();
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _previewSound(String uri) async {
+    if (uri == 'default') return;
+    try {
+      await _soundChannel.invokeMethod('stopPreview');
+      await _soundChannel.invokeMethod('previewSound', {'uri': uri});
+      if (mounted) setState(() => _previewingUri = uri);
+      // نرجع الحالة عادي بعد 3 ثواني
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted && _previewingUri == uri) {
+          setState(() => _previewingUri = null);
+        }
+      });
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    try {
+      _soundChannel.invokeMethod('stopPreview');
+    } catch (_) {}
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      title: const Text('🎵 اختر صوت المنبه', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 450,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                shrinkWrap: true,
+                children: [
+                  _soundTile(
+                    title: 'الافتراضي (شغلنا)',
+                    subtitle: 'صوت النظام + السكرتيرة تنطق',
+                    uri: 'default',
+                  ),
+                  const Divider(thickness: 2),
+                  ..._sounds.map((s) => _soundTile(
+                        title: s['title'] ?? '',
+                        subtitle: '',
+                        uri: s['uri'] ?? '',
+                      )),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إلغاء'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+          onPressed: () {
+            Navigator.pop(context, _selected);
+          },
+          child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    );
+  }
+
+  Widget _soundTile({required String title, required String subtitle, required String uri}) {
+    final isSelected = _selected == uri;
+    final isPreviewing = _previewingUri == uri;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      decoration: BoxDecoration(
+        color: isSelected ? const Color(0xFFC5A059).withOpacity(0.15) : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isSelected ? const Color(0xFFC5A059) : Colors.transparent,
+          width: 2,
+        ),
+      ),
+      child: ListTile(
+        dense: true,
+        leading: Radio<String>(
+          value: uri,
+          groupValue: _selected,
+          activeColor: const Color(0xFF1B2A4A),
+          onChanged: (val) => setState(() => _selected = val),
+        ),
+        title: Text(title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            )),
+        subtitle: subtitle.isEmpty ? null : Text(subtitle, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        trailing: uri == 'default'
+            ? null
+            : IconButton(
+                icon: Icon(
+                  isPreviewing ? Icons.hourglass_top : Icons.volume_up,
+                  color: const Color(0xFF1B2A4A),
+                ),
+                onPressed: () => _previewSound(uri),
+              ),
+      ),
+    );
+  }
+}
 // ═══════════════════════════════════════
 // SettingsScreen
 // ═══════════════════════════════════════
@@ -269,6 +424,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String? _maleVoiceName;
   String? _femaleVoiceName;
+  String? _defaultAlarmSound;
+  String? _defaultEventSound;
   bool _isPickingVoice = false;
 
   @override
@@ -299,26 +456,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _origDefaultInterval = _defaultInterval;
     _origSecretaryName = _secretaryName;
 
-    _loadSavedVoices();
+    _loadSavedData();
   }
 
-  Future<void> _loadSavedVoices() async {
+  Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
       _maleVoiceName = prefs.getString('male_voice_name');
       _femaleVoiceName = prefs.getString('female_voice_name');
+      _defaultAlarmSound = prefs.getString('default_alarm_sound');
+      _defaultEventSound = prefs.getString('default_event_sound');
     });
   }
 
+  // ✅ بدون stop
   Future<void> _pickVoiceFor(String gender) async {
     if (_isPickingVoice) return;
     setState(() => _isPickingVoice = true);
 
     try {
-      await _appTts.stop();
-      await Future.delayed(const Duration(milliseconds: 200));
-
       List<Map<String, String>> voices = [];
       try {
         final rawVoices = await _appTts.getVoices;
@@ -367,6 +524,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } finally {
       if (mounted) setState(() => _isPickingVoice = false);
+    }
+  }
+
+  // ✅ اختيار صوت المنبه الافتراضي
+  Future<void> _pickDefaultSound(String type) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = type == 'alarm' ? _defaultAlarmSound : _defaultEventSound;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => SoundPickerDialog(currentUri: current),
+    );
+
+    if (result != null) {
+      final key = type == 'alarm' ? 'default_alarm_sound' : 'default_event_sound';
+      if (result == 'default') {
+        await prefs.remove(key);
+      } else {
+        await prefs.setString(key, result);
+      }
+      if (!mounted) return;
+      setState(() {
+        if (type == 'alarm') {
+          _defaultAlarmSound = result == 'default' ? null : result;
+        } else {
+          _defaultEventSound = result == 'default' ? null : result;
+        }
+      });
     }
   }
 
@@ -768,6 +953,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (v) => setState(() => _shakeInBackground = v),
             ),
           ),
+          const SizedBox(height: 12),
+          // 🆕 صوت المنبه الافتراضي
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: InkWell(
+              onTap: () => _pickDefaultSound('alarm'),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A), size: 26),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('🎵 صوت المنبه الافتراضي',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          const SizedBox(height: 4),
+                          Text(
+                            _defaultAlarmSound == null ? 'الافتراضي (شغلنا)' : _defaultAlarmSound!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _defaultAlarmSound != null ? const Color(0xFFC5A059) : Colors.grey,
+                              fontWeight: _defaultAlarmSound != null ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // 🆕 صوت المناسبات الافتراضي
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: InkWell(
+              onTap: () => _pickDefaultSound('event'),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.celebration, color: Color(0xFF1B2A4A), size: 26),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('🎵 صوت المناسبات الافتراضي',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          const SizedBox(height: 4),
+                          Text(
+                            _defaultEventSound == null ? 'الافتراضي (شغلنا)' : _defaultEventSound!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _defaultEventSound != null ? const Color(0xFFC5A059) : Colors.grey,
+                              fontWeight: _defaultEventSound != null ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+                  ],
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 30),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
@@ -787,6 +1048,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
+
+// ═══════════════════════════════════════
+// SecretaryApp
+// ═══════════════════════════════════════
 class SecretaryApp extends StatelessWidget {
   final bool isFirstTime;
   final String? savedName;
@@ -842,21 +1107,17 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
   Future<void> _requestPermissions() async {
     setState(() => _isRequesting = true);
 
-    // 1. المايكروفون
     await Permission.microphone.request();
     await Future.delayed(const Duration(milliseconds: 500));
 
-    // 2. الإشعارات
     await Permission.notification.request();
     await Future.delayed(const Duration(milliseconds: 500));
 
-    // 3. المنبهات الدقيقة
     if (await Permission.scheduleExactAlarm.isDenied) {
       await Permission.scheduleExactAlarm.request();
       await Future.delayed(const Duration(seconds: 1));
     }
 
-    // 4. إذن البطارية
     if (await Permission.ignoreBatteryOptimizations.isDenied) {
       await Permission.ignoreBatteryOptimizations.request();
       await Future.delayed(const Duration(milliseconds: 500));
@@ -893,7 +1154,6 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
       return;
     }
 
-    // 5. إشعارات ملء الشاشة
     await _askFullScreenIntent();
 
     if (mounted) {
@@ -1019,7 +1279,6 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
     );
   }
 }
-
 // ═══════════════════════════════════════
 // SetupSecretaryScreen
 // ═══════════════════════════════════════
@@ -1055,14 +1314,12 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
     setState(() => _savedVoiceName = prefs.getString(key));
   }
 
+  // ✅ بدون stop
   Future<void> _pickVoice() async {
     if (_isPickingVoice) return;
     setState(() => _isPickingVoice = true);
 
     try {
-      await _appTts.stop();
-      await Future.delayed(const Duration(milliseconds: 200));
-
       List<Map<String, String>> voices = [];
       try {
         final rawVoices = await _appTts.getVoices;
@@ -1324,7 +1581,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
 }
 
 // ═══════════════════════════════════════
-// VoicePickerDialog — بدون awaitSpeakCompletion
+// VoicePickerDialog — بدون stop + بدون awaitSpeakCompletion
 // ═══════════════════════════════════════
 class VoicePickerDialog extends StatefulWidget {
   final String gender;
@@ -1348,6 +1605,7 @@ class _VoicePickerDialogState extends State<VoicePickerDialog> {
   String? _selected;
   String _selectedLocale = 'ar-EG';
   bool _isTesting = false;
+  bool _isClosing = false;
 
   @override
   void initState() {
@@ -1357,29 +1615,34 @@ class _VoicePickerDialogState extends State<VoicePickerDialog> {
   }
 
   Future<void> _testVoice(String name, String locale) async {
-    if (_isTesting) return;
+    if (_isTesting || _isClosing) return;
     setState(() => _isTesting = true);
     try {
-      await _appTts.stop();
-      await Future.delayed(const Duration(milliseconds: 500));
-      try {
-        await _appTts.setVoice({'name': name, 'locale': locale});
-      } catch (_) {}
-      await Future.delayed(const Duration(milliseconds: 300));
-      await _appTts.setSpeechRate(0.48);
+      await _appTts.setVoice({'name': name, 'locale': locale});
+      await _appTts.setSpeechRate(1.0);
       await _appTts.setVolume(1.0);
       await _appTts.speak(widget.gender == 'ذكر'
           ? "مرحباً، أنا سكرتيرك الشخصي"
           : "مرحباً، أنا سكرتيرتك الشخصية");
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e')),
-        );
-      }
-    } finally {
+    } catch (_) {}
+    finally {
       if (mounted) setState(() => _isTesting = false);
     }
+  }
+
+  void _confirm() {
+    if (_selected == null || _isClosing) return;
+    _isClosing = true;
+    Navigator.of(context).pop({
+      'name': _selected,
+      'locale': _selectedLocale,
+    });
+  }
+
+  void _cancel() {
+    if (_isClosing) return;
+    _isClosing = true;
+    Navigator.of(context).pop();
   }
 
   @override
@@ -1388,104 +1651,104 @@ class _VoicePickerDialogState extends State<VoicePickerDialog> {
         ? '🎧 اختر صوت السكرتير (راجل)'
         : '🎧 اختر صوت السكرتيرة (ست)';
 
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: widget.voices.isEmpty
-            ? Column(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.warning_amber, color: Colors.orange, size: 50),
-                  SizedBox(height: 10),
-                  Text('مفيش أصوات عربية على الجهاز',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  Text(
-                    'من فضلك نزّل حزمة اللغة العربية من إعدادات Google TTS',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              )
-            : ListView.builder(
-                shrinkWrap: true,
-                itemCount: widget.voices.length,
-                itemBuilder: (ctx, i) {
-                  final v = widget.voices[i];
-                  final name = v['name'] ?? '';
-                  final locale = v['locale'] ?? '';
-                  final isSelected = _selected == name;
-                  return Container(
-                    margin: const EdgeInsets.symmetric(vertical: 3),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFFC5A059).withOpacity(0.15)
-                          : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (!didPop) _cancel();
+      },
+      child: AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: widget.voices.isEmpty
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.warning_amber, color: Colors.orange, size: 50),
+                    SizedBox(height: 10),
+                    Text('مفيش أصوات عربية على الجهاز',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    SizedBox(height: 8),
+                    Text(
+                      'من فضلك نزّل حزمة اللغة العربية من إعدادات Google TTS',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: widget.voices.length,
+                  itemBuilder: (ctx, i) {
+                    final v = widget.voices[i];
+                    final name = v['name'] ?? '';
+                    final locale = v['locale'] ?? '';
+                    final isSelected = _selected == name;
+                    return Container(
+                      margin: const EdgeInsets.symmetric(vertical: 3),
+                      decoration: BoxDecoration(
                         color: isSelected
-                            ? const Color(0xFFC5A059)
-                            : Colors.transparent,
-                        width: 2,
-                      ),
-                    ),
-                    child: ListTile(
-                      dense: true,
-                      leading: Radio<String>(
-                        value: name,
-                        groupValue: _selected,
-                        activeColor: const Color(0xFF1B2A4A),
-                        onChanged: (val) {
-                          setState(() {
-                            _selected = val;
-                            _selectedLocale = locale;
-                          });
-                        },
-                      ),
-                      title: Text(name,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          )),
-                      subtitle: Text('اللغة: $locale',
-                          style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                      trailing: IconButton(
-                        icon: Icon(
-                          _isTesting ? Icons.hourglass_top : Icons.volume_up,
-                          color: const Color(0xFF1B2A4A),
+                            ? const Color(0xFFC5A059).withOpacity(0.15)
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xFFC5A059)
+                              : Colors.transparent,
+                          width: 2,
                         ),
-                        onPressed: _isTesting ? null : () => _testVoice(name, locale),
                       ),
-                    ),
-                  );
-                },
-              ),
+                      child: ListTile(
+                        dense: true,
+                        leading: Radio<String>(
+                          value: name,
+                          groupValue: _selected,
+                          activeColor: const Color(0xFF1B2A4A),
+                          onChanged: _isClosing ? null : (val) {
+                            setState(() {
+                              _selected = val;
+                              _selectedLocale = locale;
+                            });
+                          },
+                        ),
+                        title: Text(name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            )),
+                        subtitle: Text('اللغة: $locale',
+                            style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                        trailing: IconButton(
+                          icon: Icon(
+                            _isTesting ? Icons.hourglass_top : Icons.volume_up,
+                            color: const Color(0xFF1B2A4A),
+                          ),
+                          onPressed: (_isTesting || _isClosing) ? null : () => _testVoice(name, locale),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _isClosing ? null : _cancel,
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+            onPressed: (_selected == null || _isClosing) ? null : _confirm,
+            child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('إلغاء'),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
-          onPressed: _selected == null
-              ? null
-              : () {
-                  Navigator.pop(context, {
-                    'name': _selected,
-                    'locale': _selectedLocale,
-                  });
-                },
-          child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
-        ),
-      ],
     );
   }
 }
+
 // ═══════════════════════════════════════
-// MainDashboard
+// MainDashboard — بداية
 // ═══════════════════════════════════════
 class MainDashboard extends StatefulWidget {
   final String secretaryName;
@@ -1609,6 +1872,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final repeat = data['repeat'] as String? ?? 'مرة واحدة';
       final interval = data['interval'] as String? ?? 'بدون تنبيه';
       final customDays = List<String>.from(data['customDays'] ?? []);
+      final sound = data['sound'] as String?;
 
       if (scheduledMillis == null || title.isEmpty) {
         await prefs.remove('pending_alarm');
@@ -1632,6 +1896,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           interval,
           customDays,
           DateTime.fromMillisecondsSinceEpoch(scheduledMillis),
+          sound,
         );
       }
     } catch (_) {}
@@ -1664,9 +1929,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final title = data['title'] as String? ?? '';
       final detail = data['detail'] as String? ?? '';
       final interval = data['interval'] as String? ?? 'مرة واحدة';
+      final sound = data['sound'] as String?;
+      final hasCustomSound = sound != null && sound != 'default' && sound.isNotEmpty;
 
       if (title.isNotEmpty && mounted) {
-        _showEventReminder(title, detail, interval);
+        _showEventReminder(title, detail, interval, hasCustomSound: hasCustomSound);
       }
     } catch (_) {}
   }
@@ -1830,6 +2097,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
           if (prayerStr == currentTime && !_adhanAlerted) {
             _adhanAlerted = true;
+
+            // ✅ نلغي الإشعار فوراً (عشان ما يجيش mp3 مع TTS)
+            final key = _prayerKey(entry.key);
+            if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
+              await _notifications.cancel((dayOffset * 10) + key.hashCode);
+            }
+
             await _speak("حان الآن موعد أذان ${entry.key}");
             Future.delayed(const Duration(minutes: 2), () => _adhanAlerted = false);
           }
@@ -1849,7 +2123,14 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         if (t['alarm'] == true && t['scheduled'] != null) {
           final dt = DateTime.tryParse(t['scheduled'].toString());
           if (dt != null && dt.isAfter(DateTime.now())) {
-            _scheduleContinuousAlarm(t['task'].toString(), dt, t['repeat'] ?? 'مرة واحدة', t['repeatInterval'] ?? 'كل 10 ثواني', List<String>.from(t['customDays'] ?? []));
+            _scheduleContinuousAlarm(
+              t['task'].toString(),
+              dt,
+              t['repeat'] ?? 'مرة واحدة',
+              t['repeatInterval'] ?? 'كل 10 ثواني',
+              List<String>.from(t['customDays'] ?? []),
+              soundUri: t['sound'],
+            );
           }
         }
       }
@@ -2102,8 +2383,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _speech.cancel();
     super.dispose();
   }
-
-  Future<void> _configureVoice({bool skipGreeting = false}) async {
+    Future<void> _configureVoice({bool skipGreeting = false}) async {
     try {
       await _tts.setLanguage("ar-EG");
       await Future.delayed(const Duration(milliseconds: 150));
@@ -2162,11 +2442,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
+  // ✅ بدون stop
   Future<void> _openVoicePicker() async {
     if (_isListening || _isRecording) return;
-
-    await _tts.stop();
-    await Future.delayed(const Duration(milliseconds: 300));
 
     final voices = await _getArabicVoices();
     if (!mounted) return;
@@ -2192,15 +2470,20 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await prefs.setString(key, result['name']!);
       await prefs.setString(localeKey, result['locale']!);
 
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _appTts.setVoice({
+            'name': result['name']!,
+            'locale': result['locale']!,
+          });
+        }
+      });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('✅ تم حفظ الصوت: ${result['name']}')),
         );
       }
-
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) _configureVoice(skipGreeting: true);
-      });
     }
   }
 
@@ -2263,10 +2546,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speak("الحمد لله بخير، دايماً في خدمتك $userTitle 💛");
       return true;
     }
-    if (_hasAny(cmd, ['عامل ايه في الدنيا', 'اخبار الدنيا', 'الدنيا ايه'])) {
-      await _speak("الحمد لله، الدنيا تمام. وبيك $userTitle أكثر 💛");
-      return true;
-    }
     if (_hasAny(cmd, ['شكرا', 'شكراً', 'متشكر', 'متشكرة', 'مشكور', 'مشكورة', 'ربنا يخليك', 'ربنا يخليكي', 'ميرسي', 'ميرسى', 'ثانكس'])) {
       await _speak("العفو $userTitle، ده واجبي 🙏");
       return true;
@@ -2295,7 +2574,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speak("ألف سلامة عليك $userTitle، $_takeCareWord بالك من نفسك 💚");
       return true;
     }
-    if (_hasAny(cmd, ['مبسوط', 'مبسوطة', 'فرحان', 'فرحانة', 'سعيد', 'سعيدة', 'الحمد لله مبسوط'])) {
+    if (_hasAny(cmd, ['مبسوط', 'مبسوطة', 'فرحان', 'فرحانة', 'سعيد', 'سعيدة'])) {
       await _speak("وأنا كمان $_happyWord ليك $userTitle 😊");
       return true;
     }
@@ -2311,10 +2590,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speak("وعليكم السلام ورحمة الله وبركاته $userTitle 🌟");
       return true;
     }
-    if (_hasAny(cmd, ['أشوفك بعدين', 'اشوفك بعدين', 'يلا باي', 'في رعاية الله'])) {
-      await _speak("في رعاية الله $userTitle، أنا هنا لو احتجتني 🌟");
-      return true;
-    }
     if (_hasAny(cmd, ['يلا', 'يالا', 'بسرعة', 'بسرعه', 'حالا', 'حالاً', 'دلوقتي'])) {
       await _speak("حاضر $userTitle، أنا في الخدمة 🏃");
       return true;
@@ -2323,7 +2598,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speak("أيوة $userTitle، أنا $_listenWord وأنا في الخدمة 👂");
       return true;
     }
-    if (_hasAny(cmd, ['يلا نبدأ', 'نبدأ', 'هيا نبدأ', 'هيا بنا', 'يلا نشوف'])) {
+    if (_hasAny(cmd, ['يلا نبدأ', 'نبدأ', 'هيا نبدأ', 'هيا بنا'])) {
       await _speak("تمام $userTitle، أنا $secTitle الشخصي بتاعك، قولي عايز إيه وأنا أنفذ");
       return true;
     }
@@ -2339,56 +2614,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speak("اتفضل $userTitle، قوللي وأنا أنفذ");
       return true;
     }
-    if (_hasAny(cmd, ['ربنا يكرمك', 'ربنا يسعدك', 'ربنا يحفظك', 'ربنا يوفقك', 'ربنا يخليك ليا'])) {
+    if (_hasAny(cmd, ['ربنا يكرمك', 'ربنا يسعدك', 'ربنا يحفظك', 'ربنا يوفقك'])) {
       await _speak("وربنا يكرمك $userTitle، ده من فضل ربنا 💛");
-      return true;
-    }
-    if (_hasAny(cmd, ['زهقان', 'زهقانة', 'مليت', 'حاسس بالوحدة'])) {
-      await _speak("ما تزعلش $userTitle، أنا معاك. قولي نحجز موعد أو نلعب لعبة؟");
-      return true;
-    }
-    if (_hasAny(cmd, ['جعان', 'جعانة', 'عطشان', 'عطشانة', 'عايز اكل', 'عايزة اكل'])) {
-      await _speak("خد بالك من نفسك $userTitle، متسيبش نفسك من غير أكل 💚");
-      return true;
-    }
-    if (_hasAny(cmd, ['نايم', 'نايمة', 'صاحي', 'صاحية', 'قايم من النوم'])) {
-      if (cmd.contains('صاحي') || cmd.contains('صاحية') || cmd.contains('قايم')) {
-        await _speak("صباح الخير $userTitle، دايماً نشيط 🌟");
-      } else {
-        await _speak("خد راحتك $userTitle، أنا هسيبك تنام 😴");
-      }
-      return true;
-    }
-    if (_hasAny(cmd, ['الجو حلو', 'الجو جميل', 'الجو حر', 'الجو برد'])) {
-      await _speak("الجو دايماً حلو معاك $userTitle 🌤️");
-      return true;
-    }
-    if (_hasAny(cmd, ['اهلا', 'أهلاً', 'مرحبا', 'هاي', 'hello', 'hi'])) {
-      await _speak("أهلاً بيك $userTitle، نورت 🌟");
-      return true;
-    }
-    if (_hasAny(cmd, ['مبروك', 'ألف مبروك', 'الف مبروك'])) {
-      await _speak("الله يبارك فيك $userTitle، عقبال كل حاجة حلوة 🎉");
-      return true;
-    }
-    if (_hasAny(cmd, ['سلامتك', 'الف سلامة', 'ألف سلامة'])) {
-      await _speak("الله يسلمك $userTitle 💚");
-      return true;
-    }
-    if (_hasAny(cmd, ['عندك شغل', 'عندك حاجة', 'مشغول', 'مشغولة'])) {
-      await _speak("لأ $userTitle، فاضي ليك دايماً 👌");
-      return true;
-    }
-    if (_hasAny(cmd, ['يلا ننام', 'خلاص هننام', 'هنام'])) {
-      await _speak("تصبح على خير $userTitle، أحلام سعيدة 🌙");
-      return true;
-    }
-    if (_hasAny(cmd, ['يلا نصحي', 'خلص نوم', 'قوم اصحي'])) {
-      await _speak("صباح الخير $userTitle، يومك سعيد ☀️");
-      return true;
-    }
-    if (_hasAny(cmd, ['كلمني', 'اتكلم', 'قولي حاجة', 'اشغلني'])) {
-      await _speak("أنا معاك $userTitle، سامعك. قولي عايز تعمل إيه؟");
       return true;
     }
     if (_hasAny(cmd, ['نكته', 'نكتة', 'ضحكني', 'قولي نكته'])) {
@@ -2406,10 +2633,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final now = DateTime.now();
       final date = DateFormat('dd MMMM yyyy', 'ar').format(now);
       await _speak("التاريخ اليوم $date $userTitle");
-      return true;
-    }
-    if (_hasAny(cmd, ['مش محتاج تشكرني', 'بلاش شكر', 'مش عايز شكر'])) {
-      await _speak("تمام $userTitle، تحت أمرك دايماً 💛");
       return true;
     }
     if (_hasAny(cmd, ['خلاص', 'كفاية', 'كفايه', 'بس كده'])) {
@@ -2518,6 +2741,31 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return 'كل 10 ثواني';
   }
 
+  // ✅ دوال الحساب
+  int _getIntervalSeconds(String interval) {
+    switch (interval) {
+      case 'مرة واحدة': return 0;
+      case 'كل 10 ثواني': return 10;
+      case 'كل 20 ثانية': return 20;
+      case 'كل 30 ثانية': return 30;
+      case 'كل دقيقة': return 60;
+      case 'كل دقيقتين': return 120;
+      case 'كل 3 دقايق': return 180;
+      case 'كل 5 دقايق': return 300;
+      case 'كل 10 دقايق': return 600;
+      default: return 0;
+    }
+  }
+
+  // ✅ دالة جديدة: وقت التكرار الفعلي
+  int _getEffectiveIntervalSeconds(String interval, String? soundUri) {
+    int userSeconds = _getIntervalSeconds(interval);
+    if (userSeconds == 0) return 0;
+    if (soundUri == null || soundUri == 'default' || soundUri.isEmpty) return userSeconds;
+
+    // لو صوت مخصص، نستخدم 20 ثانية كحد أدنى (لأن الأصوات أطول)
+    return userSeconds > 20 ? userSeconds : 20;
+  }
   Future<void> _processSmartVoiceCommand(String rawCommand) async {
     final userTitle = _userTitle;
     final cmd = _norm(rawCommand);
@@ -2554,38 +2802,28 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
 
     final alarmKeywords = [
-      "فكرني", "فكريني", "فكروني", "فكرنى", "تفكرني", "تفكريني", "هتفكرني", "هتفكريني",
-      "افتكرني", "افتكريني", "افتكرلي", "افتكرى لي", "هفتكرك",
-      "ذكرني", "ذكريني", "ذكروني", "ذكرنى", "تذكرني", "تذكريني", "هتذكرني", "هتذكريني",
-      "نبهني", "نبهيني", "نبهوني", "نبهنى", "تنبهني", "تنبهيني", "تنبيهي", "تنبيهني",
-      "منبه", "منبّه", "منبهني", "منبهلي", "منبهيلي", "المنبه", "نبّهني",
+      "فكرني", "فكريني", "فكروني", "فكرنى", "تفكرني", "تفكريني", "هتفكرني",
+      "افتكرني", "افتكريني", "افتكرلي",
+      "ذكرني", "ذكريني", "ذكروني", "ذكرنى", "تذكرني", "تذكريني",
+      "نبهني", "نبهيني", "نبهوني", "نبهنى", "تنبهني", "تنبهيني",
+      "منبه", "منبّه", "منبهني", "منبهلي", "المنبه",
       "اضبطلي", "اظبطلي", "اضبطيلي", "اظبطيلي", "ظبطلي", "ظبطيلي",
       "ضبطلي", "ضبطيلي", "اضبط", "اظبط", "اضبطي", "اظبطي", "ظبط", "ظبطي",
-      "ضبط", "ضبطي", "اضبطيلى",
-      "سجل عندك", "سجلي عندك", "سجللي", "سجليلي", "سجللى", "سجلى لى",
-      "حطلي", "حطلى", "حطيلي", "حطى لي", "حطني", "حطيني",
-      "اعمللي", "اعمليلي", "اعمللى", "اعملى لي", "اعملني", "اعمليني", "اعمليلى",
-      "عايز", "عاوز", "عايزة", "عاوزة", "عايزك", "عاوزك", "عايزاك", "عاوزاك",
-      "عايز افتكر", "عاوز افتكر", "عايزة افتكر", "عاوزة افتكر",
-      "عايز منبه", "عاوز منبه", "عايزة منبه", "عاوزة منبه",
-      "عايز تذكير", "عاوز تذكير", "عايزة تذكير", "عاوزة تذكير",
-      "عايز اضبط", "عايزة اضبط", "عاوز اضبط", "عاوزة اضبط",
-      "صحيني", "صحيني الصبح", "صحيني بكرة", "صحوني", "صحى", "تصحيني",
-      "صحي", "صحيلي", "أصحى", "صيحيني", "صحيلى",
-      "ورايا", "ورايه", "ورايا حاجه", "ورايا حاجة", "وراك", "وراك حاجة",
-      "ورايا حاجه مهمه", "ورايا حاجة مهمة",
-      "دبرلي", "دبريلي", "دبرلى", "دبرى لي",
-      "رتبلي", "رتبيلي", "رتبلى", "رتبى لي",
-      "جهزلي", "جهزيلي", "جهزلى", "جهزى لي",
+      "سجل عندك", "سجلي عندك", "سجللي", "سجليلي",
+      "حطلي", "حطلى", "حطيلي", "حطني", "حطيني",
+      "اعمللي", "اعمليلي", "اعمللى", "اعملى لي", "اعملني",
+      "عايز", "عاوز", "عايزة", "عاوزة", "عايزك", "عاوزك",
+      "صحيني", "صحيني الصبح", "صحيني بكرة", "صحوني", "تصحيني",
+      "صحي", "صحيلي", "أصحى", "صيحيني",
+      "ورايا", "ورايه", "ورايا حاجه", "ورايا حاجة",
+      "دبرلي", "دبريلي", "رتبلي", "رتبيلي", "جهزلي", "جهزيلي",
       "علمني", "علميني",
       "خلي بالك", "خليكي بالك", "خد بالك", "خدي بالك",
       "ما تنساني", "ماتنساني", "متنساني", "ماتنسانيش", "متنسانيش",
       "ماتنساش", "متنساش", "ماتنساشي", "متنساشي",
-      "ماتنسى", "متنسى", "ماتنسيش", "متنسيش",
-      "موعد", "ميعاد", "موعدي", "ميعادي", "حددلي موعد", "حددلي ميعاد",
-      "حدديلي موعد", "حدديلي ميعاد",
+      "موعد", "ميعاد", "موعدي", "حددلي موعد", "حددلي ميعاد",
       "تنبيه", "التنبيه", "هنسى", "هنسي", "هنساه",
-      "خايف أنسى", "خايفة أنسى", "خايف انسى", "خايفة انسى",
+      "خايف أنسى", "خايفة أنسى",
       "جهز نفسك", "خليك جاهز", "خليكي جاهزة",
       "ساعدني", "ساعديني", "تساعدني", "تساعديني",
       "تذكره", "تذكرة", "تذكيري", "تذكيرى",
@@ -2603,19 +2841,18 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       "غير", "غيري", "غيرلي", "غيريلي", "تغير", "تغيري",
       "غيّر", "غيّري", "تغيير", "تغييري",
       "بدل", "بدلي", "بدللي", "بدليلي", "تبدل", "تبدلي",
-      "حرك", "حركي", "أخر", "أخري",
     ];
 
     final deleteKeywords = [
       "امسح", "امسحي", "امسحلي", "امسحيلي", "أمسح", "أمسحي",
       "مسح", "مسحي", "مسحلي", "مسحيلي",
-      "احذف", "احذفي", "احذفلي", "احذفيلي", "أحذف", "أحذفي",
+      "احذف", "احذفي", "احذفلي", "احذفيلي",
       "حذف", "حذفي", "حذفلي", "حذفيلي",
       "شيل", "شيلي", "شيللي", "شيليلي", "أشيل",
-      "الغي", "الغى", "ألغي", "ألغى", "الغيلي", "ألغيلي",
-      "إلغاء", "إلغى", "كانسل", "كنسل", "كنسلي", "كانسلي",
-      "وقف المنبه", "وقفي المنبه", "اوقف المنبه", "أوقف المنبه",
-      "اقفل المنبه", "اقفلي المنبه", "الغي المنبه", "ألغي المنبه",
+      "الغي", "الغى", "ألغي", "ألغى",
+      "إلغاء", "إلغى", "كانسل", "كنسل", "كنسلي",
+      "وقف المنبه", "وقفي المنبه", "اوقف المنبه",
+      "اقفل المنبه", "اقفلي المنبه", "الغي المنبه",
     ];
 
     if (_hasAny(cmd, deleteKeywords)) {
@@ -2631,19 +2868,18 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final prayerKeywords = ["صلوات", "صلاة", "صلاه", "الصلاة", "مواقيت", "اذان", "أذان",
       "الفجر", "الظهر", "العصر", "المغرب", "العشاء"];
 
-    final diaryKeywords = ["يوميات", "يومياتي", "اليوميات", "مفكرة", "مفكرتي", "المفكرة",
-      "مذكرة", "مذكرتي", "تدوين", "خواطر", "اكتبلي", "اكتبيلي"];
+    final diaryKeywords = ["يوميات", "يومياتي", "اليوميات", "مفكرة", "مفكرتي",
+      "مذكرة", "مذكرتي", "تدوين", "خواطر", "اكتبلي"];
 
     final eventKeywords = ["مناسبات", "مناسباتي", "المناسبات", "مناسبة", "مناسبه",
       "عيد", "العيد", "أعياد", "اعياد", "ذكرى", "الذكرى", "احتفال", "حفلة"];
 
     final openRecorderKeywords = [
-      "افتح المسجل", "افتح مسجل", "افتحلي المسجل", "افتحي المسجل", "افتحيلى المسجل",
+      "افتح المسجل", "افتح مسجل", "افتحلي المسجل", "افتحي المسجل",
       "المسجل", "مسجل", "المسجل الصوتي",
-      "سجل صوت", "سجل صوتي", "سجلي صوت", "سجلي صوتي",
+      "سجل صوت", "سجل صوتي", "سجلي صوت",
       "التسجيلات", "تسجيلات", "تسجيلاتي",
       "صوتيات", "الصوتيات",
-      "المذكرات الصوتيه", "مذكرات صوتيه", "المذكرات الصوتية",
     ];
 
     final startRecordKeywords = [
@@ -2652,55 +2888,43 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       "ابدا تسجيل", "ابدا التسجيل",
       "سجل دلوقتي", "سجل حالا", "سجل حالاً",
       "سجلي دلوقتي", "سجلي حالا", "سجلي حالاً",
-      "سجللي دلوقتي", "سجليلي دلوقتي", "سجللي حالا", "سجليلي حالا",
+      "سجللي دلوقتي", "سجليلي دلوقتي",
       "ابدأ دلوقتي", "ابدئي دلوقتي",
       "ابدأ سجل", "ابدئي سجل",
       "عايز أسجل", "عايز اسجل", "عاوز أسجل", "عاوز اسجل",
       "عايزة أسجل", "عايزة اسجل", "عاوزة أسجل", "عاوزة اسجل",
-      "شغل التسجيل", "شغلي التسجيل", "شغل المسجل", "شغلي المسجل",
-      "ابدأ التسجيل دلوقتي", "ابدئي التسجيل دلوقتي",
-      "سجل يلا", "سجلي يلا", "سجل بسرعة", "سجلي بسرعة",
+      "شغل التسجيل", "شغلي التسجيل",
+      "سجل يلا", "سجلي يلا",
     ];
 
     final stopRecordKeywords = [
-      "وقف تسجيل", "وقف التسجيل",
-      "وقفي تسجيل", "وقفي التسجيل",
-      "اوقف تسجيل", "اوقف التسجيل",
-      "أوقف تسجيل", "أوقف التسجيل",
-      "وقفت تسجيل", "وقفت التسجيل",
+      "وقف تسجيل", "وقف التسجيل", "وقفي تسجيل", "وقفي التسجيل",
+      "اوقف تسجيل", "اوقف التسجيل", "أوقف تسجيل",
       "خلاص وقف تسجيل", "خلاص وقف التسجيل",
-      "خلاص وقفي تسجيل", "خلاص وقفي التسجيل",
       "خلاص وقف", "خلاص وقفي",
       "خلاص اوقف", "خلاص أوقف",
-      "خلاص ايقاف", "خلاص إيقاف",
       "خلاص كفاية", "خلاص كفايه",
       "خلاص بلاها", "خلاص بلاش",
       "خلاص انتهي", "خلاص انتهى",
       "خلاص اقفل التسجيل", "خلاص اقفلي التسجيل",
       "خلص تسجيل", "خلص التسجيل",
       "خلصي تسجيل", "خلصي التسجيل",
-      "خلصت تسجيل", "خلصت التسجيل",
       "خلص خلاص", "خلصي خلاص",
       "بطل تسجيل", "بطل التسجيل",
       "بطلي تسجيل", "بطلي التسجيل",
-      "بطل بقي", "بطلي بقي",
       "انهي التسجيل", "انهي تسجيل",
-      "أنهي التسجيل", "أنهي تسجيل",
       "اقفل التسجيل", "اقفلي التسجيل",
       "اقفل تسجيل", "اقفلي تسجيل",
       "قفل التسجيل", "قفلي التسجيل",
       "كفاية تسجيل", "كفاية التسجيل",
       "كفايه تسجيل", "كفايه التسجيل",
       "كفاية كده", "كفايه كده",
-      "كفاية خلاص", "كفايه خلاص",
       "بس كده", "بس خلاص", "بس كفاية", "بس كفايه",
-      "كده كفاية", "كده كفايه",
       "اوقف", "أوقف", "ايقاف", "إيقاف",
       "ستوب", "stop",
       "سيب التسجيل", "سيبي التسجيل",
-      "متسجلش", "ماتسجلش", "متسجليش", "ماتسجليش",
+      "متسجلش", "ماتسجلش",
       "مش عايز اسجل", "مش عاوز اسجل",
-      "مش عايزة اسجل", "مش عاوزة اسجل",
     ];
 
     if (_hasAny(cmd, prayerKeywords)) {
@@ -2873,7 +3097,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     final strip = <String>{
       'اظبطلي', 'اضبطلي', 'اظبطيلي', 'اضبطيلي', 'اظبط', 'اضبط', 'اظبطي', 'اضبطي',
-      'ظبط', 'ضبط', 'ظبطي', 'ضبطي', 'ظبطلي', 'ضبطلي', 'ظبطيلي', 'ضبطيلي',
+      'ظبط', 'ضبط', 'ظبطي', 'ضبطي', 'ظبطلي', 'ضبطلي',
       'منبه', 'منبّه', 'المنبه',
       'فكرني', 'فكريني', 'ذكرني', 'ذكريني', 'نبهني', 'نبهيني',
       'تذكير', 'تذكيري', 'تذكيرى', 'سجل', 'سجلي', 'عندك', 'ورايا', 'ورايه',
@@ -2930,6 +3154,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         'date': formattedDate, 'task': cleanTitle, 'time': formattedTime,
         'alarm': true, 'scheduled': scheduled.toIso8601String(),
         'repeat': repeatType, 'repeatInterval': intervalType, 'customDays': customDays,
+        'sound': null,
       });
     });
     _saveData();
@@ -2952,23 +3177,15 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await _speak("تم التنفيذ $userTitle! تم تسجيل: $cleanTitle، الساعة $h12$minuteText $periodText$repeatText$intervalText.");
   }
 
-  int _getIntervalSeconds(String interval) {
-    switch (interval) {
-      case 'مرة واحدة': return 0;
-      case 'كل 10 ثواني': return 10;
-      case 'كل 20 ثانية': return 20;
-      case 'كل 30 ثانية': return 30;
-      case 'كل دقيقة': return 60;
-      case 'كل دقيقتين': return 120;
-      case 'كل 3 دقايق': return 180;
-      case 'كل 5 دقايق': return 300;
-      case 'كل 10 دقايق': return 600;
-      default: return 0;
-    }
-  }
-
-  // ✅ مع Native Alarm
-  void _scheduleContinuousAlarm(String taskTitle, DateTime scheduledDateTime, String repeat, String interval, List<String> customDays) {
+  // ✅ Native Alarm بس لو مفيش صوت مخصص
+  void _scheduleContinuousAlarm(
+    String taskTitle,
+    DateTime scheduledDateTime,
+    String repeat,
+    String interval,
+    List<String> customDays, {
+    String? soundUri,
+  }) {
     Duration difference = scheduledDateTime.difference(DateTime.now());
     if (difference.isNegative) return;
 
@@ -2978,24 +3195,34 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       repeat: repeat,
       interval: interval,
       customDays: customDays,
+      soundUri: soundUri,
     );
 
-    _scheduleNativeAlarm(taskTitle, scheduledDateTime);
+    // ✅ Native Alarm (TTS) بس لو مفيش صوت مخصص
+    final hasCustomSound = soundUri != null && soundUri != 'default' && soundUri.isNotEmpty;
+    if (!hasCustomSound) {
+      _scheduleNativeAlarm(taskTitle, scheduledDateTime);
+    }
 
     late final Timer timer;
     timer = Timer(difference, () {
       _activeTimers.remove(timer);
-      if (mounted) _startAlarmLoop(taskTitle, repeat, interval, customDays, scheduledDateTime);
+      if (mounted) _startAlarmLoop(taskTitle, repeat, interval, customDays, scheduledDateTime, soundUri);
     });
     _activeTimers.add(timer);
   }
 
-  Future<void> _scheduleNativeAlarm(String taskTitle, DateTime scheduledDateTime) async {
+  Future<void> _scheduleNativeAlarm(
+    String taskTitle,
+    DateTime scheduledDateTime, {
+    String prefix = 'حان الآن موعد: ',
+  }) async {
     try {
       await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
         'id': taskTitle.hashCode + 5000,
         'title': taskTitle,
         'timestamp': scheduledDateTime.millisecondsSinceEpoch,
+        'prefix': prefix,
       });
     } catch (_) {}
   }
@@ -3031,22 +3258,29 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays);
   }
 
-  // ✅ قناة المنبه v6
+  // ✅ قناة المنبه v6 + صوت مخصص
   Future<void> _scheduleBackgroundNotification(
     String taskTitle,
     DateTime scheduledDateTime, {
     String repeat = 'مرة واحدة',
     String interval = 'بدون تنبيه',
     List<String> customDays = const [],
+    String? soundUri,
   }) async {
+    // الصوت: المهمة → الافتراضي
+    final prefs = await SharedPreferences.getInstance();
+    final finalSound = soundUri ?? prefs.getString('default_alarm_sound');
+
     final tzTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
-    const androidDetails = AndroidNotificationDetails(
+
+    final androidDetails = AndroidNotificationDetails(
       'secretary_alarm_v6',
       'منبه السكرتير v6',
       channelDescription: 'تنبيهات المواعيد',
       importance: Importance.max,
       priority: Priority.max,
       playSound: true,
+      sound: _getNotificationSound(finalSound),
       enableVibration: true,
       category: AndroidNotificationCategory.alarm,
       autoCancel: false,
@@ -3063,55 +3297,74 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         ),
       ],
     );
-    const notificationDetails = NotificationDetails(android: androidDetails);
+
     await _notifications.zonedSchedule(
       taskTitle.hashCode + 1000,
       'تنبيه هام!',
       'حان الآن موعد: $taskTitle',
       tzTime,
-      notificationDetails,
+      NotificationDetails(android: androidDetails),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
     );
 
-    final prefs = await SharedPreferences.getInstance();
     await prefs.setString('pending_alarm', json.encode({
       'title': taskTitle,
       'scheduledMillis': scheduledDateTime.millisecondsSinceEpoch,
       'repeat': repeat,
       'interval': interval,
       'customDays': customDays,
+      'sound': finalSound,
     }));
   }
 
-  // ✅ زر خلاص يمسح الموعد لو مرة واحدة + يلغي Native
-  void _startAlarmLoop(String taskTitle, String repeat, String interval, List<String> customDays, DateTime scheduled) {
+  // ✅ TTS بس لو مفيش صوت مخصص
+  void _startAlarmLoop(
+    String taskTitle,
+    String repeat,
+    String interval,
+    List<String> customDays,
+    DateTime scheduled,
+    String? soundUri,
+  ) {
     final userTitle = _userTitle;
     WakelockPlus.enable();
     HapticFeedback.vibrate();
+
+    final hasCustomSound = soundUri != null && soundUri != 'default' && soundUri.isNotEmpty;
+
     void speakAlert() {
-      _speak("حان الآن موعد: $taskTitle");
+      if (!hasCustomSound) {
+        _speak("حان الآن موعد: $taskTitle");
+      }
       HapticFeedback.vibrate();
     }
 
-    if (interval != 'بدون تنبيه') {
+    if (interval != 'بدون تنبيه' && !hasCustomSound) {
       speakAlert();
     }
 
-    int secs = _getIntervalSeconds(interval);
+    // ✅ وقت التكرار الفعلي (حسب مدة الصوت)
+    int secs = _getEffectiveIntervalSeconds(interval, soundUri);
     Timer? loopTimer;
-    if (secs > 0 && interval != 'مرة واحدة') {
+    if (secs > 0 && interval != 'مرة واحدة' && !hasCustomSound) {
       loopTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
       _activeTimers.add(loopTimer);
     }
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1B2A4A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(children: [Icon(Icons.alarm_on, color: Color(0xFFC5A059), size: 30), SizedBox(width: 10), Text('تنبيه هام!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
-        content: Text('$userTitle، حان الآن موعد:\n"$taskTitle"', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Row(children: [
+          Icon(Icons.alarm_on, color: Color(0xFFC5A059), size: 30),
+          SizedBox(width: 10),
+          Text('تنبيه هام!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ]),
+        content: Text('$userTitle، حان الآن موعد:\n"$taskTitle"',
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
@@ -3136,29 +3389,15 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 _rescheduleRepeating(taskTitle, repeat, interval, customDays, scheduled);
               }
             },
-            child: const Text('خلاص (إيقاف)', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            child: const Text('خلاص (إيقاف)',
+                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
           )
         ],
       ),
     );
   }
 
-  Future<Map<String, String>> _calculatePrayerTimes() async {
-    try {
-      final coordinates = Coordinates(30.0444, 31.2357);
-      final date = DateComponents.from(DateTime.now());
-      final params = CalculationMethod.egyptian.getParameters();
-      params.madhab = Madhab.shafi;
-      final prayerTimes = PrayerTimes(coordinates, date, params);
-      final format = DateFormat('hh:mm a', 'ar');
-      return {'fajr': format.format(prayerTimes.fajr), 'sunrise': format.format(prayerTimes.sunrise), 'dhuhr': format.format(prayerTimes.dhuhr), 'asr': format.format(prayerTimes.asr), 'maghrib': format.format(prayerTimes.maghrib), 'isha': format.format(prayerTimes.isha)};
-    } catch (e) {
-      final format = DateFormat('hh:mm a', 'ar');
-      final now = DateTime.now();
-      return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
-    }
-  }
-    // ═══════════════════════════════════════
+  // ═══════════════════════════════════════
   // Events Reminders
   // ═══════════════════════════════════════
   Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
@@ -3168,6 +3407,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final reminderMinute = event['reminderMinute'] ?? _settings.defaultReminderMinute;
       final advanceDays = _getAdvanceDays(event['advanceReminder'] ?? 'قبلها بيوم');
       final interval = event['repeatInterval'] ?? 'مرة واحدة';
+      final sound = event['sound'] as String?;
       final now = DateTime.now();
 
       final eventThisYear = DateTime(now.year, eventDate.month, eventDate.day);
@@ -3177,12 +3417,28 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       if (reminderDateTime.isBefore(now)) return;
 
       await _scheduleEventNotification(event, reminderDateTime, interval);
+
+      // ✅ Native Alarm بس لو مفيش صوت مخصص
+      final hasCustomSound = sound != null && sound != 'default' && sound.isNotEmpty;
+      if (!hasCustomSound) {
+        await _scheduleNativeAlarm(
+          'مناسبة: ${event['title']}',
+          reminderDateTime,
+          prefix: 'قربت مناسبة: ',
+        );
+      }
+
       final diff = reminderDateTime.difference(now);
 
       late final Timer timer;
       timer = Timer(diff, () {
         _activeTimers.remove(timer);
-        if (mounted) _showEventReminder(event['title'].toString(), event['detail'].toString(), interval);
+        if (mounted) _showEventReminder(
+          event['title'].toString(),
+          event['detail'].toString(),
+          interval,
+          hasCustomSound: hasCustomSound,
+        );
       });
       _activeTimers.add(timer);
     } catch (_) {}
@@ -3193,11 +3449,17 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final eventId = event['title'].toString().hashCode + event['eventDate'].toString().hashCode;
       final tzTime = tz.TZDateTime.from(fireTime, tz.local);
 
-      const androidDetails = AndroidNotificationDetails(
+      // الصوت: المناسبة → الافتراضي
+      final prefs = await SharedPreferences.getInstance();
+      final finalSound = event['sound'] ?? prefs.getString('default_event_sound');
+
+      final androidDetails = AndroidNotificationDetails(
         'event_channel_v1', 'تنبيهات المناسبات',
         channelDescription: 'تنبيهات المناسبات السنوية',
         importance: Importance.max, priority: Priority.max,
-        playSound: true, enableVibration: true,
+        playSound: true,
+        sound: _getNotificationSound(finalSound),
+        enableVibration: true,
         category: AndroidNotificationCategory.alarm,
         autoCancel: false, ongoing: true, fullScreenIntent: true,
         visibility: NotificationVisibility.public,
@@ -3205,15 +3467,15 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
       await _notifications.zonedSchedule(
         eventId, '🎉 تذكير بمناسبة', 'قربت مناسبة: ${event['title']}',
-        tzTime, const NotificationDetails(android: androidDetails),
+        tzTime, NotificationDetails(android: androidDetails),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       );
 
-      final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pending_event_announce', json.encode({
         'title': event['title'], 'detail': event['detail'],
         'interval': interval, 'scheduledMillis': fireTime.millisecondsSinceEpoch,
+        'sound': finalSound,
       }));
     } catch (_) {}
   }
@@ -3230,7 +3492,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  Future<void> _showEventReminder(String title, String detail, String interval) async {
+  // ✅ TTS بس لو مفيش صوت مخصص
+  Future<void> _showEventReminder(String title, String detail, String interval, {bool hasCustomSound = false}) async {
     if (_eventDialogShowing) return;
     _eventDialogShowing = true;
     _eventAnnouncing = true;
@@ -3244,15 +3507,17 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     } catch (_) {}
 
     void speakAlert() {
-      _speak("تنبيه: قربت مناسبة $title. $detail");
+      if (!hasCustomSound) {
+        _speak("تنبيه: قربت مناسبة $title. $detail");
+      }
       HapticFeedback.vibrate();
     }
 
-    if (interval != 'بدون تنبيه') speakAlert();
+    if (interval != 'بدون تنبيه' && !hasCustomSound) speakAlert();
 
     _eventRepeatTimer?.cancel();
     int secs = _getIntervalSeconds(interval);
-    if (secs > 0 && interval != 'مرة واحدة') {
+    if (secs > 0 && interval != 'مرة واحدة' && !hasCustomSound) {
       _eventRepeatTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
     }
 
@@ -3268,8 +3533,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1B2A4A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(children: [Icon(Icons.celebration, color: Color(0xFFC5A059), size: 30), SizedBox(width: 10), Text('تذكير بمناسبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
-        content: Text('قربت مناسبة: $title\n$detail', style: const TextStyle(color: Colors.white, fontSize: 16)),
+        title: const Row(children: [
+          Icon(Icons.celebration, color: Color(0xFFC5A059), size: 30),
+          SizedBox(width: 10),
+          Text('تذكير بمناسبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ]),
+        content: Text('قربت مناسبة: $title\n$detail',
+            style: const TextStyle(color: Colors.white, fontSize: 16)),
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
@@ -3279,6 +3549,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               WakelockPlus.disable();
               _eventAnnouncing = false;
               _eventDialogShowing = false;
+              _cancelNativeAlarm('مناسبة: $title');
               Navigator.pop(ctx);
             },
             child: const Text('تمام', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -3288,7 +3559,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
-  // ✅ مع _cancelNativeAlarm
   void _deleteTask(int index) {
     final taskTitle = _tasks[index]['task'].toString();
     setState(() => _tasks.removeAt(index));
@@ -3351,6 +3621,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     String selectedRepeat = 'مرة واحدة';
     String selectedInterval = _settings.defaultInterval;
     List<String> selectedDays = [];
+    String? selectedSound;
     final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'أسبوعي', 'شهري', 'مخصص'];
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     showDialog(
@@ -3391,6 +3662,33 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 const Align(alignment: Alignment.centerRight, child: Text('التنبيه المستمر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(border: OutlineInputBorder()), items: intervalOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval)),
+                const Divider(),
+                Row(
+                  children: [
+                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A), size: 20),
+                    const SizedBox(width: 8),
+                    const Text('الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        selectedSound == null ? 'افتراضي' : 'مخصص',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        final result = await showDialog<String>(
+                          context: context,
+                          builder: (_) => SoundPickerDialog(currentUri: selectedSound),
+                        );
+                        if (result != null) {
+                          setStateSB(() => selectedSound = result == 'default' ? null : result);
+                        }
+                      },
+                      child: const Text('اختيار'),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -3402,10 +3700,29 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 if (taskCtrl.text.isNotEmpty) {
                   final scheduledDateTime = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, selectedTime.hour, selectedTime.minute);
                   setState(() {
-                    _tasks.add({'date': DateFormat('yyyy-MM-dd').format(_selectedDate), 'task': taskCtrl.text, 'time': selectedInterval == 'بدون تنبيه' ? 'بدون تنبيه' : selectedTime.format(context), 'alarm': selectedInterval != 'بدون تنبيه', 'scheduled': scheduledDateTime.toIso8601String(), 'repeat': selectedRepeat, 'repeatInterval': selectedInterval, 'customDays': selectedDays});
+                    _tasks.add({
+                      'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
+                      'task': taskCtrl.text,
+                      'time': selectedInterval == 'بدون تنبيه' ? 'بدون تنبيه' : selectedTime.format(context),
+                      'alarm': selectedInterval != 'بدون تنبيه',
+                      'scheduled': scheduledDateTime.toIso8601String(),
+                      'repeat': selectedRepeat,
+                      'repeatInterval': selectedInterval,
+                      'customDays': selectedDays,
+                      'sound': selectedSound,
+                    });
                   });
                   _saveData();
-                  if (selectedInterval != 'بدون تنبيه') _scheduleContinuousAlarm(taskCtrl.text, scheduledDateTime, selectedRepeat, selectedInterval, selectedDays);
+                  if (selectedInterval != 'بدون تنبيه') {
+                    _scheduleContinuousAlarm(
+                      taskCtrl.text,
+                      scheduledDateTime,
+                      selectedRepeat,
+                      selectedInterval,
+                      selectedDays,
+                      soundUri: selectedSound,
+                    );
+                  }
                   Navigator.pop(ctx);
                 }
               },
@@ -3428,6 +3745,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     String selectedRepeat = task['repeat'] ?? 'مرة واحدة';
     String selectedInterval = task['repeatInterval'] ?? _settings.defaultInterval;
     List<String> selectedDays = List<String>.from(task['customDays'] ?? []);
+    String? selectedSound = task['sound'];
     final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'أسبوعي', 'شهري', 'مخصص'];
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     showDialog(
@@ -3468,6 +3786,33 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 const Align(alignment: Alignment.centerRight, child: Text('التنبيه المستمر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(border: OutlineInputBorder()), items: intervalOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval)),
+                const Divider(),
+                Row(
+                  children: [
+                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A), size: 20),
+                    const SizedBox(width: 8),
+                    const Text('الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        selectedSound == null ? 'افتراضي' : 'مخصص',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        final result = await showDialog<String>(
+                          context: context,
+                          builder: (_) => SoundPickerDialog(currentUri: selectedSound),
+                        );
+                        if (result != null) {
+                          setStateSB(() => selectedSound = result == 'default' ? null : result);
+                        }
+                      },
+                      child: const Text('اختيار'),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -3478,11 +3823,31 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               onPressed: () {
                 if (taskCtrl.text.isNotEmpty) {
                   final scheduledDateTime = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, selectedTime.hour, selectedTime.minute);
+                  _cancelNativeAlarm(task['task'].toString());
                   setState(() {
-                    _tasks[index] = {'date': task['date'], 'task': taskCtrl.text, 'time': selectedInterval == 'بدون تنبيه' ? 'بدون تنبيه' : selectedTime.format(context), 'alarm': selectedInterval != 'بدون تنبيه', 'scheduled': scheduledDateTime.toIso8601String(), 'repeat': selectedRepeat, 'repeatInterval': selectedInterval, 'customDays': selectedDays};
+                    _tasks[index] = {
+                      'date': task['date'],
+                      'task': taskCtrl.text,
+                      'time': selectedInterval == 'بدون تنبيه' ? 'بدون تنبيه' : selectedTime.format(context),
+                      'alarm': selectedInterval != 'بدون تنبيه',
+                      'scheduled': scheduledDateTime.toIso8601String(),
+                      'repeat': selectedRepeat,
+                      'repeatInterval': selectedInterval,
+                      'customDays': selectedDays,
+                      'sound': selectedSound,
+                    };
                   });
                   _saveData();
-                  if (selectedInterval != 'بدون تنبيه') _scheduleContinuousAlarm(taskCtrl.text, scheduledDateTime, selectedRepeat, selectedInterval, selectedDays);
+                  if (selectedInterval != 'بدون تنبيه') {
+                    _scheduleContinuousAlarm(
+                      taskCtrl.text,
+                      scheduledDateTime,
+                      selectedRepeat,
+                      selectedInterval,
+                      selectedDays,
+                      soundUri: selectedSound,
+                    );
+                  }
                   Navigator.pop(ctx);
                 }
               },
@@ -3501,6 +3866,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     String selectedInterval = 'مرة واحدة';
     DateTime selectedEventDate = DateTime.now();
     TimeOfDay reminderTime = TimeOfDay(hour: _settings.defaultReminderHour, minute: _settings.defaultReminderMinute);
+    String? selectedSound;
     final List<String> reminderOptions = ['في نفس اليوم', 'قبلها بيوم', 'قبلها بـ 3 أيام', 'قبلها بأسبوع', 'قبلها بـ 10 أيام', 'قبلها بشهر'];
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     showDialog(
@@ -3529,6 +3895,33 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 DropdownButtonFormField<String>(value: selectedAdvanceReminder, decoration: const InputDecoration(labelText: 'التذكير المسبق', border: OutlineInputBorder()), items: reminderOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedAdvanceReminder = val ?? selectedAdvanceReminder)),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(labelText: 'التنبيه المستمر', border: OutlineInputBorder()), items: intervalOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? 'مرة واحدة')),
+                const Divider(),
+                Row(
+                  children: [
+                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A), size: 20),
+                    const SizedBox(width: 8),
+                    const Text('الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        selectedSound == null ? 'افتراضي' : 'مخصص',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        final result = await showDialog<String>(
+                          context: context,
+                          builder: (_) => SoundPickerDialog(currentUri: selectedSound),
+                        );
+                        if (result != null) {
+                          setStateSB(() => selectedSound = result == 'default' ? null : result);
+                        }
+                      },
+                      child: const Text('اختيار'),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -3546,6 +3939,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                     'reminderHour': reminderTime.hour,
                     'reminderMinute': reminderTime.minute,
                     'repeatInterval': selectedInterval,
+                    'sound': selectedSound,
                   };
                   setState(() => _specialEvents.add(newEvent));
                   _saveData();
@@ -3575,6 +3969,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       hour: event['reminderHour'] ?? _settings.defaultReminderHour,
       minute: event['reminderMinute'] ?? _settings.defaultReminderMinute,
     );
+    String? selectedSound = event['sound'];
     final List<String> reminderOptions = ['في نفس اليوم', 'قبلها بيوم', 'قبلها بـ 3 أيام', 'قبلها بأسبوع', 'قبلها بـ 10 أيام', 'قبلها بشهر'];
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     showDialog(
@@ -3603,6 +3998,33 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 DropdownButtonFormField<String>(value: selectedAdvanceReminder, decoration: const InputDecoration(labelText: 'التذكير المسبق', border: OutlineInputBorder()), items: reminderOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedAdvanceReminder = val ?? selectedAdvanceReminder)),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(labelText: 'التنبيه المستمر', border: OutlineInputBorder()), items: intervalOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? 'مرة واحدة')),
+                const Divider(),
+                Row(
+                  children: [
+                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A), size: 20),
+                    const SizedBox(width: 8),
+                    const Text('الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        selectedSound == null ? 'افتراضي' : 'مخصص',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        final result = await showDialog<String>(
+                          context: context,
+                          builder: (_) => SoundPickerDialog(currentUri: selectedSound),
+                        );
+                        if (result != null) {
+                          setStateSB(() => selectedSound = result == 'default' ? null : result);
+                        }
+                      },
+                      child: const Text('اختيار'),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -3612,6 +4034,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
               onPressed: () {
                 if (titleCtrl.text.isNotEmpty) {
+                  _cancelNativeAlarm('مناسبة: ${event['title']}');
                   final updatedEvent = {
                     'title': titleCtrl.text,
                     'detail': detailCtrl.text.isEmpty ? 'مناسبة سنوية' : detailCtrl.text,
@@ -3620,6 +4043,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                     'reminderHour': reminderTime.hour,
                     'reminderMinute': reminderTime.minute,
                     'repeatInterval': selectedInterval,
+                    'sound': selectedSound,
                   };
                   setState(() => _specialEvents[index] = updatedEvent);
                   _saveData();
@@ -3660,6 +4084,22 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         Expanded(child: TextField(controller: diaryCtrl, maxLines: null, expands: true, textAlignVertical: TextAlignVertical.top, style: const TextStyle(fontSize: 16, height: 1.6), decoration: const InputDecoration(hintText: 'اكتب يومياتك هنا...', border: InputBorder.none))),
       ])),
     )));
+  }
+
+  Future<Map<String, String>> _calculatePrayerTimes() async {
+    try {
+      final coordinates = Coordinates(30.0444, 31.2357);
+      final date = DateComponents.from(DateTime.now());
+      final params = CalculationMethod.egyptian.getParameters();
+      params.madhab = Madhab.shafi;
+      final prayerTimes = PrayerTimes(coordinates, date, params);
+      final format = DateFormat('hh:mm a', 'ar');
+      return {'fajr': format.format(prayerTimes.fajr), 'sunrise': format.format(prayerTimes.sunrise), 'dhuhr': format.format(prayerTimes.dhuhr), 'asr': format.format(prayerTimes.asr), 'maghrib': format.format(prayerTimes.maghrib), 'isha': format.format(prayerTimes.isha)};
+    } catch (e) {
+      final format = DateFormat('hh:mm a', 'ar');
+      final now = DateTime.now();
+      return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
+    }
   }
 
   @override
@@ -3887,7 +4327,15 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               isThreeLine: true,
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _editSpecialEventDialog(i)),
-                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () { setState(() => _specialEvents.removeAt(i)); _saveData(); }),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  onPressed: () {
+                    final title = e['title'].toString();
+                    setState(() => _specialEvents.removeAt(i));
+                    _saveData();
+                    _cancelNativeAlarm('مناسبة: $title');
+                  },
+                ),
               ]),
             ),
           );
