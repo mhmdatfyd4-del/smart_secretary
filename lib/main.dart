@@ -62,7 +62,7 @@ List<String> _getNamesForGender(String voiceGender) {
   return voiceGender == 'ذكر' ? _maleNamesMap.keys.toList() : _femaleNamesMap.keys.toList();
 }
 
-// ✅ دالة مساعدة: تحديد نوع الصوت (raw أو URI)
+// ✅ دالة صوت الإشعار (تدعم raw:// والـ uri)
 AndroidNotificationSound? _getNotificationSound(String? soundUri) {
   if (soundUri == null || soundUri.isEmpty || soundUri == 'default') {
     return null;
@@ -79,11 +79,6 @@ void main() async {
   await initializeDateFormatting('ar');
   tz.initializeTimeZones();
   await _initNotifications();
-
-  try {
-    await _appTts.setLanguage("ar-EG");
-    await Future.delayed(const Duration(milliseconds: 200));
-  } catch (_) {}
 
   final prefs = await SharedPreferences.getInstance();
   bool isFirstTime = prefs.getBool('is_first_time') ?? true;
@@ -207,7 +202,6 @@ class AppSettings {
     this.defaultInterval = 'كل 10 ثواني',
   });
 
-  // ✅ سرعة عادية (بدل البطيئة)
   double get speechRate {
     switch (voiceLevel) {
       case 'منخفض': return 0.75;
@@ -222,148 +216,6 @@ class AppSettings {
       case 'متوسط': return 0.7;
       default: return 1.0;
     }
-  }
-}
-
-// ═══════════════════════════════════════
-// 🎵 SoundPickerDialog
-// ═══════════════════════════════════════
-class SoundPickerDialog extends StatefulWidget {
-  final String? currentUri;
-
-  const SoundPickerDialog({super.key, this.currentUri});
-
-  @override
-  State<SoundPickerDialog> createState() => _SoundPickerDialogState();
-}
-
-class _SoundPickerDialogState extends State<SoundPickerDialog> {
-  List<Map<String, String>> _sounds = [];
-  String? _selected;
-  bool _isLoading = true;
-  String? _previewingUri;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = widget.currentUri ?? 'default';
-    _loadSounds();
-  }
-
-  Future<void> _loadSounds() async {
-    try {
-      final result = await _soundChannel.invokeMethod('getAvailableSounds');
-      if (result is List) {
-        _sounds = result.map((e) => Map<String, String>.from(e as Map)).toList();
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _isLoading = false);
-  }
-
-  Future<void> _previewSound(String uri) async {
-    if (uri == 'default') return;
-    try {
-      await _soundChannel.invokeMethod('stopPreview');
-      await _soundChannel.invokeMethod('previewSound', {'uri': uri});
-      if (mounted) setState(() => _previewingUri = uri);
-      // نرجع الحالة عادي بعد 3 ثواني
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted && _previewingUri == uri) {
-          setState(() => _previewingUri = null);
-        }
-      });
-    } catch (_) {}
-  }
-
-  @override
-  void dispose() {
-    try {
-      _soundChannel.invokeMethod('stopPreview');
-    } catch (_) {}
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      title: const Text('🎵 اختر صوت المنبه', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-      content: SizedBox(
-        width: double.maxFinite,
-        height: 450,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                shrinkWrap: true,
-                children: [
-                  _soundTile(
-                    title: 'الافتراضي (شغلنا)',
-                    subtitle: 'صوت النظام + السكرتيرة تنطق',
-                    uri: 'default',
-                  ),
-                  const Divider(thickness: 2),
-                  ..._sounds.map((s) => _soundTile(
-                        title: s['title'] ?? '',
-                        subtitle: '',
-                        uri: s['uri'] ?? '',
-                      )),
-                ],
-              ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('إلغاء'),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
-          onPressed: () {
-            Navigator.pop(context, _selected);
-          },
-          child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
-        ),
-      ],
-    );
-  }
-
-  Widget _soundTile({required String title, required String subtitle, required String uri}) {
-    final isSelected = _selected == uri;
-    final isPreviewing = _previewingUri == uri;
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFFC5A059).withOpacity(0.15) : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isSelected ? const Color(0xFFC5A059) : Colors.transparent,
-          width: 2,
-        ),
-      ),
-      child: ListTile(
-        dense: true,
-        leading: Radio<String>(
-          value: uri,
-          groupValue: _selected,
-          activeColor: const Color(0xFF1B2A4A),
-          onChanged: (val) => setState(() => _selected = val),
-        ),
-        title: Text(title,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            )),
-        subtitle: subtitle.isEmpty ? null : Text(subtitle, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-        trailing: uri == 'default'
-            ? null
-            : IconButton(
-                icon: Icon(
-                  isPreviewing ? Icons.hourglass_top : Icons.volume_up,
-                  color: const Color(0xFF1B2A4A),
-                ),
-                onPressed: () => _previewSound(uri),
-              ),
-      ),
-    );
   }
 }
 // ═══════════════════════════════════════
@@ -424,9 +276,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String? _maleVoiceName;
   String? _femaleVoiceName;
+  bool _isPickingVoice = false;
+
+  // 🆕 أصوات منبه/مناسبة
   String? _defaultAlarmSound;
   String? _defaultEventSound;
-  bool _isPickingVoice = false;
 
   @override
   void initState() {
@@ -456,21 +310,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _origDefaultInterval = _defaultInterval;
     _origSecretaryName = _secretaryName;
 
-    _loadSavedData();
+    _loadSavedVoices();
+    _loadSavedSounds();
   }
 
-  Future<void> _loadSavedData() async {
+  Future<void> _loadSavedVoices() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
       _maleVoiceName = prefs.getString('male_voice_name');
       _femaleVoiceName = prefs.getString('female_voice_name');
+    });
+  }
+
+  // 🆕 تحميل الأصوات المحفوظة
+  Future<void> _loadSavedSounds() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
       _defaultAlarmSound = prefs.getString('default_alarm_sound');
       _defaultEventSound = prefs.getString('default_event_sound');
     });
   }
 
-  // ✅ بدون stop
+  // 🆕 اختيار صوت المنبه/المناسبة الافتراضي
+  Future<void> _pickDefaultSound(String type) async {
+    final current = type == 'alarm' ? _defaultAlarmSound : _defaultEventSound;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => SoundPickerDialog(currentUri: current),
+    );
+
+    if (result != null) {
+      final prefs = await SharedPreferences.getInstance();
+      final key = type == 'alarm' ? 'default_alarm_sound' : 'default_event_sound';
+      if (result == 'default') {
+        await prefs.remove(key);
+      } else {
+        await prefs.setString(key, result);
+      }
+      if (!mounted) return;
+      setState(() {
+        if (type == 'alarm') _defaultAlarmSound = result == 'default' ? null : result;
+        else _defaultEventSound = result == 'default' ? null : result;
+      });
+    }
+  }
+
   Future<void> _pickVoiceFor(String gender) async {
     if (_isPickingVoice) return;
     setState(() => _isPickingVoice = true);
@@ -519,39 +406,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           else _femaleVoiceName = result['name'];
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ تم حفظ صوت $gender: ${result['name']}')),
+          SnackBar(content: Text('✅ تم حفظ صوت $gender — فعّال بعد إعادة فتح التطبيق')),
         );
       }
     } finally {
       if (mounted) setState(() => _isPickingVoice = false);
-    }
-  }
-
-  // ✅ اختيار صوت المنبه الافتراضي
-  Future<void> _pickDefaultSound(String type) async {
-    final prefs = await SharedPreferences.getInstance();
-    final current = type == 'alarm' ? _defaultAlarmSound : _defaultEventSound;
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (_) => SoundPickerDialog(currentUri: current),
-    );
-
-    if (result != null) {
-      final key = type == 'alarm' ? 'default_alarm_sound' : 'default_event_sound';
-      if (result == 'default') {
-        await prefs.remove(key);
-      } else {
-        await prefs.setString(key, result);
-      }
-      if (!mounted) return;
-      setState(() {
-        if (type == 'alarm') {
-          _defaultAlarmSound = result == 'default' ? null : result;
-        } else {
-          _defaultEventSound = result == 'default' ? null : result;
-        }
-      });
     }
   }
 
@@ -717,6 +576,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
+
+          // 🆕 صوت المنبه الافتراضي
+          const SizedBox(height: 12),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: InkWell(
+              onTap: () => _pickDefaultSound('alarm'),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.notifications_active, color: Color(0xFF1B2A4A), size: 26),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('🎵 صوت المنبه الافتراضي',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          const SizedBox(height: 4),
+                          Text(
+                            _defaultAlarmSound == null
+                                ? 'الافتراضي (شغلنا — السكرتيرة تنطق)'
+                                : 'مخصص — بدون صوت سكرتيرة',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _defaultAlarmSound != null ? const Color(0xFFC5A059) : Colors.grey,
+                              fontWeight: _defaultAlarmSound != null ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 🆕 صوت المناسبات الافتراضي
+          const SizedBox(height: 12),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: InkWell(
+              onTap: () => _pickDefaultSound('event'),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.celebration, color: Color(0xFF1B2A4A), size: 26),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('🎵 صوت المناسبات الافتراضي',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          const SizedBox(height: 4),
+                          Text(
+                            _defaultEventSound == null
+                                ? 'الافتراضي (شغلنا — السكرتيرة تنطق)'
+                                : 'مخصص — بدون صوت سكرتيرة',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _defaultEventSound != null ? const Color(0xFFC5A059) : Colors.grey,
+                              fontWeight: _defaultEventSound != null ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
           const SizedBox(height: 12),
           Card(
             elevation: 2,
@@ -953,82 +895,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (v) => setState(() => _shakeInBackground = v),
             ),
           ),
-          const SizedBox(height: 12),
-          // 🆕 صوت المنبه الافتراضي
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: InkWell(
-              onTap: () => _pickDefaultSound('alarm'),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A), size: 26),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('🎵 صوت المنبه الافتراضي',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          const SizedBox(height: 4),
-                          Text(
-                            _defaultAlarmSound == null ? 'الافتراضي (شغلنا)' : _defaultAlarmSound!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _defaultAlarmSound != null ? const Color(0xFFC5A059) : Colors.grey,
-                              fontWeight: _defaultAlarmSound != null ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          // 🆕 صوت المناسبات الافتراضي
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: InkWell(
-              onTap: () => _pickDefaultSound('event'),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.celebration, color: Color(0xFF1B2A4A), size: 26),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('🎵 صوت المناسبات الافتراضي',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          const SizedBox(height: 4),
-                          Text(
-                            _defaultEventSound == null ? 'الافتراضي (شغلنا)' : _defaultEventSound!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _defaultEventSound != null ? const Color(0xFFC5A059) : Colors.grey,
-                              fontWeight: _defaultEventSound != null ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
-                  ],
-                ),
-              ),
-            ),
-          ),
           const SizedBox(height: 30),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
@@ -1048,10 +914,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
-
-// ═══════════════════════════════════════
-// SecretaryApp
-// ═══════════════════════════════════════
 class SecretaryApp extends StatelessWidget {
   final bool isFirstTime;
   final String? savedName;
@@ -1091,9 +953,6 @@ class SecretaryApp extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════
-// TermsAndPermissionsScreen
-// ═══════════════════════════════════════
 class TermsAndPermissionsScreen extends StatefulWidget {
   const TermsAndPermissionsScreen({super.key});
   @override
@@ -1131,11 +990,7 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
     if (!micGranted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ محتاج إذن المايكروفون'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
+          const SnackBar(content: Text('❌ محتاج إذن المايكروفون'), backgroundColor: Colors.red),
         );
       }
       return;
@@ -1144,11 +999,7 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
     if (!batteryGranted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ محتاج تسمح للتطبيق يشتغل في الخلفية'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 4),
-          ),
+          const SnackBar(content: Text('❌ محتاج تسمح للتطبيق يشتغل في الخلفية'), backgroundColor: Colors.red),
         );
       }
       return;
@@ -1181,15 +1032,12 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
             Text('إشعارات ملء الشاشة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           ]),
           content: const Text(
-            'عشان المنبه يشتغل والتابلت مقفول، محتاج تفعّل "إشعارات ملء الشاشة" للتطبيق.\n\n'
-            'اضغط "الإعدادات" عشان تفتح الصفحة، وبعدين فعّل الخيار.',
+            'عشان المنبه يشتغل والتابلت مقفول، محتاج تفعّل "إشعارات ملء الشاشة".\n\n'
+            'اضغط "الإعدادات" وبعدين فعّل الخيار.',
             style: TextStyle(fontSize: 14, height: 1.6),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('إلغاء'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
               onPressed: () => Navigator.pop(ctx, true),
@@ -1220,7 +1068,9 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
           children: [
             const Icon(Icons.verified_user_sharp, size: 80, color: Color(0xFF1B2A4A)),
             const SizedBox(height: 15),
-            const Text('مرحباً بك في نظام السكرتير الشخصي الذكي', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+            const Text('مرحباً بك في نظام السكرتير الشخصي الذكي',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
             const SizedBox(height: 15),
             Expanded(
               child: Container(
@@ -1248,7 +1098,8 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
                       SizedBox(height: 5),
                       Text('• إشعارات ملء الشاشة: لظهور التنبيهات والتابلت مقفول.', style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 15),
-                      Text('جميع البيانات محفوظة بأمان محلياً على جهازك.', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey)),
+                      Text('جميع البيانات محفوظة بأمان محلياً على جهازك.',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey)),
                     ],
                   ),
                 ),
@@ -1279,9 +1130,7 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
     );
   }
 }
-// ═══════════════════════════════════════
-// SetupSecretaryScreen
-// ═══════════════════════════════════════
+
 class SetupSecretaryScreen extends StatefulWidget {
   const SetupSecretaryScreen({super.key});
   @override
@@ -1314,7 +1163,6 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
     setState(() => _savedVoiceName = prefs.getString(key));
   }
 
-  // ✅ بدون stop
   Future<void> _pickVoice() async {
     if (_isPickingVoice) return;
     setState(() => _isPickingVoice = true);
@@ -1360,7 +1208,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
         if (!mounted) return;
         setState(() => _savedVoiceName = result['name']);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ تم حفظ الصوت: ${result['name']}')),
+          SnackBar(content: Text('✅ تم حفظ الصوت — فعّال بعد إعادة فتح التطبيق')),
         );
       }
     } finally {
@@ -1581,7 +1429,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
 }
 
 // ═══════════════════════════════════════
-// VoicePickerDialog — بدون stop + بدون awaitSpeakCompletion
+// VoicePickerDialog — بدون أي setVoice نهائياً
 // ═══════════════════════════════════════
 class VoicePickerDialog extends StatefulWidget {
   final String gender;
@@ -1604,8 +1452,6 @@ class VoicePickerDialog extends StatefulWidget {
 class _VoicePickerDialogState extends State<VoicePickerDialog> {
   String? _selected;
   String _selectedLocale = 'ar-EG';
-  bool _isTesting = false;
-  bool _isClosing = false;
 
   @override
   void initState() {
@@ -1614,25 +1460,8 @@ class _VoicePickerDialogState extends State<VoicePickerDialog> {
     _selectedLocale = widget.initialLocale;
   }
 
-  Future<void> _testVoice(String name, String locale) async {
-    if (_isTesting || _isClosing) return;
-    setState(() => _isTesting = true);
-    try {
-      await _appTts.setVoice({'name': name, 'locale': locale});
-      await _appTts.setSpeechRate(1.0);
-      await _appTts.setVolume(1.0);
-      await _appTts.speak(widget.gender == 'ذكر'
-          ? "مرحباً، أنا سكرتيرك الشخصي"
-          : "مرحباً، أنا سكرتيرتك الشخصية");
-    } catch (_) {}
-    finally {
-      if (mounted) setState(() => _isTesting = false);
-    }
-  }
-
   void _confirm() {
-    if (_selected == null || _isClosing) return;
-    _isClosing = true;
+    if (_selected == null) return;
     Navigator.of(context).pop({
       'name': _selected,
       'locale': _selectedLocale,
@@ -1640,8 +1469,6 @@ class _VoicePickerDialogState extends State<VoicePickerDialog> {
   }
 
   void _cancel() {
-    if (_isClosing) return;
-    _isClosing = true;
     Navigator.of(context).pop();
   }
 
@@ -1651,104 +1478,207 @@ class _VoicePickerDialogState extends State<VoicePickerDialog> {
         ? '🎧 اختر صوت السكرتير (راجل)'
         : '🎧 اختر صوت السكرتيرة (ست)';
 
-    return PopScope(
-      canPop: false,
-      onPopInvoked: (didPop) {
-        if (!didPop) _cancel();
-      },
-      child: AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: widget.voices.isEmpty
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.warning_amber, color: Colors.orange, size: 50),
-                    SizedBox(height: 10),
-                    Text('مفيش أصوات عربية على الجهاز',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    SizedBox(height: 8),
-                    Text(
-                      'من فضلك نزّل حزمة اللغة العربية من إعدادات Google TTS',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                )
-              : ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: widget.voices.length,
-                  itemBuilder: (ctx, i) {
-                    final v = widget.voices[i];
-                    final name = v['name'] ?? '';
-                    final locale = v['locale'] ?? '';
-                    final isSelected = _selected == name;
-                    return Container(
-                      margin: const EdgeInsets.symmetric(vertical: 3),
-                      decoration: BoxDecoration(
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: widget.voices.isEmpty
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.warning_amber, color: Colors.orange, size: 50),
+                  SizedBox(height: 10),
+                  Text('مفيش أصوات عربية على الجهاز',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  Text(
+                    'من فضلك نزّل حزمة اللغة العربية من إعدادات Google TTS',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                itemCount: widget.voices.length,
+                itemBuilder: (ctx, i) {
+                  final v = widget.voices[i];
+                  final name = v['name'] ?? '';
+                  final locale = v['locale'] ?? '';
+                  final isSelected = _selected == name;
+                  return Container(
+                    margin: const EdgeInsets.symmetric(vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? const Color(0xFFC5A059).withOpacity(0.15)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
                         color: isSelected
-                            ? const Color(0xFFC5A059).withOpacity(0.15)
-                            : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isSelected
-                              ? const Color(0xFFC5A059)
-                              : Colors.transparent,
-                          width: 2,
-                        ),
+                            ? const Color(0xFFC5A059)
+                            : Colors.transparent,
+                        width: 2,
                       ),
-                      child: ListTile(
-                        dense: true,
-                        leading: Radio<String>(
-                          value: name,
-                          groupValue: _selected,
-                          activeColor: const Color(0xFF1B2A4A),
-                          onChanged: _isClosing ? null : (val) {
-                            setState(() {
-                              _selected = val;
-                              _selectedLocale = locale;
-                            });
-                          },
-                        ),
-                        title: Text(name,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            )),
-                        subtitle: Text('اللغة: $locale',
-                            style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                        trailing: IconButton(
-                          icon: Icon(
-                            _isTesting ? Icons.hourglass_top : Icons.volume_up,
-                            color: const Color(0xFF1B2A4A),
-                          ),
-                          onPressed: (_isTesting || _isClosing) ? null : () => _testVoice(name, locale),
-                        ),
+                    ),
+                    child: ListTile(
+                      dense: true,
+                      leading: Radio<String>(
+                        value: name,
+                        groupValue: _selected,
+                        activeColor: const Color(0xFF1B2A4A),
+                        onChanged: (val) {
+                          setState(() {
+                            _selected = val;
+                            _selectedLocale = locale;
+                          });
+                        },
                       ),
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _isClosing ? null : _cancel,
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
-            onPressed: (_selected == null || _isClosing) ? null : _confirm,
-            child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+                      title: Text(name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          )),
+                      subtitle: Text('اللغة: $locale',
+                          style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                    ),
+                  );
+                },
+              ),
       ),
+      actions: [
+        TextButton(
+          onPressed: _cancel,
+          child: const Text('إلغاء'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+          onPressed: _selected == null ? null : _confirm,
+          child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
+        ),
+      ],
     );
   }
 }
 
 // ═══════════════════════════════════════
-// MainDashboard — بداية
+// SoundPickerDialog
+// ═══════════════════════════════════════
+class SoundPickerDialog extends StatefulWidget {
+  final String? currentUri;
+
+  const SoundPickerDialog({super.key, this.currentUri});
+
+  @override
+  State<SoundPickerDialog> createState() => _SoundPickerDialogState();
+}
+
+class _SoundPickerDialogState extends State<SoundPickerDialog> {
+  List<Map<String, String>> _sounds = [];
+  String? _selected;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.currentUri ?? 'default';
+    _loadSounds();
+  }
+
+  Future<void> _loadSounds() async {
+    try {
+      final result = await _soundChannel.invokeMethod('getAvailableSounds');
+      if (result is List) {
+        _sounds = result.map((e) => Map<String, String>.from(e as Map)).toList();
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _previewSound(String uri) async {
+    if (uri == 'default') return;
+    try {
+      await _soundChannel.invokeMethod('previewSound', {'uri': uri});
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    try {
+      _soundChannel.invokeMethod('stopPreview');
+    } catch (_) {}
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      title: const Text('🎵 اختر صوت المنبه', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 450,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                shrinkWrap: true,
+                children: [
+                  _soundTile(title: 'الافتراضي (شغلنا — السكرتيرة تنطق)', uri: 'default'),
+                  const Divider(),
+                  ..._sounds.map((s) => _soundTile(
+                        title: s['title'] ?? '',
+                        uri: s['uri'] ?? '',
+                      )),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إلغاء'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+          onPressed: () => Navigator.pop(context, _selected),
+          child: const Text('تأكيد', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    );
+  }
+
+  Widget _soundTile({required String title, required String uri}) {
+    final isSelected = _selected == uri;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      decoration: BoxDecoration(
+        color: isSelected ? const Color(0xFFC5A059).withOpacity(0.15) : null,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isSelected ? const Color(0xFFC5A059) : Colors.transparent,
+          width: 2,
+        ),
+      ),
+      child: ListTile(
+        dense: true,
+        leading: Radio<String>(
+          value: uri,
+          groupValue: _selected,
+          activeColor: const Color(0xFF1B2A4A),
+          onChanged: (val) => setState(() => _selected = val),
+        ),
+        title: Text(title, style: const TextStyle(fontSize: 12)),
+        trailing: uri == 'default'
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.volume_up, color: Color(0xFF1B2A4A)),
+                onPressed: () => _previewSound(uri),
+              ),
+      ),
+    );
+  }
+}
+// ═══════════════════════════════════════
+// MainDashboard
 // ═══════════════════════════════════════
 class MainDashboard extends StatefulWidget {
   final String secretaryName;
@@ -1929,8 +1859,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final title = data['title'] as String? ?? '';
       final detail = data['detail'] as String? ?? '';
       final interval = data['interval'] as String? ?? 'مرة واحدة';
-      final sound = data['sound'] as String?;
-      final hasCustomSound = sound != null && sound != 'default' && sound.isNotEmpty;
+      final hasCustomSound = data['hasCustomSound'] as bool? ?? false;
 
       if (title.isNotEmpty && mounted) {
         _showEventReminder(title, detail, interval, hasCustomSound: hasCustomSound);
@@ -1949,7 +1878,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ قناة الأذان v3
   Future<void> _scheduleAdhan30Days() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -2098,7 +2026,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           if (prayerStr == currentTime && !_adhanAlerted) {
             _adhanAlerted = true;
 
-            // ✅ نلغي الإشعار فوراً (عشان ما يجيش mp3 مع TTS)
+            // ✅ نلغي الإشعار (عشان ما يجيش mp3 مع TTS)
             final key = _prayerKey(entry.key);
             if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
               await _notifications.cancel((dayOffset * 10) + key.hashCode);
@@ -2124,8 +2052,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           final dt = DateTime.tryParse(t['scheduled'].toString());
           if (dt != null && dt.isAfter(DateTime.now())) {
             _scheduleContinuousAlarm(
-              t['task'].toString(),
-              dt,
+              t['task'].toString(), dt,
               t['repeat'] ?? 'مرة واحدة',
               t['repeatInterval'] ?? 'كل 10 ثواني',
               List<String>.from(t['customDays'] ?? []),
@@ -2383,7 +2310,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _speech.cancel();
     super.dispose();
   }
-    Future<void> _configureVoice({bool skipGreeting = false}) async {
+
+  Future<void> _configureVoice({bool skipGreeting = false}) async {
     try {
       await _tts.setLanguage("ar-EG");
       await Future.delayed(const Duration(milliseconds: 150));
@@ -2442,7 +2370,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ بدون stop
   Future<void> _openVoicePicker() async {
     if (_isListening || _isRecording) return;
 
@@ -2469,19 +2396,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     if (result != null) {
       await prefs.setString(key, result['name']!);
       await prefs.setString(localeKey, result['locale']!);
-
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          _appTts.setVoice({
-            'name': result['name']!,
-            'locale': result['locale']!,
-          });
-        }
-      });
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ تم حفظ الصوت: ${result['name']}')),
+          SnackBar(content: Text('✅ تم حفظ الصوت — فعّال بعد إعادة فتح التطبيق')),
         );
       }
     }
@@ -2546,6 +2463,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speak("الحمد لله بخير، دايماً في خدمتك $userTitle 💛");
       return true;
     }
+    if (_hasAny(cmd, ['عامل ايه في الدنيا', 'اخبار الدنيا', 'الدنيا ايه'])) {
+      await _speak("الحمد لله، الدنيا تمام. وبيك $userTitle أكثر 💛");
+      return true;
+    }
     if (_hasAny(cmd, ['شكرا', 'شكراً', 'متشكر', 'متشكرة', 'مشكور', 'مشكورة', 'ربنا يخليك', 'ربنا يخليكي', 'ميرسي', 'ميرسى', 'ثانكس'])) {
       await _speak("العفو $userTitle، ده واجبي 🙏");
       return true;
@@ -2574,7 +2495,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speak("ألف سلامة عليك $userTitle، $_takeCareWord بالك من نفسك 💚");
       return true;
     }
-    if (_hasAny(cmd, ['مبسوط', 'مبسوطة', 'فرحان', 'فرحانة', 'سعيد', 'سعيدة'])) {
+    if (_hasAny(cmd, ['مبسوط', 'مبسوطة', 'فرحان', 'فرحانة', 'سعيد', 'سعيدة', 'الحمد لله مبسوط'])) {
       await _speak("وأنا كمان $_happyWord ليك $userTitle 😊");
       return true;
     }
@@ -2590,6 +2511,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speak("وعليكم السلام ورحمة الله وبركاته $userTitle 🌟");
       return true;
     }
+    if (_hasAny(cmd, ['أشوفك بعدين', 'اشوفك بعدين', 'يلا باي', 'في رعاية الله'])) {
+      await _speak("في رعاية الله $userTitle، أنا هنا لو احتجتني 🌟");
+      return true;
+    }
     if (_hasAny(cmd, ['يلا', 'يالا', 'بسرعة', 'بسرعه', 'حالا', 'حالاً', 'دلوقتي'])) {
       await _speak("حاضر $userTitle، أنا في الخدمة 🏃");
       return true;
@@ -2598,7 +2523,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speak("أيوة $userTitle، أنا $_listenWord وأنا في الخدمة 👂");
       return true;
     }
-    if (_hasAny(cmd, ['يلا نبدأ', 'نبدأ', 'هيا نبدأ', 'هيا بنا'])) {
+    if (_hasAny(cmd, ['يلا نبدأ', 'نبدأ', 'هيا نبدأ', 'هيا بنا', 'يلا نشوف'])) {
       await _speak("تمام $userTitle، أنا $secTitle الشخصي بتاعك، قولي عايز إيه وأنا أنفذ");
       return true;
     }
@@ -2614,8 +2539,56 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speak("اتفضل $userTitle، قوللي وأنا أنفذ");
       return true;
     }
-    if (_hasAny(cmd, ['ربنا يكرمك', 'ربنا يسعدك', 'ربنا يحفظك', 'ربنا يوفقك'])) {
+    if (_hasAny(cmd, ['ربنا يكرمك', 'ربنا يسعدك', 'ربنا يحفظك', 'ربنا يوفقك', 'ربنا يخليك ليا'])) {
       await _speak("وربنا يكرمك $userTitle، ده من فضل ربنا 💛");
+      return true;
+    }
+    if (_hasAny(cmd, ['زهقان', 'زهقانة', 'مليت', 'حاسس بالوحدة'])) {
+      await _speak("ما تزعلش $userTitle، أنا معاك. قولي نحجز موعد أو نلعب لعبة؟");
+      return true;
+    }
+    if (_hasAny(cmd, ['جعان', 'جعانة', 'عطشان', 'عطشانة', 'عايز اكل', 'عايزة اكل'])) {
+      await _speak("خد بالك من نفسك $userTitle، متسيبش نفسك من غير أكل 💚");
+      return true;
+    }
+    if (_hasAny(cmd, ['نايم', 'نايمة', 'صاحي', 'صاحية', 'قايم من النوم'])) {
+      if (cmd.contains('صاحي') || cmd.contains('صاحية') || cmd.contains('قايم')) {
+        await _speak("صباح الخير $userTitle، دايماً نشيط 🌟");
+      } else {
+        await _speak("خد راحتك $userTitle، أنا هسيبك تنام 😴");
+      }
+      return true;
+    }
+    if (_hasAny(cmd, ['الجو حلو', 'الجو جميل', 'الجو حر', 'الجو برد'])) {
+      await _speak("الجو دايماً حلو معاك $userTitle 🌤️");
+      return true;
+    }
+    if (_hasAny(cmd, ['اهلا', 'أهلاً', 'مرحبا', 'هاي', 'hello', 'hi'])) {
+      await _speak("أهلاً بيك $userTitle، نورت 🌟");
+      return true;
+    }
+    if (_hasAny(cmd, ['مبروك', 'ألف مبروك', 'الف مبروك'])) {
+      await _speak("الله يبارك فيك $userTitle، عقبال كل حاجة حلوة 🎉");
+      return true;
+    }
+    if (_hasAny(cmd, ['سلامتك', 'الف سلامة', 'ألف سلامة'])) {
+      await _speak("الله يسلمك $userTitle 💚");
+      return true;
+    }
+    if (_hasAny(cmd, ['عندك شغل', 'عندك حاجة', 'مشغول', 'مشغولة'])) {
+      await _speak("لأ $userTitle، فاضي ليك دايماً 👌");
+      return true;
+    }
+    if (_hasAny(cmd, ['يلا ننام', 'خلاص هننام', 'هنام'])) {
+      await _speak("تصبح على خير $userTitle، أحلام سعيدة 🌙");
+      return true;
+    }
+    if (_hasAny(cmd, ['يلا نصحي', 'خلص نوم', 'قوم اصحي'])) {
+      await _speak("صباح الخير $userTitle، يومك سعيد ☀️");
+      return true;
+    }
+    if (_hasAny(cmd, ['كلمني', 'اتكلم', 'قولي حاجة', 'اشغلني'])) {
+      await _speak("أنا معاك $userTitle، سامعك. قولي عايز تعمل إيه؟");
       return true;
     }
     if (_hasAny(cmd, ['نكته', 'نكتة', 'ضحكني', 'قولي نكته'])) {
@@ -2633,6 +2606,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final now = DateTime.now();
       final date = DateFormat('dd MMMM yyyy', 'ar').format(now);
       await _speak("التاريخ اليوم $date $userTitle");
+      return true;
+    }
+    if (_hasAny(cmd, ['مش محتاج تشكرني', 'بلاش شكر', 'مش عايز شكر'])) {
+      await _speak("تمام $userTitle، تحت أمرك دايماً 💛");
       return true;
     }
     if (_hasAny(cmd, ['خلاص', 'كفاية', 'كفايه', 'بس كده'])) {
@@ -2741,31 +2718,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return 'كل 10 ثواني';
   }
 
-  // ✅ دوال الحساب
-  int _getIntervalSeconds(String interval) {
-    switch (interval) {
-      case 'مرة واحدة': return 0;
-      case 'كل 10 ثواني': return 10;
-      case 'كل 20 ثانية': return 20;
-      case 'كل 30 ثانية': return 30;
-      case 'كل دقيقة': return 60;
-      case 'كل دقيقتين': return 120;
-      case 'كل 3 دقايق': return 180;
-      case 'كل 5 دقايق': return 300;
-      case 'كل 10 دقايق': return 600;
-      default: return 0;
-    }
-  }
-
-  // ✅ دالة جديدة: وقت التكرار الفعلي
-  int _getEffectiveIntervalSeconds(String interval, String? soundUri) {
-    int userSeconds = _getIntervalSeconds(interval);
-    if (userSeconds == 0) return 0;
-    if (soundUri == null || soundUri == 'default' || soundUri.isEmpty) return userSeconds;
-
-    // لو صوت مخصص، نستخدم 20 ثانية كحد أدنى (لأن الأصوات أطول)
-    return userSeconds > 20 ? userSeconds : 20;
-  }
   Future<void> _processSmartVoiceCommand(String rawCommand) async {
     final userTitle = _userTitle;
     final cmd = _norm(rawCommand);
@@ -2802,28 +2754,38 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
 
     final alarmKeywords = [
-      "فكرني", "فكريني", "فكروني", "فكرنى", "تفكرني", "تفكريني", "هتفكرني",
-      "افتكرني", "افتكريني", "افتكرلي",
-      "ذكرني", "ذكريني", "ذكروني", "ذكرنى", "تذكرني", "تذكريني",
-      "نبهني", "نبهيني", "نبهوني", "نبهنى", "تنبهني", "تنبهيني",
-      "منبه", "منبّه", "منبهني", "منبهلي", "المنبه",
+      "فكرني", "فكريني", "فكروني", "فكرنى", "تفكرني", "تفكريني", "هتفكرني", "هتفكريني",
+      "افتكرني", "افتكريني", "افتكرلي", "افتكرى لي", "هفتكرك",
+      "ذكرني", "ذكريني", "ذكروني", "ذكرنى", "تذكرني", "تذكريني", "هتذكرني", "هتذكريني",
+      "نبهني", "نبهيني", "نبهوني", "نبهنى", "تنبهني", "تنبهيني", "تنبيهي", "تنبيهني",
+      "منبه", "منبّه", "منبهني", "منبهلي", "منبهيلي", "المنبه", "نبّهني",
       "اضبطلي", "اظبطلي", "اضبطيلي", "اظبطيلي", "ظبطلي", "ظبطيلي",
       "ضبطلي", "ضبطيلي", "اضبط", "اظبط", "اضبطي", "اظبطي", "ظبط", "ظبطي",
-      "سجل عندك", "سجلي عندك", "سجللي", "سجليلي",
-      "حطلي", "حطلى", "حطيلي", "حطني", "حطيني",
-      "اعمللي", "اعمليلي", "اعمللى", "اعملى لي", "اعملني",
-      "عايز", "عاوز", "عايزة", "عاوزة", "عايزك", "عاوزك",
-      "صحيني", "صحيني الصبح", "صحيني بكرة", "صحوني", "تصحيني",
-      "صحي", "صحيلي", "أصحى", "صيحيني",
-      "ورايا", "ورايه", "ورايا حاجه", "ورايا حاجة",
-      "دبرلي", "دبريلي", "رتبلي", "رتبيلي", "جهزلي", "جهزيلي",
+      "ضبط", "ضبطي", "اضبطيلى",
+      "سجل عندك", "سجلي عندك", "سجللي", "سجليلي", "سجللى", "سجلى لى",
+      "حطلي", "حطلى", "حطيلي", "حطى لي", "حطني", "حطيني",
+      "اعمللي", "اعمليلي", "اعمللى", "اعملى لي", "اعملني", "اعمليني", "اعمليلى",
+      "عايز", "عاوز", "عايزة", "عاوزة", "عايزك", "عاوزك", "عايزاك", "عاوزاك",
+      "عايز افتكر", "عاوز افتكر", "عايزة افتكر", "عاوزة افتكر",
+      "عايز منبه", "عاوز منبه", "عايزة منبه", "عاوزة منبه",
+      "عايز تذكير", "عاوز تذكير", "عايزة تذكير", "عاوزة تذكير",
+      "عايز اضبط", "عايزة اضبط", "عاوز اضبط", "عاوزة اضبط",
+      "صحيني", "صحيني الصبح", "صحيني بكرة", "صحوني", "صحى", "تصحيني",
+      "صحي", "صحيلي", "أصحى", "صيحيني", "صحيلى",
+      "ورايا", "ورايه", "ورايا حاجه", "ورايا حاجة", "وراك", "وراك حاجة",
+      "ورايا حاجه مهمه", "ورايا حاجة مهمة",
+      "دبرلي", "دبريلي", "دبرلى", "دبرى لي",
+      "رتبلي", "رتبيلي", "رتبلى", "رتبى لي",
+      "جهزلي", "جهزيلي", "جهزلى", "جهزى لي",
       "علمني", "علميني",
       "خلي بالك", "خليكي بالك", "خد بالك", "خدي بالك",
       "ما تنساني", "ماتنساني", "متنساني", "ماتنسانيش", "متنسانيش",
       "ماتنساش", "متنساش", "ماتنساشي", "متنساشي",
-      "موعد", "ميعاد", "موعدي", "حددلي موعد", "حددلي ميعاد",
+      "ماتنسى", "متنسى", "ماتنسيش", "متنسيش",
+      "موعد", "ميعاد", "موعدي", "ميعادي", "حددلي موعد", "حددلي ميعاد",
+      "حدديلي موعد", "حدديلي ميعاد",
       "تنبيه", "التنبيه", "هنسى", "هنسي", "هنساه",
-      "خايف أنسى", "خايفة أنسى",
+      "خايف أنسى", "خايفة أنسى", "خايف انسى", "خايفة انسى",
       "جهز نفسك", "خليك جاهز", "خليكي جاهزة",
       "ساعدني", "ساعديني", "تساعدني", "تساعديني",
       "تذكره", "تذكرة", "تذكيري", "تذكيرى",
@@ -2841,18 +2803,19 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       "غير", "غيري", "غيرلي", "غيريلي", "تغير", "تغيري",
       "غيّر", "غيّري", "تغيير", "تغييري",
       "بدل", "بدلي", "بدللي", "بدليلي", "تبدل", "تبدلي",
+      "حرك", "حركي", "أخر", "أخري",
     ];
 
     final deleteKeywords = [
       "امسح", "امسحي", "امسحلي", "امسحيلي", "أمسح", "أمسحي",
       "مسح", "مسحي", "مسحلي", "مسحيلي",
-      "احذف", "احذفي", "احذفلي", "احذفيلي",
+      "احذف", "احذفي", "احذفلي", "احذفيلي", "أحذف", "أحذفي",
       "حذف", "حذفي", "حذفلي", "حذفيلي",
       "شيل", "شيلي", "شيللي", "شيليلي", "أشيل",
-      "الغي", "الغى", "ألغي", "ألغى",
-      "إلغاء", "إلغى", "كانسل", "كنسل", "كنسلي",
-      "وقف المنبه", "وقفي المنبه", "اوقف المنبه",
-      "اقفل المنبه", "اقفلي المنبه", "الغي المنبه",
+      "الغي", "الغى", "ألغي", "ألغى", "الغيلي", "ألغيلي",
+      "إلغاء", "إلغى", "كانسل", "كنسل", "كنسلي", "كانسلي",
+      "وقف المنبه", "وقفي المنبه", "اوقف المنبه", "أوقف المنبه",
+      "اقفل المنبه", "اقفلي المنبه", "الغي المنبه", "ألغي المنبه",
     ];
 
     if (_hasAny(cmd, deleteKeywords)) {
@@ -2868,18 +2831,19 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final prayerKeywords = ["صلوات", "صلاة", "صلاه", "الصلاة", "مواقيت", "اذان", "أذان",
       "الفجر", "الظهر", "العصر", "المغرب", "العشاء"];
 
-    final diaryKeywords = ["يوميات", "يومياتي", "اليوميات", "مفكرة", "مفكرتي",
-      "مذكرة", "مذكرتي", "تدوين", "خواطر", "اكتبلي"];
+    final diaryKeywords = ["يوميات", "يومياتي", "اليوميات", "مفكرة", "مفكرتي", "المفكرة",
+      "مذكرة", "مذكرتي", "تدوين", "خواطر", "اكتبلي", "اكتبيلي"];
 
     final eventKeywords = ["مناسبات", "مناسباتي", "المناسبات", "مناسبة", "مناسبه",
       "عيد", "العيد", "أعياد", "اعياد", "ذكرى", "الذكرى", "احتفال", "حفلة"];
 
     final openRecorderKeywords = [
-      "افتح المسجل", "افتح مسجل", "افتحلي المسجل", "افتحي المسجل",
+      "افتح المسجل", "افتح مسجل", "افتحلي المسجل", "افتحي المسجل", "افتحيلى المسجل",
       "المسجل", "مسجل", "المسجل الصوتي",
-      "سجل صوت", "سجل صوتي", "سجلي صوت",
+      "سجل صوت", "سجل صوتي", "سجلي صوت", "سجلي صوتي",
       "التسجيلات", "تسجيلات", "تسجيلاتي",
       "صوتيات", "الصوتيات",
+      "المذكرات الصوتيه", "مذكرات صوتيه", "المذكرات الصوتية",
     ];
 
     final startRecordKeywords = [
@@ -2888,43 +2852,55 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       "ابدا تسجيل", "ابدا التسجيل",
       "سجل دلوقتي", "سجل حالا", "سجل حالاً",
       "سجلي دلوقتي", "سجلي حالا", "سجلي حالاً",
-      "سجللي دلوقتي", "سجليلي دلوقتي",
+      "سجللي دلوقتي", "سجليلي دلوقتي", "سجللي حالا", "سجليلي حالا",
       "ابدأ دلوقتي", "ابدئي دلوقتي",
       "ابدأ سجل", "ابدئي سجل",
       "عايز أسجل", "عايز اسجل", "عاوز أسجل", "عاوز اسجل",
       "عايزة أسجل", "عايزة اسجل", "عاوزة أسجل", "عاوزة اسجل",
-      "شغل التسجيل", "شغلي التسجيل",
-      "سجل يلا", "سجلي يلا",
+      "شغل التسجيل", "شغلي التسجيل", "شغل المسجل", "شغلي المسجل",
+      "ابدأ التسجيل دلوقتي", "ابدئي التسجيل دلوقتي",
+      "سجل يلا", "سجلي يلا", "سجل بسرعة", "سجلي بسرعة",
     ];
 
     final stopRecordKeywords = [
-      "وقف تسجيل", "وقف التسجيل", "وقفي تسجيل", "وقفي التسجيل",
-      "اوقف تسجيل", "اوقف التسجيل", "أوقف تسجيل",
+      "وقف تسجيل", "وقف التسجيل",
+      "وقفي تسجيل", "وقفي التسجيل",
+      "اوقف تسجيل", "اوقف التسجيل",
+      "أوقف تسجيل", "أوقف التسجيل",
+      "وقفت تسجيل", "وقفت التسجيل",
       "خلاص وقف تسجيل", "خلاص وقف التسجيل",
+      "خلاص وقفي تسجيل", "خلاص وقفي التسجيل",
       "خلاص وقف", "خلاص وقفي",
       "خلاص اوقف", "خلاص أوقف",
+      "خلاص ايقاف", "خلاص إيقاف",
       "خلاص كفاية", "خلاص كفايه",
       "خلاص بلاها", "خلاص بلاش",
       "خلاص انتهي", "خلاص انتهى",
       "خلاص اقفل التسجيل", "خلاص اقفلي التسجيل",
       "خلص تسجيل", "خلص التسجيل",
       "خلصي تسجيل", "خلصي التسجيل",
+      "خلصت تسجيل", "خلصت التسجيل",
       "خلص خلاص", "خلصي خلاص",
       "بطل تسجيل", "بطل التسجيل",
       "بطلي تسجيل", "بطلي التسجيل",
+      "بطل بقي", "بطلي بقي",
       "انهي التسجيل", "انهي تسجيل",
+      "أنهي التسجيل", "أنهي تسجيل",
       "اقفل التسجيل", "اقفلي التسجيل",
       "اقفل تسجيل", "اقفلي تسجيل",
       "قفل التسجيل", "قفلي التسجيل",
       "كفاية تسجيل", "كفاية التسجيل",
       "كفايه تسجيل", "كفايه التسجيل",
       "كفاية كده", "كفايه كده",
+      "كفاية خلاص", "كفايه خلاص",
       "بس كده", "بس خلاص", "بس كفاية", "بس كفايه",
+      "كده كفاية", "كده كفايه",
       "اوقف", "أوقف", "ايقاف", "إيقاف",
       "ستوب", "stop",
       "سيب التسجيل", "سيبي التسجيل",
-      "متسجلش", "ماتسجلش",
+      "متسجلش", "ماتسجلش", "متسجليش", "ماتسجليش",
       "مش عايز اسجل", "مش عاوز اسجل",
+      "مش عايزة اسجل", "مش عاوزة اسجل",
     ];
 
     if (_hasAny(cmd, prayerKeywords)) {
@@ -3097,7 +3073,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     final strip = <String>{
       'اظبطلي', 'اضبطلي', 'اظبطيلي', 'اضبطيلي', 'اظبط', 'اضبط', 'اظبطي', 'اضبطي',
-      'ظبط', 'ضبط', 'ظبطي', 'ضبطي', 'ظبطلي', 'ضبطلي',
+      'ظبط', 'ضبط', 'ظبطي', 'ضبطي', 'ظبطلي', 'ضبطلي', 'ظبطيلي', 'ضبطيلي',
       'منبه', 'منبّه', 'المنبه',
       'فكرني', 'فكريني', 'ذكرني', 'ذكريني', 'نبهني', 'نبهيني',
       'تذكير', 'تذكيري', 'تذكيرى', 'سجل', 'سجلي', 'عندك', 'ورايا', 'ورايه',
@@ -3177,7 +3153,21 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await _speak("تم التنفيذ $userTitle! تم تسجيل: $cleanTitle، الساعة $h12$minuteText $periodText$repeatText$intervalText.");
   }
 
-  // ✅ Native Alarm بس لو مفيش صوت مخصص
+  int _getIntervalSeconds(String interval) {
+    switch (interval) {
+      case 'مرة واحدة': return 0;
+      case 'كل 10 ثواني': return 10;
+      case 'كل 20 ثانية': return 20;
+      case 'كل 30 ثانية': return 30;
+      case 'كل دقيقة': return 60;
+      case 'كل دقيقتين': return 120;
+      case 'كل 3 دقايق': return 180;
+      case 'كل 5 دقايق': return 300;
+      case 'كل 10 دقايق': return 600;
+      default: return 0;
+    }
+  }
+
   void _scheduleContinuousAlarm(
     String taskTitle,
     DateTime scheduledDateTime,
@@ -3198,9 +3188,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       soundUri: soundUri,
     );
 
-    // ✅ Native Alarm (TTS) بس لو مفيش صوت مخصص
-    final hasCustomSound = soundUri != null && soundUri != 'default' && soundUri.isNotEmpty;
-    if (!hasCustomSound) {
+    // ✅ Native Alarm بس لو مفيش صوت مخصص
+    if (soundUri == null || soundUri.isEmpty || soundUri == 'default') {
       _scheduleNativeAlarm(taskTitle, scheduledDateTime);
     }
 
@@ -3235,7 +3224,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     } catch (_) {}
   }
 
-  void _rescheduleRepeating(String taskTitle, String repeat, String interval, List<String> customDays, DateTime lastScheduled) {
+  void _rescheduleRepeating(String taskTitle, String repeat, String interval, List<String> customDays, DateTime lastScheduled, String? soundUri) {
     DateTime next;
     if (repeat == 'يومي') {
       next = lastScheduled.add(const Duration(days: 1));
@@ -3255,10 +3244,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     } else {
       return;
     }
-    _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays);
+    _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays, soundUri: soundUri);
   }
 
-  // ✅ قناة المنبه v6 + صوت مخصص
   Future<void> _scheduleBackgroundNotification(
     String taskTitle,
     DateTime scheduledDateTime, {
@@ -3267,7 +3255,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     List<String> customDays = const [],
     String? soundUri,
   }) async {
-    // الصوت: المهمة → الافتراضي
     final prefs = await SharedPreferences.getInstance();
     final finalSound = soundUri ?? prefs.getString('default_alarm_sound');
 
@@ -3314,11 +3301,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       'repeat': repeat,
       'interval': interval,
       'customDays': customDays,
-      'sound': finalSound,
+      'sound': soundUri,
     }));
   }
 
-  // ✅ TTS بس لو مفيش صوت مخصص
   void _startAlarmLoop(
     String taskTitle,
     String repeat,
@@ -3328,10 +3314,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     String? soundUri,
   ) {
     final userTitle = _userTitle;
+    final hasCustomSound = soundUri != null && soundUri.isNotEmpty && soundUri != 'default';
+
     WakelockPlus.enable();
     HapticFeedback.vibrate();
-
-    final hasCustomSound = soundUri != null && soundUri != 'default' && soundUri.isNotEmpty;
 
     void speakAlert() {
       if (!hasCustomSound) {
@@ -3344,8 +3330,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       speakAlert();
     }
 
-    // ✅ وقت التكرار الفعلي (حسب مدة الصوت)
-    int secs = _getEffectiveIntervalSeconds(interval, soundUri);
+    int secs = _getIntervalSeconds(interval);
     Timer? loopTimer;
     if (secs > 0 && interval != 'مرة واحدة' && !hasCustomSound) {
       loopTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
@@ -3358,13 +3343,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1B2A4A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(children: [
-          Icon(Icons.alarm_on, color: Color(0xFFC5A059), size: 30),
-          SizedBox(width: 10),
-          Text('تنبيه هام!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        ]),
-        content: Text('$userTitle، حان الآن موعد:\n"$taskTitle"',
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Row(children: [Icon(Icons.alarm_on, color: Color(0xFFC5A059), size: 30), SizedBox(width: 10), Text('تنبيه هام!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
+        content: Text('$userTitle، حان الآن موعد:\n"$taskTitle"', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
@@ -3386,704 +3366,14 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                   prefs.remove('pending_alarm');
                 });
               } else {
-                _rescheduleRepeating(taskTitle, repeat, interval, customDays, scheduled);
+                _rescheduleRepeating(taskTitle, repeat, interval, customDays, scheduled, soundUri);
               }
             },
-            child: const Text('خلاص (إيقاف)',
-                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            child: const Text('خلاص (إيقاف)', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
           )
         ],
       ),
     );
-  }
-
-  // ═══════════════════════════════════════
-  // Events Reminders
-  // ═══════════════════════════════════════
-  Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
-    try {
-      final eventDate = DateTime.parse(event['eventDate'].toString());
-      final reminderHour = event['reminderHour'] ?? _settings.defaultReminderHour;
-      final reminderMinute = event['reminderMinute'] ?? _settings.defaultReminderMinute;
-      final advanceDays = _getAdvanceDays(event['advanceReminder'] ?? 'قبلها بيوم');
-      final interval = event['repeatInterval'] ?? 'مرة واحدة';
-      final sound = event['sound'] as String?;
-      final now = DateTime.now();
-
-      final eventThisYear = DateTime(now.year, eventDate.month, eventDate.day);
-      final reminderDate = eventThisYear.subtract(Duration(days: advanceDays));
-      final reminderDateTime = DateTime(reminderDate.year, reminderDate.month, reminderDate.day, reminderHour, reminderMinute);
-
-      if (reminderDateTime.isBefore(now)) return;
-
-      await _scheduleEventNotification(event, reminderDateTime, interval);
-
-      // ✅ Native Alarm بس لو مفيش صوت مخصص
-      final hasCustomSound = sound != null && sound != 'default' && sound.isNotEmpty;
-      if (!hasCustomSound) {
-        await _scheduleNativeAlarm(
-          'مناسبة: ${event['title']}',
-          reminderDateTime,
-          prefix: 'قربت مناسبة: ',
-        );
-      }
-
-      final diff = reminderDateTime.difference(now);
-
-      late final Timer timer;
-      timer = Timer(diff, () {
-        _activeTimers.remove(timer);
-        if (mounted) _showEventReminder(
-          event['title'].toString(),
-          event['detail'].toString(),
-          interval,
-          hasCustomSound: hasCustomSound,
-        );
-      });
-      _activeTimers.add(timer);
-    } catch (_) {}
-  }
-
-  Future<void> _scheduleEventNotification(Map<String, dynamic> event, DateTime fireTime, String interval) async {
-    try {
-      final eventId = event['title'].toString().hashCode + event['eventDate'].toString().hashCode;
-      final tzTime = tz.TZDateTime.from(fireTime, tz.local);
-
-      // الصوت: المناسبة → الافتراضي
-      final prefs = await SharedPreferences.getInstance();
-      final finalSound = event['sound'] ?? prefs.getString('default_event_sound');
-
-      final androidDetails = AndroidNotificationDetails(
-        'event_channel_v1', 'تنبيهات المناسبات',
-        channelDescription: 'تنبيهات المناسبات السنوية',
-        importance: Importance.max, priority: Priority.max,
-        playSound: true,
-        sound: _getNotificationSound(finalSound),
-        enableVibration: true,
-        category: AndroidNotificationCategory.alarm,
-        autoCancel: false, ongoing: true, fullScreenIntent: true,
-        visibility: NotificationVisibility.public,
-      );
-
-      await _notifications.zonedSchedule(
-        eventId, '🎉 تذكير بمناسبة', 'قربت مناسبة: ${event['title']}',
-        tzTime, NotificationDetails(android: androidDetails),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      );
-
-      await prefs.setString('pending_event_announce', json.encode({
-        'title': event['title'], 'detail': event['detail'],
-        'interval': interval, 'scheduledMillis': fireTime.millisecondsSinceEpoch,
-        'sound': finalSound,
-      }));
-    } catch (_) {}
-  }
-
-  int _getAdvanceDays(String advanceReminder) {
-    switch (advanceReminder) {
-      case 'في نفس اليوم': return 0;
-      case 'قبلها بيوم': return 1;
-      case 'قبلها بـ 3 أيام': return 3;
-      case 'قبلها بأسبوع': return 7;
-      case 'قبلها بـ 10 أيام': return 10;
-      case 'قبلها بشهر': return 30;
-      default: return 1;
-    }
-  }
-
-  // ✅ TTS بس لو مفيش صوت مخصص
-  Future<void> _showEventReminder(String title, String detail, String interval, {bool hasCustomSound = false}) async {
-    if (_eventDialogShowing) return;
-    _eventDialogShowing = true;
-    _eventAnnouncing = true;
-
-    HapticFeedback.vibrate();
-    WakelockPlus.enable();
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('pending_event_announce');
-    } catch (_) {}
-
-    void speakAlert() {
-      if (!hasCustomSound) {
-        _speak("تنبيه: قربت مناسبة $title. $detail");
-      }
-      HapticFeedback.vibrate();
-    }
-
-    if (interval != 'بدون تنبيه' && !hasCustomSound) speakAlert();
-
-    _eventRepeatTimer?.cancel();
-    int secs = _getIntervalSeconds(interval);
-    if (secs > 0 && interval != 'مرة واحدة' && !hasCustomSound) {
-      _eventRepeatTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
-    }
-
-    if (!mounted) {
-      _eventDialogShowing = false;
-      _eventAnnouncing = false;
-      return;
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1B2A4A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(children: [
-          Icon(Icons.celebration, color: Color(0xFFC5A059), size: 30),
-          SizedBox(width: 10),
-          Text('تذكير بمناسبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        ]),
-        content: Text('قربت مناسبة: $title\n$detail',
-            style: const TextStyle(color: Colors.white, fontSize: 16)),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
-            onPressed: () {
-              _eventRepeatTimer?.cancel();
-              _tts.stop();
-              WakelockPlus.disable();
-              _eventAnnouncing = false;
-              _eventDialogShowing = false;
-              _cancelNativeAlarm('مناسبة: $title');
-              Navigator.pop(ctx);
-            },
-            child: const Text('تمام', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          )
-        ],
-      ),
-    );
-  }
-
-  void _deleteTask(int index) {
-    final taskTitle = _tasks[index]['task'].toString();
-    setState(() => _tasks.removeAt(index));
-    _saveData();
-    _cancelNativeAlarm(taskTitle);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
-  }
-
-  void _openSettingsScreen() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SettingsScreen(
-          settings: _settings,
-          ttsVolume: _ttsVolume,
-          currentSecretaryName: _secretaryName,
-          currentIsUserMale: _isUserMale,
-          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeBg, voiceGender, defaultInterval) async {
-            setState(() {
-              _settings.defaultReminderHour = hour;
-              _settings.defaultReminderMinute = minute;
-              _settings.voiceLevel = voiceLevel;
-              _settings.greetingEnabled = greeting;
-              _settings.adhanAlertEnabled = adhan;
-              _ttsVolume = ttsVol;
-              _settings.showAboveLockScreen = showLock;
-              _settings.shakeInBackgroundEnabled = shakeBg;
-              _settings.voiceGender = voiceGender;
-              _settings.defaultInterval = defaultInterval;
-            });
-            await _saveSettings();
-            await _scheduleAdhan30Days();
-            try {
-              if (showLock) {
-                await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
-              } else {
-                await _lockScreenChannel.invokeMethod('disableShowWhenLocked');
-              }
-            } catch (_) {}
-          },
-          onSaveSecretary: (name, voiceGender) async {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('secretary_name', name);
-            await prefs.setString('voice_gender', voiceGender);
-            setState(() {
-              _secretaryName = name;
-              _settings.voiceGender = voiceGender;
-            });
-          },
-        ),
-      ),
-    ).then((_) {
-      _configureVoice(skipGreeting: true);
-    });
-  }
-
-  void _addNewTaskDialog() {
-    TextEditingController taskCtrl = TextEditingController();
-    TimeOfDay selectedTime = TimeOfDay.now();
-    String selectedRepeat = 'مرة واحدة';
-    String selectedInterval = _settings.defaultInterval;
-    List<String> selectedDays = [];
-    String? selectedSound;
-    final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'أسبوعي', 'شهري', 'مخصص'];
-    final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateSB) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          title: const Text('إضافة موعد جديد', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: taskCtrl, decoration: const InputDecoration(labelText: 'تفاصيل المهمة')),
-                const SizedBox(height: 15),
-                if (selectedInterval != 'بدون تنبيه') ...[
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('الوقت: ${selectedTime.format(context)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    TextButton.icon(icon: const Icon(Icons.access_time, color: Color(0xFFC5A059)), label: const Text('تحديد'), onPressed: () async {
-                      final t = await showTimePicker(context: context, initialTime: selectedTime);
-                      if (t != null) setStateSB(() => selectedTime = t);
-                    }),
-                  ]),
-                  const Divider(),
-                  const Align(alignment: Alignment.centerRight, child: Text('التكرار:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(value: selectedRepeat, decoration: const InputDecoration(border: OutlineInputBorder()), items: repeatOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setStateSB(() => selectedRepeat = val ?? 'مرة واحدة')),
-                  if (selectedRepeat == 'مخصص') ...[
-                    const SizedBox(height: 10),
-                    const Align(alignment: Alignment.centerRight, child: Text('اختر الأيام:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                    const SizedBox(height: 5),
-                    Wrap(spacing: 5, runSpacing: 5, children: _weekDays.map((day) {
-                      final isSelected = selectedDays.contains(day);
-                      return FilterChip(label: Text(day, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.black87)), selected: isSelected, selectedColor: const Color(0xFF1B2A4A), onSelected: (v) => setStateSB(() { if (v) selectedDays.add(day); else selectedDays.remove(day); }));
-                    }).toList()),
-                  ],
-                ],
-                const Divider(),
-                const Align(alignment: Alignment.centerRight, child: Text('التنبيه المستمر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(border: OutlineInputBorder()), items: intervalOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval)),
-                const Divider(),
-                Row(
-                  children: [
-                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A), size: 20),
-                    const SizedBox(width: 8),
-                    const Text('الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        selectedSound == null ? 'افتراضي' : 'مخصص',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        final result = await showDialog<String>(
-                          context: context,
-                          builder: (_) => SoundPickerDialog(currentUri: selectedSound),
-                        );
-                        if (result != null) {
-                          setStateSB(() => selectedSound = result == 'default' ? null : result);
-                        }
-                      },
-                      child: const Text('اختيار'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
-              onPressed: () {
-                if (taskCtrl.text.isNotEmpty) {
-                  final scheduledDateTime = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, selectedTime.hour, selectedTime.minute);
-                  setState(() {
-                    _tasks.add({
-                      'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
-                      'task': taskCtrl.text,
-                      'time': selectedInterval == 'بدون تنبيه' ? 'بدون تنبيه' : selectedTime.format(context),
-                      'alarm': selectedInterval != 'بدون تنبيه',
-                      'scheduled': scheduledDateTime.toIso8601String(),
-                      'repeat': selectedRepeat,
-                      'repeatInterval': selectedInterval,
-                      'customDays': selectedDays,
-                      'sound': selectedSound,
-                    });
-                  });
-                  _saveData();
-                  if (selectedInterval != 'بدون تنبيه') {
-                    _scheduleContinuousAlarm(
-                      taskCtrl.text,
-                      scheduledDateTime,
-                      selectedRepeat,
-                      selectedInterval,
-                      selectedDays,
-                      soundUri: selectedSound,
-                    );
-                  }
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _editTaskDialog(int index) {
-    final task = _tasks[index];
-    TextEditingController taskCtrl = TextEditingController(text: task['task'].toString());
-    TimeOfDay selectedTime = TimeOfDay.now();
-    try {
-      final t = DateFormat('hh:mm a', 'ar').parse(task['time'].toString());
-      selectedTime = TimeOfDay(hour: t.hour, minute: t.minute);
-    } catch (_) {}
-    String selectedRepeat = task['repeat'] ?? 'مرة واحدة';
-    String selectedInterval = task['repeatInterval'] ?? _settings.defaultInterval;
-    List<String> selectedDays = List<String>.from(task['customDays'] ?? []);
-    String? selectedSound = task['sound'];
-    final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'أسبوعي', 'شهري', 'مخصص'];
-    final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateSB) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          title: const Text('تعديل الموعد', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: taskCtrl, decoration: const InputDecoration(labelText: 'تفاصيل المهمة')),
-                const SizedBox(height: 15),
-                if (selectedInterval != 'بدون تنبيه') ...[
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('الوقت: ${selectedTime.format(context)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    TextButton.icon(icon: const Icon(Icons.access_time, color: Color(0xFFC5A059)), label: const Text('تحديد'), onPressed: () async {
-                      final t = await showTimePicker(context: context, initialTime: selectedTime);
-                      if (t != null) setStateSB(() => selectedTime = t);
-                    }),
-                  ]),
-                  const Divider(),
-                  const Align(alignment: Alignment.centerRight, child: Text('التكرار:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(value: selectedRepeat, decoration: const InputDecoration(border: OutlineInputBorder()), items: repeatOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setStateSB(() => selectedRepeat = val ?? 'مرة واحدة')),
-                  if (selectedRepeat == 'مخصص') ...[
-                    const SizedBox(height: 10),
-                    const Align(alignment: Alignment.centerRight, child: Text('اختر الأيام:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                    const SizedBox(height: 5),
-                    Wrap(spacing: 5, runSpacing: 5, children: _weekDays.map((day) {
-                      final isSelected = selectedDays.contains(day);
-                      return FilterChip(label: Text(day, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.black87)), selected: isSelected, selectedColor: const Color(0xFF1B2A4A), onSelected: (v) => setStateSB(() { if (v) selectedDays.add(day); else selectedDays.remove(day); }));
-                    }).toList()),
-                  ],
-                ],
-                const Divider(),
-                const Align(alignment: Alignment.centerRight, child: Text('التنبيه المستمر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(border: OutlineInputBorder()), items: intervalOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval)),
-                const Divider(),
-                Row(
-                  children: [
-                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A), size: 20),
-                    const SizedBox(width: 8),
-                    const Text('الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        selectedSound == null ? 'افتراضي' : 'مخصص',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        final result = await showDialog<String>(
-                          context: context,
-                          builder: (_) => SoundPickerDialog(currentUri: selectedSound),
-                        );
-                        if (result != null) {
-                          setStateSB(() => selectedSound = result == 'default' ? null : result);
-                        }
-                      },
-                      child: const Text('اختيار'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
-              onPressed: () {
-                if (taskCtrl.text.isNotEmpty) {
-                  final scheduledDateTime = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, selectedTime.hour, selectedTime.minute);
-                  _cancelNativeAlarm(task['task'].toString());
-                  setState(() {
-                    _tasks[index] = {
-                      'date': task['date'],
-                      'task': taskCtrl.text,
-                      'time': selectedInterval == 'بدون تنبيه' ? 'بدون تنبيه' : selectedTime.format(context),
-                      'alarm': selectedInterval != 'بدون تنبيه',
-                      'scheduled': scheduledDateTime.toIso8601String(),
-                      'repeat': selectedRepeat,
-                      'repeatInterval': selectedInterval,
-                      'customDays': selectedDays,
-                      'sound': selectedSound,
-                    };
-                  });
-                  _saveData();
-                  if (selectedInterval != 'بدون تنبيه') {
-                    _scheduleContinuousAlarm(
-                      taskCtrl.text,
-                      scheduledDateTime,
-                      selectedRepeat,
-                      selectedInterval,
-                      selectedDays,
-                      soundUri: selectedSound,
-                    );
-                  }
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _addSpecialEventDialog() {
-    TextEditingController titleCtrl = TextEditingController();
-    TextEditingController detailCtrl = TextEditingController();
-    String selectedAdvanceReminder = 'قبلها بيوم';
-    String selectedInterval = 'مرة واحدة';
-    DateTime selectedEventDate = DateTime.now();
-    TimeOfDay reminderTime = TimeOfDay(hour: _settings.defaultReminderHour, minute: _settings.defaultReminderMinute);
-    String? selectedSound;
-    final List<String> reminderOptions = ['في نفس اليوم', 'قبلها بيوم', 'قبلها بـ 3 أيام', 'قبلها بأسبوع', 'قبلها بـ 10 أيام', 'قبلها بشهر'];
-    final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateSB) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          title: const Text('إضافة مناسبة', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المناسبة')),
-                const SizedBox(height: 10),
-                TextField(controller: detailCtrl, decoration: const InputDecoration(labelText: 'التفاصيل/الاسم')),
-                const SizedBox(height: 15),
-                ListTile(contentPadding: EdgeInsets.zero, title: Text('التاريخ: ${DateFormat('yyyy/MM/dd').format(selectedEventDate)}'), trailing: const Icon(Icons.calendar_today, color: Color(0xFF1B2A4A)), onTap: () async {
-                  final picked = await showDatePicker(context: context, initialDate: selectedEventDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
-                  if (picked != null) setStateSB(() => selectedEventDate = picked);
-                }),
-                ListTile(contentPadding: EdgeInsets.zero, title: Text('وقت التذكير: ${reminderTime.format(context)}'), trailing: const Icon(Icons.access_time, color: Color(0xFF1B2A4A)), onTap: () async {
-                  final picked = await showTimePicker(context: context, initialTime: reminderTime);
-                  if (picked != null) setStateSB(() => reminderTime = picked);
-                }),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(value: selectedAdvanceReminder, decoration: const InputDecoration(labelText: 'التذكير المسبق', border: OutlineInputBorder()), items: reminderOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedAdvanceReminder = val ?? selectedAdvanceReminder)),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(labelText: 'التنبيه المستمر', border: OutlineInputBorder()), items: intervalOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? 'مرة واحدة')),
-                const Divider(),
-                Row(
-                  children: [
-                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A), size: 20),
-                    const SizedBox(width: 8),
-                    const Text('الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        selectedSound == null ? 'افتراضي' : 'مخصص',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        final result = await showDialog<String>(
-                          context: context,
-                          builder: (_) => SoundPickerDialog(currentUri: selectedSound),
-                        );
-                        if (result != null) {
-                          setStateSB(() => selectedSound = result == 'default' ? null : result);
-                        }
-                      },
-                      child: const Text('اختيار'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
-              onPressed: () {
-                if (titleCtrl.text.isNotEmpty) {
-                  final newEvent = {
-                    'title': titleCtrl.text,
-                    'detail': detailCtrl.text.isEmpty ? 'مناسبة سنوية' : detailCtrl.text,
-                    'advanceReminder': selectedAdvanceReminder,
-                    'eventDate': selectedEventDate.toIso8601String(),
-                    'reminderHour': reminderTime.hour,
-                    'reminderMinute': reminderTime.minute,
-                    'repeatInterval': selectedInterval,
-                    'sound': selectedSound,
-                  };
-                  setState(() => _specialEvents.add(newEvent));
-                  _saveData();
-                  _scheduleEventReminder(newEvent);
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _editSpecialEventDialog(int index) {
-    final event = _specialEvents[index];
-    TextEditingController titleCtrl = TextEditingController(text: event['title'].toString());
-    TextEditingController detailCtrl = TextEditingController(text: event['detail'].toString());
-    String selectedAdvanceReminder = event['advanceReminder'] ?? 'قبلها بيوم';
-    String selectedInterval = event['repeatInterval'] ?? 'مرة واحدة';
-    DateTime selectedEventDate = DateTime.now();
-    try {
-      selectedEventDate = DateTime.parse(event['eventDate'].toString());
-    } catch (_) {}
-    TimeOfDay reminderTime = TimeOfDay(
-      hour: event['reminderHour'] ?? _settings.defaultReminderHour,
-      minute: event['reminderMinute'] ?? _settings.defaultReminderMinute,
-    );
-    String? selectedSound = event['sound'];
-    final List<String> reminderOptions = ['في نفس اليوم', 'قبلها بيوم', 'قبلها بـ 3 أيام', 'قبلها بأسبوع', 'قبلها بـ 10 أيام', 'قبلها بشهر'];
-    final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateSB) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          title: const Text('تعديل المناسبة', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المناسبة')),
-                const SizedBox(height: 10),
-                TextField(controller: detailCtrl, decoration: const InputDecoration(labelText: 'التفاصيل/الاسم')),
-                const SizedBox(height: 15),
-                ListTile(contentPadding: EdgeInsets.zero, title: Text('التاريخ: ${DateFormat('yyyy/MM/dd').format(selectedEventDate)}'), trailing: const Icon(Icons.calendar_today, color: Color(0xFF1B2A4A)), onTap: () async {
-                  final picked = await showDatePicker(context: context, initialDate: selectedEventDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
-                  if (picked != null) setStateSB(() => selectedEventDate = picked);
-                }),
-                ListTile(contentPadding: EdgeInsets.zero, title: Text('وقت التذكير: ${reminderTime.format(context)}'), trailing: const Icon(Icons.access_time, color: Color(0xFF1B2A4A)), onTap: () async {
-                  final picked = await showTimePicker(context: context, initialTime: reminderTime);
-                  if (picked != null) setStateSB(() => reminderTime = picked);
-                }),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(value: selectedAdvanceReminder, decoration: const InputDecoration(labelText: 'التذكير المسبق', border: OutlineInputBorder()), items: reminderOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedAdvanceReminder = val ?? selectedAdvanceReminder)),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(value: selectedInterval, decoration: const InputDecoration(labelText: 'التنبيه المستمر', border: OutlineInputBorder()), items: intervalOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(), onChanged: (val) => setStateSB(() => selectedInterval = val ?? 'مرة واحدة')),
-                const Divider(),
-                Row(
-                  children: [
-                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A), size: 20),
-                    const SizedBox(width: 8),
-                    const Text('الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        selectedSound == null ? 'افتراضي' : 'مخصص',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        final result = await showDialog<String>(
-                          context: context,
-                          builder: (_) => SoundPickerDialog(currentUri: selectedSound),
-                        );
-                        if (result != null) {
-                          setStateSB(() => selectedSound = result == 'default' ? null : result);
-                        }
-                      },
-                      child: const Text('اختيار'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
-              onPressed: () {
-                if (titleCtrl.text.isNotEmpty) {
-                  _cancelNativeAlarm('مناسبة: ${event['title']}');
-                  final updatedEvent = {
-                    'title': titleCtrl.text,
-                    'detail': detailCtrl.text.isEmpty ? 'مناسبة سنوية' : detailCtrl.text,
-                    'advanceReminder': selectedAdvanceReminder,
-                    'eventDate': selectedEventDate.toIso8601String(),
-                    'reminderHour': reminderTime.hour,
-                    'reminderMinute': reminderTime.minute,
-                    'repeatInterval': selectedInterval,
-                    'sound': selectedSound,
-                  };
-                  setState(() => _specialEvents[index] = updatedEvent);
-                  _saveData();
-                  _scheduleEventReminder(updatedEvent);
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _openDiaryPage(DateTime date) {
-    String key = DateFormat('yyyy-MM-dd').format(date);
-    String dayName = DateFormat('EEEE', 'ar').format(date);
-    String fullDate = DateFormat('dd MMMM yyyy', 'ar').format(date);
-    TextEditingController diaryCtrl = TextEditingController(text: _diaries[key] ?? '');
-    Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(backgroundColor: const Color(0xFF1B2A4A), foregroundColor: Colors.white, title: const Text('تدوين اليوميات'), actions: [
-        IconButton(icon: const Icon(Icons.check, color: Color(0xFFC5A059), size: 28), onPressed: () {
-          setState(() => _diaries[key] = diaryCtrl.text);
-          _saveData();
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الحفظ!')));
-        })
-      ]),
-      body: Padding(padding: const EdgeInsets.all(20.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(width: double.infinity, padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: const Color(0xFFF4F6F9), borderRadius: BorderRadius.circular(12), border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 4))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('اليوم: $dayName', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
-          const SizedBox(height: 4),
-          Text('التاريخ: $fullDate', style: const TextStyle(fontSize: 15, color: Colors.grey, fontWeight: FontWeight.w600)),
-        ])),
-        const SizedBox(height: 20),
-        Expanded(child: TextField(controller: diaryCtrl, maxLines: null, expands: true, textAlignVertical: TextAlignVertical.top, style: const TextStyle(fontSize: 16, height: 1.6), decoration: const InputDecoration(hintText: 'اكتب يومياتك هنا...', border: InputBorder.none))),
-      ])),
-    )));
   }
 
   Future<Map<String, String>> _calculatePrayerTimes() async {
@@ -4101,96 +3391,1151 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
     }
   }
+  // ═══════════════════════════════════════
+// Events Reminders
+// ═══════════════════════════════════════
+Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
+  try {
+    final eventDate = DateTime.parse(event['eventDate'].toString());
+    final reminderHour = event['reminderHour'] ?? _settings.defaultReminderHour;
+    final reminderMinute = event['reminderMinute'] ?? _settings.defaultReminderMinute;
+    final advanceDays = _getAdvanceDays(event['advanceReminder'] ?? 'قبلها بيوم');
+    final interval = event['repeatInterval'] ?? 'مرة واحدة';
+    final now = DateTime.now();
 
-  @override
-  Widget build(BuildContext context) {
-    final List<Widget> screens = [_buildCalendarAndTasksTab(), _buildDiariesTab(), _buildPrayerTimesTab(), _buildSpecialEventsTab(), _buildRecorderTab()];
+    final eventThisYear = DateTime(now.year, eventDate.month, eventDate.day);
+    final reminderDate = eventThisYear.subtract(Duration(days: advanceDays));
+    final reminderDateTime = DateTime(reminderDate.year, reminderDate.month, reminderDate.day, reminderHour, reminderMinute);
 
-    Widget? fab;
-    if (_isRecording) {
-      fab = FloatingActionButton.extended(
-        onPressed: _stopRecording,
-        backgroundColor: Colors.red,
-        icon: const Icon(Icons.stop, color: Colors.white),
-        label: Text(
-          'إيقاف التسجيل (${_formatDuration(_recordingDuration)})',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-      );
-    } else if (_currentIndex == 0) {
-      fab = FloatingActionButton.extended(
-        onPressed: _addNewTaskDialog,
-        backgroundColor: const Color(0xFF1B2A4A),
-        icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
-        label: const Text('إضافة موعد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      );
-    } else if (_currentIndex == 3) {
-      fab = FloatingActionButton.extended(
-        onPressed: _addSpecialEventDialog,
-        backgroundColor: const Color(0xFF1B2A4A),
-        icon: const Icon(Icons.card_giftcard, color: Color(0xFFC5A059)),
-        label: const Text('إضافة مناسبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+    if (reminderDateTime.isBefore(now)) return;
+
+    await _scheduleEventNotification(event, reminderDateTime, interval);
+
+    final hasCustomSound = event['sound'] != null && event['sound'] != 'default';
+    if (!hasCustomSound) {
+      await _scheduleNativeAlarm(
+        'مناسبة: ${event['title']}',
+        reminderDateTime,
+        prefix: 'قربت مناسبة: ',
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1B2A4A),
-        foregroundColor: Colors.white,
-        elevation: 3,
-        title: Row(children: [
-          CircleAvatar(radius: 22, backgroundColor: const Color(0xFFC5A059), child: ClipOval(child: Image.asset(_getSecretaryImage(_secretaryName, _settings.voiceGender), width: 44, height: 44, fit: BoxFit.cover, alignment: const Alignment(0, -0.3), errorBuilder: (c, e, s) => const Icon(Icons.face_3, color: Colors.white)))),
-          const SizedBox(width: 12),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('$_secTitle: $_secretaryName', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const Text('هز الهاتف للتحدث', style: TextStyle(fontSize: 11, color: Colors.white70)),
-          ]),
-        ]),
+    final diff = reminderDateTime.difference(now);
+
+    late final Timer timer;
+    timer = Timer(diff, () {
+      _activeTimers.remove(timer);
+      if (mounted) _showEventReminder(
+        event['title'].toString(),
+        event['detail'].toString(),
+        interval,
+        hasCustomSound: hasCustomSound,
+      );
+    });
+    _activeTimers.add(timer);
+  } catch (_) {}
+}
+
+Future<void> _scheduleEventNotification(Map<String, dynamic> event, DateTime fireTime, String interval) async {
+  try {
+    final eventId = event['title'].toString().hashCode + event['eventDate'].toString().hashCode;
+    final tzTime = tz.TZDateTime.from(fireTime, tz.local);
+
+    final prefs = await SharedPreferences.getInstance();
+    final finalSound = event['sound'] ?? prefs.getString('default_event_sound');
+
+    final androidDetails = AndroidNotificationDetails(
+      'event_channel_v1', 'تنبيهات المناسبات',
+      channelDescription: 'تنبيهات المناسبات السنوية',
+      importance: Importance.max, priority: Priority.max,
+      playSound: true,
+      sound: _getNotificationSound(finalSound),
+      enableVibration: true,
+      category: AndroidNotificationCategory.alarm,
+      autoCancel: false, ongoing: true, fullScreenIntent: true,
+      visibility: NotificationVisibility.public,
+    );
+
+    await _notifications.zonedSchedule(
+      eventId, '🎉 تذكير بمناسبة', 'قربت مناسبة: ${event['title']}',
+      tzTime, NotificationDetails(android: androidDetails),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+    );
+
+    await prefs.setString('pending_event_announce', json.encode({
+      'title': event['title'], 'detail': event['detail'],
+      'interval': interval, 'scheduledMillis': fireTime.millisecondsSinceEpoch,
+      'hasCustomSound': finalSound != null && finalSound != 'default',
+    }));
+  } catch (_) {}
+}
+
+int _getAdvanceDays(String advanceReminder) {
+  switch (advanceReminder) {
+    case 'في نفس اليوم': return 0;
+    case 'قبلها بيوم': return 1;
+    case 'قبلها بـ 3 أيام': return 3;
+    case 'قبلها بأسبوع': return 7;
+    case 'قبلها بـ 10 أيام': return 10;
+    case 'قبلها بشهر': return 30;
+    default: return 1;
+  }
+}
+
+Future<void> _showEventReminder(String title, String detail, String interval, {bool hasCustomSound = false}) async {
+  if (_eventDialogShowing) return;
+  _eventDialogShowing = true;
+  _eventAnnouncing = true;
+
+  HapticFeedback.vibrate();
+  WakelockPlus.enable();
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('pending_event_announce');
+  } catch (_) {}
+
+  void speakAlert() {
+    if (!hasCustomSound) {
+      _speak("تنبيه: قربت مناسبة $title. $detail");
+    }
+    HapticFeedback.vibrate();
+  }
+
+  if (interval != 'بدون تنبيه' && !hasCustomSound) speakAlert();
+
+  _eventRepeatTimer?.cancel();
+  int secs = _getIntervalSeconds(interval);
+  if (secs > 0 && interval != 'مرة واحدة' && !hasCustomSound) {
+    _eventRepeatTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
+  }
+
+  if (!mounted) {
+    _eventDialogShowing = false;
+    _eventAnnouncing = false;
+    return;
+  }
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF1B2A4A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Row(children: [Icon(Icons.celebration, color: Color(0xFFC5A059), size: 30), SizedBox(width: 10), Text('تذكير بمناسبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
+      content: Text('قربت مناسبة: $title\n$detail', style: const TextStyle(color: Colors.white, fontSize: 16)),
+      actions: [
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
+          onPressed: () {
+            _eventRepeatTimer?.cancel();
+            _tts.stop();
+            WakelockPlus.disable();
+            _eventAnnouncing = false;
+            _eventDialogShowing = false;
+            _cancelNativeAlarm('مناسبة: $title');
+            Navigator.pop(ctx);
+          },
+          child: const Text('تمام', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        )
+      ],
+    ),
+  );
+}
+
+void _deleteTask(int index) {
+  final taskTitle = _tasks[index]['task'].toString();
+  setState(() => _tasks.removeAt(index));
+  _saveData();
+  _cancelNativeAlarm(taskTitle);
+  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
+}
+
+// 🆕 حذف موعد من الجدول الأسبوعي
+void _deleteWeeklyTask(int index) {
+  final task = _weeklySchedule[index];
+  final taskTitle = task['task'].toString();
+  final day = task['day'].toString();
+  setState(() => _weeklySchedule.removeAt(index));
+  _saveWeeklySchedule();
+  _cancelNativeAlarm('جدول_${day}_$taskTitle');
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف الموعد من $day')));
+}
+
+void _openSettingsScreen() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => SettingsScreen(
+        settings: _settings,
+        ttsVolume: _ttsVolume,
+        currentSecretaryName: _secretaryName,
+        currentIsUserMale: _isUserMale,
+        onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeBg, voiceGender, defaultInterval) async {
+          setState(() {
+            _settings.defaultReminderHour = hour;
+            _settings.defaultReminderMinute = minute;
+            _settings.voiceLevel = voiceLevel;
+            _settings.greetingEnabled = greeting;
+            _settings.adhanAlertEnabled = adhan;
+            _ttsVolume = ttsVol;
+            _settings.showAboveLockScreen = showLock;
+            _settings.shakeInBackgroundEnabled = shakeBg;
+            _settings.voiceGender = voiceGender;
+            _settings.defaultInterval = defaultInterval;
+          });
+          await _saveSettings();
+          await _scheduleAdhan30Days();
+          try {
+            if (showLock) {
+              await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
+            } else {
+              await _lockScreenChannel.invokeMethod('disableShowWhenLocked');
+            }
+          } catch (_) {}
+        },
+        onSaveSecretary: (name, voiceGender) async {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('secretary_name', name);
+          await prefs.setString('voice_gender', voiceGender);
+          setState(() {
+            _secretaryName = name;
+            _settings.voiceGender = voiceGender;
+          });
+        },
+      ),
+    ),
+  ).then((_) {
+    _configureVoice(skipGreeting: true);
+  });
+}
+
+// ═══════════════════════════════════════
+// إضافة موعد جديد (المهام اليومية)
+// ═══════════════════════════════════════
+void _addNewTaskDialog() {
+  _showTaskDialog();
+}
+
+void _editTaskDialog(int index) {
+  _showTaskDialog(taskIndex: index);
+}
+
+void _showTaskDialog({int? taskIndex}) {
+  Map<String, dynamic>? existingTask;
+  if (taskIndex != null) {
+    existingTask = _tasks[taskIndex];
+  }
+
+  TextEditingController taskCtrl = TextEditingController(
+    text: existingTask?['task']?.toString() ?? '',
+  );
+  TimeOfDay selectedTime = TimeOfDay.now();
+  if (existingTask != null) {
+    try {
+      final t = DateFormat('hh:mm a', 'ar').parse(existingTask['time'].toString());
+      selectedTime = TimeOfDay(hour: t.hour, minute: t.minute);
+    } catch (_) {}
+  }
+  String selectedRepeat = existingTask?['repeat'] ?? 'مرة واحدة';
+  String selectedInterval = existingTask?['repeatInterval'] ?? _settings.defaultInterval;
+  List<String> selectedDays = List<String>.from(existingTask?['customDays'] ?? []);
+  String? selectedSound = existingTask?['sound'];
+
+  final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'أسبوعي', 'شهري', 'مخصص'];
+  final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (context, setStateSB) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Text(taskIndex == null ? 'إضافة موعد جديد' : 'تعديل الموعد',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: taskCtrl, decoration: const InputDecoration(labelText: 'تفاصيل المهمة')),
+              const SizedBox(height: 15),
+              if (selectedInterval != 'بدون تنبيه') ...[
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Text('الوقت: ${selectedTime.format(context)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  TextButton.icon(icon: const Icon(Icons.access_time, color: Color(0xFFC5A059)), label: const Text('تحديد'), onPressed: () async {
+                    final t = await showTimePicker(context: context, initialTime: selectedTime);
+                    if (t != null) setStateSB(() => selectedTime = t);
+                  }),
+                ]),
+                const Divider(),
+                const Align(alignment: Alignment.centerRight, child: Text('التكرار:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedRepeat,
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  items: repeatOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                  onChanged: (val) => setStateSB(() => selectedRepeat = val ?? 'مرة واحدة'),
+                ),
+                if (selectedRepeat == 'مخصص') ...[
+                  const SizedBox(height: 10),
+                  const Align(alignment: Alignment.centerRight, child: Text('اختر الأيام:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                  const SizedBox(height: 5),
+                  Wrap(spacing: 5, runSpacing: 5, children: _weekDays.map((day) {
+                    final isSelected = selectedDays.contains(day);
+                    return FilterChip(
+                      label: Text(day, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.black87)),
+                      selected: isSelected,
+                      selectedColor: const Color(0xFF1B2A4A),
+                      onSelected: (v) => setStateSB(() {
+                        if (v) selectedDays.add(day);
+                        else selectedDays.remove(day);
+                      }),
+                    );
+                  }).toList()),
+                ],
+              ],
+              const Divider(),
+              const Align(alignment: Alignment.centerRight, child: Text('التنبيه المستمر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedInterval,
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                items: intervalOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval),
+              ),
+              const Divider(),
+              Row(children: [
+                const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
+                const SizedBox(width: 8),
+                const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    selectedSound == null ? 'الافتراضي' : 'مخصص',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    final result = await showDialog<String>(
+                      context: context,
+                      builder: (_) => SoundPickerDialog(currentUri: selectedSound),
+                    );
+                    if (result != null) {
+                      setStateSB(() => selectedSound = result == 'default' ? null : result);
+                    }
+                  },
+                  child: const Text('اختيار'),
+                ),
+              ]),
+            ],
+          ),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.record_voice_over, color: Color(0xFFC5A059)),
-            tooltip: 'اختيار الصوت',
-            onPressed: (_isListening || _isRecording) ? null : _openVoicePicker,
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+            onPressed: () {
+              if (taskCtrl.text.isNotEmpty) {
+                final scheduledDateTime = DateTime(
+                  _selectedDate.year, _selectedDate.month, _selectedDate.day,
+                  selectedTime.hour, selectedTime.minute,
+                );
+                if (taskIndex == null) {
+                  setState(() {
+                    _tasks.add({
+                      'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
+                      'task': taskCtrl.text,
+                      'time': selectedInterval == 'بدون تنبيه' ? 'بدون تنبيه' : selectedTime.format(context),
+                      'alarm': selectedInterval != 'بدون تنبيه',
+                      'scheduled': scheduledDateTime.toIso8601String(),
+                      'repeat': selectedRepeat,
+                      'repeatInterval': selectedInterval,
+                      'customDays': selectedDays,
+                      'sound': selectedSound,
+                    });
+                  });
+                } else {
+                  setState(() {
+                    _tasks[taskIndex] = {
+                      'date': existingTask!['date'],
+                      'task': taskCtrl.text,
+                      'time': selectedInterval == 'بدون تنبيه' ? 'بدون تنبيه' : selectedTime.format(context),
+                      'alarm': selectedInterval != 'بدون تنبيه',
+                      'scheduled': scheduledDateTime.toIso8601String(),
+                      'repeat': selectedRepeat,
+                      'repeatInterval': selectedInterval,
+                      'customDays': selectedDays,
+                      'sound': selectedSound,
+                    };
+                  });
+                }
+                _saveData();
+                if (selectedInterval != 'بدون تنبيه') {
+                  _scheduleContinuousAlarm(
+                    taskCtrl.text,
+                    scheduledDateTime,
+                    selectedRepeat,
+                    selectedInterval,
+                    selectedDays,
+                    soundUri: selectedSound,
+                  );
+                }
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('حفظ', style: TextStyle(color: Colors.white)),
           ),
-          IconButton(
-            icon: Icon(_isListening ? Icons.mic : Icons.mic_none, color: _isListening ? Colors.redAccent : const Color(0xFFC5A059)),
-            onPressed: _isRecording ? null : _listenVoiceCommand,
-          ),
-          IconButton(icon: const Icon(Icons.settings, color: Color(0xFFC5A059)), onPressed: _openSettingsScreen),
         ],
       ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 300),
-        transitionBuilder: (Widget child, Animation<double> animation) {
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(
-              position: Tween<Offset>(begin: const Offset(0.05, 0), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
-              child: child,
-            ),
-          );
-        },
-        child: KeyedSubtree(key: ValueKey<int>(_currentIndex), child: screens[_currentIndex]),
+    ),
+  );
+}
+
+// ═══════════════════════════════════════
+// 🆕 إضافة موعد للجدول الأسبوعي
+// ═══════════════════════════════════════
+void _addWeeklyTaskDialog(String day) {
+  _showWeeklyTaskDialog(day: day);
+}
+
+void _editWeeklyTaskDialog(int index) {
+  final task = _weeklySchedule[index];
+  _showWeeklyTaskDialog(day: task['day'].toString(), taskIndex: index);
+}
+
+void _showWeeklyTaskDialog({required String day, int? taskIndex}) {
+  Map<String, dynamic>? existingTask;
+  if (taskIndex != null) {
+    existingTask = _weeklySchedule[taskIndex];
+  }
+
+  TextEditingController taskCtrl = TextEditingController(
+    text: existingTask?['task']?.toString() ?? '',
+  );
+  TimeOfDay selectedTime = TimeOfDay.now();
+  if (existingTask != null) {
+    try {
+      final t = DateFormat('hh:mm a', 'ar').parse(existingTask['time'].toString());
+      selectedTime = TimeOfDay(hour: t.hour, minute: t.minute);
+    } catch (_) {}
+  }
+  String selectedInterval = existingTask?['repeatInterval'] ?? _settings.defaultInterval;
+  String? selectedSound = existingTask?['sound'];
+
+  final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (context, setStateSB) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Text(
+          taskIndex == null ? 'إضافة موعد ليوم $day' : 'تعديل موعد $day',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: taskCtrl, decoration: const InputDecoration(labelText: 'تفاصيل المهمة')),
+              const SizedBox(height: 15),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text('الوقت: ${selectedTime.format(context)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                TextButton.icon(icon: const Icon(Icons.access_time, color: Color(0xFFC5A059)), label: const Text('تحديد'), onPressed: () async {
+                  final t = await showTimePicker(context: context, initialTime: selectedTime);
+                  if (t != null) setStateSB(() => selectedTime = t);
+                }),
+              ]),
+              const Divider(),
+              const Align(alignment: Alignment.centerRight, child: Text('التنبيه المستمر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedInterval,
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                items: intervalOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval),
+              ),
+              const Divider(),
+              Row(children: [
+                const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
+                const SizedBox(width: 8),
+                const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    selectedSound == null ? 'الافتراضي' : 'مخصص',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    final result = await showDialog<String>(
+                      context: context,
+                      builder: (_) => SoundPickerDialog(currentUri: selectedSound),
+                    );
+                    if (result != null) {
+                      setStateSB(() => selectedSound = result == 'default' ? null : result);
+                    }
+                  },
+                  child: const Text('اختيار'),
+                ),
+              ]),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+            onPressed: () {
+              if (taskCtrl.text.isNotEmpty) {
+                final now = DateTime.now();
+                final dayIndex = _weekDays.indexOf(day);
+                final todayIndex = (now.weekday) % 7;
+                final daysAhead = (dayIndex - todayIndex + 7) % 7;
+                final targetDate = now.add(Duration(days: daysAhead));
+                final scheduledDateTime = DateTime(
+                  targetDate.year, targetDate.month, targetDate.day,
+                  selectedTime.hour, selectedTime.minute,
+                );
+
+                if (taskIndex == null) {
+                  setState(() {
+                    _weeklySchedule.add({
+                      'day': day,
+                      'task': taskCtrl.text,
+                      'time': selectedTime.format(context),
+                      'scheduled': scheduledDateTime.toIso8601String(),
+                      'repeatInterval': selectedInterval,
+                      'sound': selectedSound,
+                    });
+                  });
+                } else {
+                  setState(() {
+                    _weeklySchedule[taskIndex] = {
+                      'day': day,
+                      'task': taskCtrl.text,
+                      'time': selectedTime.format(context),
+                      'scheduled': scheduledDateTime.toIso8601String(),
+                      'repeatInterval': selectedInterval,
+                      'sound': selectedSound,
+                    };
+                  });
+                }
+                _saveWeeklySchedule();
+                if (selectedInterval != 'بدون تنبيه') {
+                  _scheduleWeeklyAlarm(
+                    taskCtrl.text,
+                    day,
+                    scheduledDateTime,
+                    selectedInterval,
+                    soundUri: selectedSound,
+                  );
+                }
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('حفظ', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
-      floatingActionButton: fab,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        selectedItemColor: const Color(0xFF1B2A4A),
-        unselectedItemColor: Colors.grey,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'التقويم'),
-          BottomNavigationBarItem(icon: Icon(Icons.book), label: 'يومياتي'),
-          BottomNavigationBarItem(icon: Icon(Icons.access_time_filled), label: 'الصلاة'),
-          BottomNavigationBarItem(icon: Icon(Icons.stars), label: 'المناسبات'),
-          BottomNavigationBarItem(icon: Icon(Icons.mic), label: 'المسجل'),
+    ),
+  );
+}
+
+// ═══════════════════════════════════════
+// إضافة/تعديل مناسبة
+// ═══════════════════════════════════════
+void _addSpecialEventDialog() {
+  _showEventDialog();
+}
+
+void _editSpecialEventDialog(int index) {
+  _showEventDialog(eventIndex: index);
+}
+
+void _showEventDialog({int? eventIndex}) {
+  Map<String, dynamic>? existingEvent;
+  if (eventIndex != null) {
+    existingEvent = _specialEvents[eventIndex];
+  }
+
+  TextEditingController titleCtrl = TextEditingController(text: existingEvent?['title']?.toString() ?? '');
+  TextEditingController detailCtrl = TextEditingController(text: existingEvent?['detail']?.toString() ?? '');
+  String selectedAdvanceReminder = existingEvent?['advanceReminder'] ?? 'قبلها بيوم';
+  String selectedInterval = existingEvent?['repeatInterval'] ?? 'مرة واحدة';
+  String? selectedSound = existingEvent?['sound'];
+  DateTime selectedEventDate = DateTime.now();
+  if (existingEvent != null) {
+    try {
+      selectedEventDate = DateTime.parse(existingEvent['eventDate'].toString());
+    } catch (_) {}
+  }
+  TimeOfDay reminderTime = TimeOfDay(
+    hour: existingEvent?['reminderHour'] ?? _settings.defaultReminderHour,
+    minute: existingEvent?['reminderMinute'] ?? _settings.defaultReminderMinute,
+  );
+
+  final List<String> reminderOptions = ['في نفس اليوم', 'قبلها بيوم', 'قبلها بـ 3 أيام', 'قبلها بأسبوع', 'قبلها بـ 10 أيام', 'قبلها بشهر'];
+  final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (context, setStateSB) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Text(eventIndex == null ? 'إضافة مناسبة' : 'تعديل المناسبة',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المناسبة')),
+              const SizedBox(height: 10),
+              TextField(controller: detailCtrl, decoration: const InputDecoration(labelText: 'التفاصيل/الاسم')),
+              const SizedBox(height: 15),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('التاريخ: ${DateFormat('yyyy/MM/dd').format(selectedEventDate)}'),
+                trailing: const Icon(Icons.calendar_today, color: Color(0xFF1B2A4A)),
+                onTap: () async {
+                  final picked = await showDatePicker(context: context, initialDate: selectedEventDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
+                  if (picked != null) setStateSB(() => selectedEventDate = picked);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('وقت التذكير: ${reminderTime.format(context)}'),
+                trailing: const Icon(Icons.access_time, color: Color(0xFF1B2A4A)),
+                onTap: () async {
+                  final picked = await showTimePicker(context: context, initialTime: reminderTime);
+                  if (picked != null) setStateSB(() => reminderTime = picked);
+                },
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedAdvanceReminder,
+                decoration: const InputDecoration(labelText: 'التذكير المسبق', border: OutlineInputBorder()),
+                items: reminderOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(),
+                onChanged: (val) => setStateSB(() => selectedAdvanceReminder = val ?? selectedAdvanceReminder),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedInterval,
+                decoration: const InputDecoration(labelText: 'التنبيه المستمر', border: OutlineInputBorder()),
+                items: intervalOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(),
+                onChanged: (val) => setStateSB(() => selectedInterval = val ?? 'مرة واحدة'),
+              ),
+              const Divider(),
+              Row(children: [
+                const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
+                const SizedBox(width: 8),
+                const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    selectedSound == null ? 'الافتراضي' : 'مخصص',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    final result = await showDialog<String>(
+                      context: context,
+                      builder: (_) => SoundPickerDialog(currentUri: selectedSound),
+                    );
+                    if (result != null) {
+                      setStateSB(() => selectedSound = result == 'default' ? null : result);
+                    }
+                  },
+                  child: const Text('اختيار'),
+                ),
+              ]),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+            onPressed: () {
+              if (titleCtrl.text.isNotEmpty) {
+                final newEvent = {
+                  'title': titleCtrl.text,
+                  'detail': detailCtrl.text.isEmpty ? 'مناسبة سنوية' : detailCtrl.text,
+                  'advanceReminder': selectedAdvanceReminder,
+                  'eventDate': selectedEventDate.toIso8601String(),
+                  'reminderHour': reminderTime.hour,
+                  'reminderMinute': reminderTime.minute,
+                  'repeatInterval': selectedInterval,
+                  'sound': selectedSound,
+                };
+                if (eventIndex == null) {
+                  setState(() => _specialEvents.add(newEvent));
+                } else {
+                  _cancelNativeAlarm('مناسبة: ${existingEvent!['title']}');
+                  setState(() => _specialEvents[eventIndex] = newEvent);
+                }
+                _saveData();
+                _scheduleEventReminder(newEvent);
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('حفظ', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+void _openDiaryPage(DateTime date) {
+  String key = DateFormat('yyyy-MM-dd').format(date);
+  String dayName = DateFormat('EEEE', 'ar').format(date);
+  String fullDate = DateFormat('dd MMMM yyyy', 'ar').format(date);
+  TextEditingController diaryCtrl = TextEditingController(text: _diaries[key] ?? '');
+  Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(
+    backgroundColor: Colors.white,
+    appBar: AppBar(backgroundColor: const Color(0xFF1B2A4A), foregroundColor: Colors.white, title: const Text('تدوين اليوميات'), actions: [
+      IconButton(icon: const Icon(Icons.check, color: Color(0xFFC5A059), size: 28), onPressed: () {
+        setState(() => _diaries[key] = diaryCtrl.text);
+        _saveData();
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الحفظ!')));
+      })
+    ]),
+    body: Padding(padding: const EdgeInsets.all(20.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Container(width: double.infinity, padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: const Color(0xFFF4F6F9), borderRadius: BorderRadius.circular(12), border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 4))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('اليوم: $dayName', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+        const SizedBox(height: 4),
+        Text('التاريخ: $fullDate', style: const TextStyle(fontSize: 15, color: Colors.grey, fontWeight: FontWeight.w600)),
+      ])),
+      const SizedBox(height: 20),
+      Expanded(child: TextField(controller: diaryCtrl, maxLines: null, expands: true, textAlignVertical: TextAlignVertical.top, style: const TextStyle(fontSize: 16, height: 1.6), decoration: const InputDecoration(hintText: 'اكتب يومياتك هنا...', border: InputBorder.none))),
+    ])),
+  )));
+}
+
+// ═══════════════════════════════════════
+// build() — يحتوي زر التبديل بين التقويم والجدول
+// ═══════════════════════════════════════
+@override
+Widget build(BuildContext context) {
+  final List<Widget> screens = [
+    _buildCalendarTab(),  // ← بيبدّل داخلياً بين التقويم والجدول
+    _buildDiariesTab(),
+    _buildPrayerTimesTab(),
+    _buildSpecialEventsTab(),
+    _buildRecorderTab(),
+  ];
+
+  Widget? fab;
+  if (_isRecording) {
+    fab = FloatingActionButton.extended(
+      onPressed: _stopRecording,
+      backgroundColor: Colors.red,
+      icon: const Icon(Icons.stop, color: Colors.white),
+      label: Text(
+        'إيقاف التسجيل (${_formatDuration(_recordingDuration)})',
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      ),
+    );
+  } else if (_currentIndex == 0 && _calendarSubView == 'calendar') {
+    fab = FloatingActionButton.extended(
+      onPressed: _addNewTaskDialog,
+      backgroundColor: const Color(0xFF1B2A4A),
+      icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
+      label: const Text('إضافة موعد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+    );
+  } else if (_currentIndex == 3) {
+    fab = FloatingActionButton.extended(
+      onPressed: _addSpecialEventDialog,
+      backgroundColor: const Color(0xFF1B2A4A),
+      icon: const Icon(Icons.card_giftcard, color: Color(0xFFC5A059)),
+      label: const Text('إضافة مناسبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  return Scaffold(
+    appBar: AppBar(
+      backgroundColor: const Color(0xFF1B2A4A),
+      foregroundColor: Colors.white,
+      elevation: 3,
+      title: Row(children: [
+        CircleAvatar(
+          radius: 22,
+          backgroundColor: const Color(0xFFC5A059),
+          child: ClipOval(
+            child: Image.asset(
+              _getSecretaryImage(_secretaryName, _settings.voiceGender),
+              width: 44, height: 44,
+              fit: BoxFit.cover,
+              alignment: const Alignment(0, -0.3),
+              errorBuilder: (c, e, s) => const Icon(Icons.face_3, color: Colors.white),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('$_secTitle: $_secretaryName', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text('هز الهاتف للتحدث', style: TextStyle(fontSize: 11, color: Colors.white70)),
+        ]),
+      ]),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.record_voice_over, color: Color(0xFFC5A059)),
+          tooltip: 'اختيار الصوت',
+          onPressed: (_isListening || _isRecording) ? null : _openVoicePicker,
+        ),
+        IconButton(
+          icon: Icon(_isListening ? Icons.mic : Icons.mic_none, color: _isListening ? Colors.redAccent : const Color(0xFFC5A059)),
+          onPressed: _isRecording ? null : _listenVoiceCommand,
+        ),
+        IconButton(icon: const Icon(Icons.settings, color: Color(0xFFC5A059)), onPressed: _openSettingsScreen),
+      ],
+    ),
+    body: AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(begin: const Offset(0.05, 0), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+            child: child,
+          ),
+        );
+      },
+      child: KeyedSubtree(key: ValueKey<int>(_currentIndex), child: screens[_currentIndex]),
+    ),
+    floatingActionButton: fab,
+    bottomNavigationBar: BottomNavigationBar(
+      currentIndex: _currentIndex,
+      onTap: (index) => setState(() => _currentIndex = index),
+      selectedItemColor: const Color(0xFF1B2A4A),
+      unselectedItemColor: Colors.grey,
+      selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+      type: BottomNavigationBarType.fixed,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'التقويم'),
+        BottomNavigationBarItem(icon: Icon(Icons.book), label: 'يومياتي'),
+        BottomNavigationBarItem(icon: Icon(Icons.access_time_filled), label: 'الصلاة'),
+        BottomNavigationBarItem(icon: Icon(Icons.stars), label: 'المناسبات'),
+        BottomNavigationBarItem(icon: Icon(Icons.mic), label: 'المسجل'),
+      ],
+    ),
+  );
+}
+    // ═══════════════════════════════════════
+  // التقويم والجدول الأسبوعي (تبديل)
+  // ═══════════════════════════════════════
+  String _calendarSubView = 'calendar';
+
+  Widget _buildCalendarTab() {
+    return Column(
+      children: [
+        // زر التبديل
+        Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _calendarSubView = 'calendar'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _calendarSubView == 'calendar' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.calendar_month,
+                          color: _calendarSubView == 'calendar' ? const Color(0xFFC5A059) : Colors.grey,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'التقويم',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: _calendarSubView == 'calendar' ? Colors.white : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _calendarSubView = 'weekly'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _calendarSubView == 'weekly' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.view_week,
+                          color: _calendarSubView == 'weekly' ? const Color(0xFFC5A059) : Colors.grey,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'الجدول الأسبوعي',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: _calendarSubView == 'weekly' ? Colors.white : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _calendarSubView == 'calendar'
+              ? _buildCalendarAndTasksTab()
+              : _buildWeeklyScheduleView(),
+        ),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════
+  // شاشة الجدول الأسبوعي
+  // ═══════════════════════════════════════
+  Widget _buildWeeklyScheduleView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)],
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+              ),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('📆 الجدول الأسبوعي',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                SizedBox(height: 5),
+                Text('اضغط على أي يوم لعرض مواعيده وإضافتها',
+                    style: TextStyle(color: Colors.white70, fontSize: 13)),
+              ],
+            ),
+          ),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.3,
+            ),
+            itemCount: _weekDays.length,
+            itemBuilder: (ctx, i) {
+              final day = _weekDays[i];
+              final dayTasks = _weeklySchedule.where((t) => t['day'] == day).toList();
+              return InkWell(
+                onTap: () => _openDayView(day),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          day,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: Color(0xFF1B2A4A),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: dayTasks.isEmpty
+                                ? Colors.grey.shade200
+                                : const Color(0xFFC5A059),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            dayTasks.isEmpty
+                                ? 'فاضي'
+                                : '${dayTasks.length} ${dayTasks.length == 1 ? "موعد" : "مواعيد"}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: dayTasks.isEmpty ? Colors.grey.shade700 : Colors.black,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
+  // ═══════════════════════════════════════
+  // شاشة يوم محدد من الجدول الأسبوعي
+  // ═══════════════════════════════════════
+  void _openDayView(String day) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StatefulBuilder(
+          builder: (context, setStateInner) {
+            final dayTasks = _weeklySchedule.where((t) => t['day'] == day).toList();
+            return Scaffold(
+              appBar: AppBar(
+                title: Text('مواعيد يوم $day',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                backgroundColor: const Color(0xFF1B2A4A),
+                foregroundColor: Colors.white,
+              ),
+              body: dayTasks.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.event_busy, size: 80, color: Colors.grey.shade400),
+                          const SizedBox(height: 15),
+                          Text(
+                            'مفيش مواعيد في يوم $day',
+                            style: const TextStyle(color: Colors.grey, fontSize: 15),
+                          ),
+                          const SizedBox(height: 25),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1B2A4A),
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
+                            label: const Text('إضافة موعد',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            onPressed: () async {
+                              await _addWeeklyTaskDialog(day);
+                              setStateInner(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: dayTasks.length,
+                      itemBuilder: (ctx, i) {
+                        final task = dayTasks[i];
+                        final globalIndex = _weeklySchedule.indexOf(task);
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: const Border(
+                                right: BorderSide(color: Color(0xFFC5A059), width: 5)),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)
+                            ],
+                          ),
+                          child: ListTile(
+                            leading: const Icon(Icons.alarm, color: Color(0xFF1B2A4A)),
+                            title: Text(task['task'].toString(),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 15)),
+                            subtitle: Text(
+                              '${task['time']} • ${task['repeatInterval']}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 12),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.blue),
+                                  onPressed: () async {
+                                    await _editWeeklyTaskDialog(globalIndex);
+                                    setStateInner(() {});
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  onPressed: () async {
+                                    _deleteWeeklyTask(globalIndex);
+                                    setStateInner(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+              floatingActionButton: dayTasks.isNotEmpty
+                  ? FloatingActionButton.extended(
+                      onPressed: () async {
+                        await _addWeeklyTaskDialog(day);
+                        setStateInner(() {});
+                      },
+                      backgroundColor: const Color(0xFF1B2A4A),
+                      icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
+                      label: const Text('إضافة موعد',
+                          style: TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.bold)),
+                    )
+                  : null,
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════
+  // التقويم والمهام (القديم)
+  // ═══════════════════════════════════════
   Widget _buildCalendarAndTasksTab() {
     String formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
     String currentTime = DateFormat('hh:mm a', 'ar').format(DateTime.now());
@@ -4201,50 +4546,157 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         Container(
           margin: const EdgeInsets.all(12),
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)], begin: Alignment.topRight, end: Alignment.bottomLeft), borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4))]),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)],
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4))
+            ],
+          ),
           child: Row(children: [
-            Container(width: 70, height: 70, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFFC5A059), width: 2), image: DecorationImage(image: AssetImage(_getSecretaryImage(_secretaryName, _settings.voiceGender)), fit: BoxFit.cover, alignment: const Alignment(0, -0.3)))),
+            Container(
+              width: 70, height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFC5A059), width: 2),
+                image: DecorationImage(
+                  image: AssetImage(
+                      _getSecretaryImage(_secretaryName, _settings.voiceGender)),
+                  fit: BoxFit.cover,
+                  alignment: const Alignment(0, -0.3),
+                ),
+              ),
+            ),
             const SizedBox(width: 15),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('مرحباً بك $userTitle! 👋', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-              const SizedBox(height: 4),
-              Text('الوقت: $currentTime', style: const TextStyle(fontSize: 13, color: Color(0xFFC5A059), fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              Text('📳 هُز الهاتف أو نادِ باسم $_secTitle.', style: const TextStyle(fontSize: 11, color: Colors.white70)),
-            ])),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('مرحباً بك $userTitle! 👋',
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white)),
+                  const SizedBox(height: 4),
+                  Text('الوقت: $currentTime',
+                      style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFFC5A059),
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text('📳 هُز الهاتف أو نادِ باسم $_secTitle.',
+                      style: const TextStyle(
+                          fontSize: 11, color: Colors.white70)),
+                ],
+              ),
+            ),
           ]),
         ),
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: const Color(0xFFFFF8EE), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFC5A059), width: 2), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8)]),
-          child: CalendarDatePicker(key: ValueKey(formattedDate), initialDate: _selectedDate, firstDate: DateTime(2024), lastDate: DateTime(2030), onDateChanged: (d) => setState(() => _selectedDate = d)),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8EE),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFC5A059), width: 2),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8)
+            ],
+          ),
+          child: CalendarDatePicker(
+            key: ValueKey(formattedDate),
+            initialDate: _selectedDate,
+            firstDate: DateTime(2024),
+            lastDate: DateTime(2030),
+            onDateChanged: (d) => setState(() => _selectedDate = d),
+          ),
         ),
         const SizedBox(height: 15),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text('جدول أعمال اليوم:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
-            Chip(label: Text('${dayTasks.length} مواعيد', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: const Color(0xFF1B2A4A)),
-          ]),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('جدول أعمال اليوم:',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1B2A4A))),
+              Chip(
+                label: Text('${dayTasks.length} مواعيد',
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold)),
+                backgroundColor: const Color(0xFF1B2A4A),
+              ),
+            ],
+          ),
         ),
         dayTasks.isEmpty
-            ? Container(padding: const EdgeInsets.all(30), child: Column(children: [Icon(Icons.event_note, size: 50, color: Colors.grey.shade400), const SizedBox(height: 8), const Text('لا توجد مواعيد', style: TextStyle(color: Colors.grey, fontSize: 14))]))
+            ? Container(
+                padding: const EdgeInsets.all(30),
+                child: Column(children: [
+                  Icon(Icons.event_note,
+                      size: 50, color: Colors.grey.shade400),
+                  const SizedBox(height: 8),
+                  const Text('لا توجد مواعيد',
+                      style: TextStyle(color: Colors.grey, fontSize: 14))
+                ]))
             : ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: dayTasks.length,
                 itemBuilder: (ctx, i) => Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 5)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5)]),
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: const Border(
+                        right: BorderSide(
+                            color: Color(0xFFC5A059), width: 5)),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 5)
+                    ],
+                  ),
                   child: ListTile(
-                    leading: const Icon(Icons.alarm, color: Color(0xFF1B2A4A)),
-                    title: Text(dayTasks[i]['task'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    subtitle: Text('${dayTasks[i]['time']} • ${dayTasks[i]['repeat'] ?? 'مرة واحدة'}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      dayTasks[i]['alarm'] == true ? const Icon(Icons.notifications_active, color: Colors.redAccent) : const Icon(Icons.notifications_off, color: Colors.grey),
-                      IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _editTaskDialog(_tasks.indexOf(dayTasks[i]))),
-                      IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => _deleteTask(_tasks.indexOf(dayTasks[i]))),
-                    ]),
+                    leading:
+                        const Icon(Icons.alarm, color: Color(0xFF1B2A4A)),
+                    title: Text(dayTasks[i]['task'].toString(),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
+                    subtitle: Text(
+                        '${dayTasks[i]['time']} • ${dayTasks[i]['repeat'] ?? 'مرة واحدة'}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 12)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        dayTasks[i]['alarm'] == true
+                            ? const Icon(Icons.notifications_active,
+                                color: Colors.redAccent)
+                            : const Icon(Icons.notifications_off,
+                                color: Colors.grey),
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.blue),
+                          onPressed: () => _editTaskDialog(
+                              _tasks.indexOf(dayTasks[i])),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline,
+                              color: Colors.red),
+                          onPressed: () =>
+                              _deleteTask(_tasks.indexOf(dayTasks[i])),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -4253,96 +4705,260 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     );
   }
 
+  // ═══════════════════════════════════════
+  // يومياتي
+  // ═══════════════════════════════════════
   Widget _buildDiariesTab() {
-    return SingleChildScrollView(child: Column(children: [
-      Container(width: double.infinity, margin: const EdgeInsets.all(12), padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFF1B2A4A), borderRadius: BorderRadius.circular(12)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('📖 مفكرة اليوميات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-        SizedBox(height: 5),
-        Text('اختر أي يوم لفتح صفحة التدوين.', style: TextStyle(color: Colors.white70, fontSize: 13)),
-      ])),
-      Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFC5A059), width: 1.5), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)]),
-        child: CalendarDatePicker(initialDate: _diaryDate, firstDate: DateTime(2024), lastDate: DateTime(2030), onDateChanged: (selectedDay) { setState(() => _diaryDate = selectedDay); _openDiaryPage(selectedDay); }),
-      ),
-      const SizedBox(height: 12),
-      Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), minimumSize: const Size.fromHeight(48), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), icon: const Icon(Icons.edit_note, color: Color(0xFFC5A059)), label: const Text('فتح يومية اليوم', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), onPressed: () => _openDiaryPage(_diaryDate))),
-      const SizedBox(height: 20),
-    ]));
+    return SingleChildScrollView(
+      child: Column(children: [
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B2A4A),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('📖 مفكرة اليوميات',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white)),
+              SizedBox(height: 5),
+              Text('اختر أي يوم لفتح صفحة التدوين.',
+                  style: TextStyle(color: Colors.white70, fontSize: 13)),
+            ],
+          ),
+        ),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)
+            ],
+          ),
+          child: CalendarDatePicker(
+            initialDate: _diaryDate,
+            firstDate: DateTime(2024),
+            lastDate: DateTime(2030),
+            onDateChanged: (selectedDay) {
+              setState(() => _diaryDate = selectedDay);
+              _openDiaryPage(selectedDay);
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B2A4A),
+              minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.edit_note, color: Color(0xFFC5A059)),
+            label: const Text('فتح يومية اليوم',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            onPressed: () => _openDiaryPage(_diaryDate),
+          ),
+        ),
+        const SizedBox(height: 20),
+      ]),
+    );
   }
 
+  // ═══════════════════════════════════════
+  // الصلاة
+  // ═══════════════════════════════════════
   Widget _buildPrayerTimesTab() {
     return FutureBuilder<Map<String, String>>(
       future: _calculatePrayerTimes(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
         final times = snapshot.data!;
-        return ListView(padding: const EdgeInsets.all(16), children: [
-          Container(padding: const EdgeInsets.all(18), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF0F172A)]), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFC5A059), width: 1.5)), child: const Column(children: [Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.access_time_filled, color: Color(0xFFC5A059), size: 22), SizedBox(width: 8), Text('مواقيت الصلاة', style: TextStyle(color: Color(0xFFC5A059), fontSize: 16, fontWeight: FontWeight.bold))])])),
-          const SizedBox(height: 15),
-          _prayerCard('الفجر', times['fajr']!, Icons.wb_twilight),
-          _prayerCard('الشروق', times['sunrise']!, Icons.wb_sunny_outlined),
-          _prayerCard('الظهر', times['dhuhr']!, Icons.wb_sunny),
-          _prayerCard('العصر', times['asr']!, Icons.filter_drama),
-          _prayerCard('المغرب', times['maghrib']!, Icons.nights_stay_outlined),
-          _prayerCard('العشاء', times['isha']!, Icons.nights_stay),
-        ]);
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [Color(0xFF1B2A4A), Color(0xFF0F172A)]),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: const Color(0xFFC5A059), width: 1.5),
+              ),
+              child: const Column(children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.access_time_filled,
+                        color: Color(0xFFC5A059), size: 22),
+                    SizedBox(width: 8),
+                    Text('مواقيت الصلاة',
+                        style: TextStyle(
+                            color: Color(0xFFC5A059),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold))
+                  ],
+                )
+              ]),
+            ),
+            const SizedBox(height: 15),
+            _prayerCard('الفجر', times['fajr']!, Icons.wb_twilight),
+            _prayerCard('الشروق', times['sunrise']!, Icons.wb_sunny_outlined),
+            _prayerCard('الظهر', times['dhuhr']!, Icons.wb_sunny),
+            _prayerCard('العصر', times['asr']!, Icons.filter_drama),
+            _prayerCard('المغرب', times['maghrib']!, Icons.nights_stay_outlined),
+            _prayerCard('العشاء', times['isha']!, Icons.nights_stay),
+          ],
+        );
       },
     );
   }
 
   Widget _prayerCard(String title, String time, IconData icon) {
-    return Container(margin: const EdgeInsets.symmetric(vertical: 6), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)]), child: ListTile(leading: Icon(icon, color: const Color(0xFF1B2A4A)), title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)), trailing: Text(time, style: const TextStyle(color: Color(0xFF1B2A4A), fontSize: 16, fontWeight: FontWeight.bold))));
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)
+        ],
+      ),
+      child: ListTile(
+        leading: Icon(icon, color: const Color(0xFF1B2A4A)),
+        title: Text(title,
+            style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Colors.black87)),
+        trailing: Text(time,
+            style: const TextStyle(
+                color: Color(0xFF1B2A4A),
+                fontSize: 16,
+                fontWeight: FontWeight.bold)),
+      ),
+    );
   }
 
+  // ═══════════════════════════════════════
+  // المناسبات
+  // ═══════════════════════════════════════
   Widget _buildSpecialEventsTab() {
-    return ListView(padding: const EdgeInsets.all(16), children: [
-      const Text('المناسبات والتنبيهات:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
-      const SizedBox(height: 10),
-      InkWell(onTap: _addSpecialEventDialog, child: Card(elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), child: const ListTile(leading: Icon(Icons.cake, color: Colors.pink, size: 32), title: Text('أعياد الميلاد (اضغط للإضافة)', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('تنبيهات مسبقة'), trailing: Icon(Icons.add_circle, color: Color(0xFF1B2A4A))))),
-      const SizedBox(height: 20),
-      const Text('قائمة المناسبات:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
-      const SizedBox(height: 10),
-      if (_specialEvents.isEmpty)
-        Container(padding: const EdgeInsets.all(30), child: Column(children: [Icon(Icons.stars, size: 50, color: Colors.grey.shade400), const SizedBox(height: 8), const Text('لا توجد مناسبات', style: TextStyle(color: Colors.grey, fontSize: 14))]))
-      else
-        ..._specialEvents.asMap().entries.map((entry) {
-          final i = entry.key;
-          final e = entry.value;
-          final eventDate = DateTime.tryParse(e['eventDate'] ?? '') ?? DateTime.now();
-          final now = DateTime.now();
-          final thisYear = DateTime(now.year, eventDate.month, eventDate.day);
-          final nextYear = DateTime(now.year + 1, eventDate.month, eventDate.day);
-          final nextOccurrence = thisYear.isAfter(now) ? thisYear : nextYear;
-          final remaining = _formatRemaining(nextOccurrence);
-          final reminderTime = '${(e['reminderHour'] ?? 18).toString().padLeft(2, '0')}:${(e['reminderMinute'] ?? 0).toString().padLeft(2, '0')}';
-          final repeatInterval = e['repeatInterval'] ?? 'مرة واحدة';
-          return Container(
-            margin: const EdgeInsets.symmetric(vertical: 5),
-            decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.amber.shade300)),
-            child: ListTile(
-              leading: const Icon(Icons.stars, color: Color(0xFFC5A059), size: 28),
-              title: Text(e['title'].toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('${e['detail']} • ${DateFormat('yyyy/MM/dd').format(eventDate)}\nالتذكير: ${e['advanceReminder']} الساعة $reminderTime • $remaining\nالتنبيه المستمر: $repeatInterval'),
-              isThreeLine: true,
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _editSpecialEventDialog(i)),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () {
-                    final title = e['title'].toString();
-                    setState(() => _specialEvents.removeAt(i));
-                    _saveData();
-                    _cancelNativeAlarm('مناسبة: $title');
-                  },
-                ),
-              ]),
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('المناسبات والتنبيهات:',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1B2A4A))),
+        const SizedBox(height: 10),
+        InkWell(
+          onTap: _addSpecialEventDialog,
+          child: Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            child: const ListTile(
+              leading: Icon(Icons.cake, color: Colors.pink, size: 32),
+              title: Text('أعياد الميلاد (اضغط للإضافة)',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('تنبيهات مسبقة'),
+              trailing:
+                  Icon(Icons.add_circle, color: Color(0xFF1B2A4A)),
             ),
-          );
-        }),
-    ]);
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text('قائمة المناسبات:',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1B2A4A))),
+        const SizedBox(height: 10),
+        if (_specialEvents.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(30),
+            child: Column(children: [
+              Icon(Icons.stars, size: 50, color: Colors.grey.shade400),
+              const SizedBox(height: 8),
+              const Text('لا توجد مناسبات',
+                  style: TextStyle(color: Colors.grey, fontSize: 14))
+            ]),
+          )
+        else
+          ..._specialEvents.asMap().entries.map((entry) {
+            final i = entry.key;
+            final e = entry.value;
+            final eventDate =
+                DateTime.tryParse(e['eventDate'] ?? '') ?? DateTime.now();
+            final now = DateTime.now();
+            final thisYear = DateTime(now.year, eventDate.month, eventDate.day);
+            final nextYear =
+                DateTime(now.year + 1, eventDate.month, eventDate.day);
+            final nextOccurrence =
+                thisYear.isAfter(now) ? thisYear : nextYear;
+            final remaining = _formatRemaining(nextOccurrence);
+            final reminderTime =
+                '${(e['reminderHour'] ?? 18).toString().padLeft(2, '0')}:${(e['reminderMinute'] ?? 0).toString().padLeft(2, '0')}';
+            final repeatInterval = e['repeatInterval'] ?? 'مرة واحدة';
+            return Container(
+              margin: const EdgeInsets.symmetric(vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: ListTile(
+                leading: const Icon(Icons.stars,
+                    color: Color(0xFFC5A059), size: 28),
+                title: Text(e['title'].toString(),
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                    '${e['detail']} • ${DateFormat('yyyy/MM/dd').format(eventDate)}\nالتذكير: ${e['advanceReminder']} الساعة $reminderTime • $remaining\nالتنبيه المستمر: $repeatInterval'),
+                isThreeLine: true,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.blue),
+                      onPressed: () => _editSpecialEventDialog(i),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline,
+                          color: Colors.red),
+                      onPressed: () {
+                        _cancelNativeAlarm('مناسبة: ${e['title']}');
+                        setState(() => _specialEvents.removeAt(i));
+                        _saveData();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+      ],
+    );
   }
 
+  // ═══════════════════════════════════════
+  // المسجل
+  // ═══════════════════════════════════════
   Widget _buildRecorderTab() {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -4351,33 +4967,92 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF0F172A)]),
+              gradient: const LinearGradient(
+                  colors: [Color(0xFF1B2A4A), Color(0xFF0F172A)]),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
+              border: Border.all(
+                  color: const Color(0xFFC5A059), width: 1.5),
             ),
             child: Column(
               children: [
-                Icon(_isRecording ? Icons.fiber_manual_record : Icons.mic, color: _isRecording ? Colors.redAccent : const Color(0xFFC5A059), size: 40),
+                Icon(
+                  _isRecording
+                      ? Icons.fiber_manual_record
+                      : Icons.mic,
+                  color: _isRecording
+                      ? Colors.redAccent
+                      : const Color(0xFFC5A059),
+                  size: 40,
+                ),
                 const SizedBox(height: 10),
-                Text(_isRecording ? 'جاري التسجيل...' : 'اضغط للتسجيل', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(
+                  _isRecording ? 'جاري التسجيل...' : 'اضغط للتسجيل',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 8),
-                Text(_formatDuration(_recordingDuration), style: const TextStyle(color: Color(0xFFC5A059), fontSize: 24, fontWeight: FontWeight.bold)),
+                Text(
+                  _formatDuration(_recordingDuration),
+                  style: const TextStyle(
+                      color: Color(0xFFC5A059),
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 15),
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: _isRecording ? Colors.red : const Color(0xFFC5A059), minimumSize: const Size.fromHeight(50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  onPressed: _isRecording ? _stopRecording : _startRecording,
-                  icon: Icon(_isRecording ? Icons.stop : Icons.fiber_manual_record, color: _isRecording ? Colors.white : Colors.black),
-                  label: Text(_isRecording ? 'إيقاف التسجيل' : 'بدء التسجيل', style: TextStyle(color: _isRecording ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isRecording
+                        ? Colors.red
+                        : const Color(0xFFC5A059),
+                    minimumSize: const Size.fromHeight(50),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed:
+                      _isRecording ? _stopRecording : _startRecording,
+                  icon: Icon(
+                    _isRecording
+                        ? Icons.stop
+                        : Icons.fiber_manual_record,
+                    color: _isRecording ? Colors.white : Colors.black,
+                  ),
+                  label: Text(
+                    _isRecording ? 'إيقاف التسجيل' : 'بدء التسجيل',
+                    style: TextStyle(
+                        color: _isRecording ? Colors.white : Colors.black,
+                        fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 20),
-          const Align(alignment: Alignment.centerRight, child: Text('التسجيلات المحفوظة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A)))),
+          const Align(
+            alignment: Alignment.centerRight,
+            child: Text('التسجيلات المحفوظة:',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1B2A4A))),
+          ),
           const SizedBox(height: 10),
           Expanded(
             child: _recordings.isEmpty
-                ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.mic_none, size: 60, color: Colors.grey.shade400), const SizedBox(height: 10), const Text('لا توجد تسجيلات', style: TextStyle(color: Colors.grey, fontSize: 14))]))
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.mic_none,
+                            size: 60, color: Colors.grey.shade400),
+                        const SizedBox(height: 10),
+                        const Text('لا توجد تسجيلات',
+                            style: TextStyle(
+                                color: Colors.grey, fontSize: 14)),
+                      ],
+                    ),
+                  )
                 : ListView.builder(
                     itemCount: _recordings.length,
                     itemBuilder: (ctx, i) {
@@ -4386,78 +5061,181 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                       final isPlaying = _currentlyPlayingPath == path;
                       String dateText = '';
                       try {
-                        dateText = DateFormat('yyyy/MM/dd - HH:mm').format(DateTime.parse(rec['createdAt'].toString()));
+                        dateText = DateFormat('yyyy/MM/dd - HH:mm').format(
+                            DateTime.parse(rec['createdAt'].toString()));
                       } catch (_) {}
                       return Container(
                         margin: const EdgeInsets.symmetric(vertical: 5),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: isPlaying ? const Color(0xFFC5A059) : Colors.grey.shade300, width: isPlaying ? 2 : 1), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)]),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: isPlaying
+                                  ? const Color(0xFFC5A059)
+                                  : Colors.grey.shade300,
+                              width: isPlaying ? 2 : 1),
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black.withOpacity(0.04),
+                                blurRadius: 6)
+                          ],
+                        ),
                         child: Column(
                           children: [
                             ListTile(
-                              leading: IconButton(icon: Icon(isPlaying ? Icons.stop_circle : Icons.play_circle_fill, color: const Color(0xFF1B2A4A), size: 32), onPressed: () => _playRecording(path)),
-                              title: Text(rec['name'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              subtitle: Text('المدة: ${rec['duration']}\n$dateText', style: const TextStyle(fontSize: 12)),
+                              leading: IconButton(
+                                icon: Icon(
+                                    isPlaying
+                                        ? Icons.stop_circle
+                                        : Icons.play_circle_fill,
+                                    color: const Color(0xFF1B2A4A),
+                                    size: 32),
+                                onPressed: () => _playRecording(path),
+                              ),
+                              title: Text(rec['name'].toString(),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14)),
+                              subtitle: Text(
+                                  'المدة: ${rec['duration']}\n$dateText',
+                                  style: const TextStyle(fontSize: 12)),
                               isThreeLine: true,
-                              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                                IconButton(icon: const Icon(Icons.share, color: Colors.green, size: 22), onPressed: () => _shareRecording(path)),
-                                IconButton(icon: const Icon(Icons.edit, color: Colors.blue, size: 22), onPressed: () => _renameRecording(i)),
-                                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22), onPressed: () => _deleteRecording(i)),
-                              ]),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.share,
+                                        color: Colors.green, size: 22),
+                                    onPressed: () =>
+                                        _shareRecording(path),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit,
+                                        color: Colors.blue, size: 22),
+                                    onPressed: () =>
+                                        _renameRecording(i),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.red,
+                                        size: 22),
+                                    onPressed: () =>
+                                        _deleteRecording(i),
+                                  ),
+                                ],
+                              ),
                             ),
                             if (isPlaying)
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
                                 child: Column(children: [
                                   Slider(
-                                    value: _currentPosition.inSeconds.toDouble().clamp(0, _currentDuration.inSeconds.toDouble()),
+                                    value: _currentPosition.inSeconds
+                                        .toDouble()
+                                        .clamp(
+                                            0,
+                                            _currentDuration.inSeconds
+                                                .toDouble()),
                                     min: 0,
-                                    max: _currentDuration.inSeconds > 0 ? _currentDuration.inSeconds.toDouble() : 1,
+                                    max: _currentDuration.inSeconds > 0
+                                        ? _currentDuration.inSeconds
+                                            .toDouble()
+                                        : 1,
                                     activeColor: const Color(0xFFC5A059),
-                                    onChanged: (val) { _audioPlayer.seek(Duration(seconds: val.toInt())); },
+                                    onChanged: (val) {
+                                      _audioPlayer.seek(Duration(
+                                          seconds: val.toInt()));
+                                    },
                                   ),
-                                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                                    Text(_formatDuration(_currentPosition), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                    Text(_formatDuration(_currentDuration), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                  ]),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                          _formatDuration(
+                                              _currentPosition),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey)),
+                                      Text(
+                                          _formatDuration(
+                                              _currentDuration),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey)),
+                                    ],
+                                  ),
                                   const SizedBox(height: 8),
                                   Row(children: [
-                                    const Icon(Icons.volume_up, size: 20, color: Color(0xFF1B2A4A)),
+                                    const Icon(Icons.volume_up,
+                                        size: 20,
+                                        color: Color(0xFF1B2A4A)),
                                     Expanded(
                                       child: Slider(
                                         value: _playbackVolume,
                                         min: 0.0,
                                         max: 1.0,
-                                        activeColor: const Color(0xFFC5A059),
+                                        activeColor:
+                                            const Color(0xFFC5A059),
                                         onChanged: (val) {
-                                          setState(() => _playbackVolume = val);
+                                          setState(() =>
+                                              _playbackVolume = val);
                                           _audioPlayer.setVolume(val);
                                           _saveSettings();
                                         },
                                       ),
                                     ),
-                                    Text('${(_playbackVolume * 100).toInt()}%', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    Text(
+                                        '${(_playbackVolume * 100).toInt()}%',
+                                        style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey)),
                                   ]),
                                   const SizedBox(height: 4),
-                                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                    const Text('السرعة:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                    const SizedBox(width: 8),
-                                    ...[0.5, 1.0, 1.5, 2.0].map((speed) {
-                                      final isSelected = _playbackSpeed == speed;
-                                      return Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                                        child: ChoiceChip(
-                                          label: Text('${speed}x', style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : Colors.black87)),
-                                          selected: isSelected,
-                                          selectedColor: const Color(0xFF1B2A4A),
-                                          onSelected: (v) {
-                                            setState(() => _playbackSpeed = speed);
-                                            _audioPlayer.setPlaybackRate(speed);
-                                            _saveSettings();
-                                          },
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ]),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                    children: [
+                                      const Text('السرعة:',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight:
+                                                  FontWeight.bold)),
+                                      const SizedBox(width: 8),
+                                      ...[0.5, 1.0, 1.5, 2.0].map((speed) {
+                                        final isSelected =
+                                            _playbackSpeed == speed;
+                                        return Padding(
+                                          padding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 3),
+                                          child: ChoiceChip(
+                                            label: Text('${speed}x',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: isSelected
+                                                        ? Colors.white
+                                                        : Colors
+                                                            .black87)),
+                                            selected: isSelected,
+                                            selectedColor:
+                                                const Color(0xFF1B2A4A),
+                                            onSelected: (v) {
+                                              setState(() =>
+                                                  _playbackSpeed =
+                                                      speed);
+                                              _audioPlayer
+                                                  .setPlaybackRate(
+                                                      speed);
+                                              _saveSettings();
+                                            },
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ],
+                                  ),
                                 ]),
                               ),
                           ],
