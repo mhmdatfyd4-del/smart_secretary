@@ -2347,8 +2347,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     } catch (_) {
       _isWakeWordListening = false;
     }
-  }
-}
   Future<bool> _handleSocialReply(String cmd) async {
     final userTitle = _userTitle;
     final secTitle = _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
