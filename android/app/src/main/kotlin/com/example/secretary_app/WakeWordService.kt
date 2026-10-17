@@ -1,0 +1,153 @@
+package com.example.secretary_app
+
+import android.app.*
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
+import android.os.IBinder
+import android.os.PowerManager
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import androidx.core.app.NotificationCompat
+
+class WakeWordService : Service() {
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var wakeWord: String = "يا سكرتير"
+    private var secretaryName: String = "سارة"
+    private var listenMode: String = "always"
+    private var wakeWordTrigger: String = "both"
+    private var voiceGender: String = "أنثى"
+    private var intent: Intent? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    private var isPaused = false
+    private val pauseReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.example.secretary_app.PAUSE_WAKE_WORD") {
+                isPaused = true
+                speechRecognizer?.cancel()
+            }
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+        
+        // ✅ هنا الاسم اللي إحنا عايزينه
+        val notification = NotificationCompat.Builder(this, "WakeWordChannel")
+            .setContentTitle("سكرتيري") 
+            .setContentText("بيستنى تنادي عليه...")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        startForeground(100, notification)
+
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Secretary::WakeWordWakeLock")
+        wakeLock?.acquire()
+
+        registerReceiver(pauseReceiver, android.content.IntentFilter("com.example.secretary_app.PAUSE_WAKE_WORD"))
+
+        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        wakeWord = prefs.getString("flutter.custom_wake_word", "يا سكرتير") ?: "يا سكرتير"
+        secretaryName = prefs.getString("flutter.secretary_name", "سارة") ?: "سارة"
+        listenMode = prefs.getString("flutter.wake_word_mode", "always") ?: "always"
+        wakeWordTrigger = prefs.getString("flutter.wake_word_trigger", "both") ?: "both"
+        voiceGender = prefs.getString("flutter.voice_gender", "أنثى") ?: "أنثى"
+
+        initSpeechRecognizer()
+    }
+
+    private fun initSpeechRecognizer() {
+        if (SpeechRecognizer.isRecognitionAvailable(this)) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-EG")
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            }
+
+            speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onError(error: Int) { startListening() }
+                override fun onResults(results: Bundle?) { processResults(results); startListening() }
+                override fun onPartialResults(partialResults: Bundle?) { processResults(partialResults) }
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            startListening()
+        }
+    }
+
+    fun startListening() {
+        if (listenMode == "off" || isPaused) return
+        speechRecognizer?.cancel()
+        speechRecognizer?.startListening(intent)
+    }
+
+    fun stopListening() {
+        speechRecognizer?.cancel()
+    }
+
+    private fun processResults(results: Bundle?) {
+        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+        if (matches != null && matches.isNotEmpty()) {
+            val text = matches[0].toLowerCase()
+            
+            val nameNorm = secretaryName.lowercase()
+            val secTitle = if (voiceGender == "ذكر") "سكرتير" else "سكرتيرة"
+            val secTitleAlt = if (voiceGender == "ذكر") "سكرتير" else "سكرتيره"
+            
+            val isNameMatch = text.contains(nameNorm) || text.contains("يا $nameNorm") ||
+                              text.contains(secTitle) || text.contains("يا $secTitle") ||
+                              text.contains(secTitleAlt) || text.contains("يا $secTitleAlt")
+            
+            val isCustomMatch = text.contains(wakeWord.lowercase())
+            
+            var isTriggered = false
+            when (wakeWordTrigger) {
+                "name_only" -> isTriggered = isNameMatch
+                "custom_only" -> isTriggered = isCustomMatch
+                else -> isTriggered = isNameMatch || isCustomMatch
+            }
+            
+            if (isTriggered) {
+                isPaused = true
+                stopListening()
+                
+                val openIntent = Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra("WAKE_WORD_DETECTED", true)
+                }
+                startActivity(openIntent)
+                
+                val broadcastIntent = Intent("com.example.secretary_app.WAKE_WORD_DETECTED")
+                sendBroadcast(broadcastIntent)
+            }
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val serviceChannel = NotificationChannel("WakeWordChannel", "Wake Word Service", NotificationManager.IMPORTANCE_LOW)
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(serviceChannel)
+        }
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        speechRecognizer?.destroy()
+        try { unregisterReceiver(pauseReceiver) } catch (_: Exception) {}
+        if (wakeLock?.isHeld == true) wakeLock?.release()
+        super.onDestroy()
+    }
+}
