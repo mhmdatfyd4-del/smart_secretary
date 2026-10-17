@@ -1623,74 +1623,73 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _scheduleAdhan30Days() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('adhan_schedule_start_date', DateTime.now().toIso8601String());
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('adhan_schedule_start_date', DateTime.now().toIso8601String());
 
-      for (int day = 0; day < 30; day++) {
-        for (final prayer in ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']) {
-          await _notifications.cancel((day * 10) + prayer.hashCode);
-        }
-      }
+    // ✅ مسح كل الإشعارات القديمة عشان نلغي أي لخبطة سابقة
+    await _notifications.cancelAll();
 
-      final prayers = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
-      final names = {
-        'fajr': 'الفجر', 'dhuhr': 'الظهر', 'asr': 'العصر',
-        'maghrib': 'المغرب', 'isha': 'العشاء',
+    // ✅ أرقام ثابتة لكل صلاة عشان نمنع أي تعارض
+    final prayerIds = {'fajr': 1, 'dhuhr': 2, 'asr': 3, 'maghrib': 4, 'isha': 5};
+    final prayers = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
+    final names = {
+      'fajr': 'الفجر', 'dhuhr': 'الظهر', 'asr': 'العصر',
+      'maghrib': 'المغرب', 'isha': 'العشاء',
+    };
+    final sounds = {
+      'fajr': 'adhan_fajr', 'dhuhr': 'adhan_dhuhr', 'asr': 'adhan_asr',
+      'maghrib': 'adhan_maghrib', 'isha': 'adhan_isha',
+    };
+
+    final now = DateTime.now();
+
+    for (int day = 0; day < 30; day++) {
+      final targetDate = now.add(Duration(days: day));
+      final coordinates = Coordinates(30.0444, 31.2357);
+      final date = DateComponents.from(targetDate);
+      final params = CalculationMethod.egyptian.getParameters();
+      params.madhab = Madhab.shafi;
+      final prayerTimes = PrayerTimes(coordinates, date, params);
+
+      final Map<String, DateTime> dayPrayers = {
+        'fajr': prayerTimes.fajr, 'dhuhr': prayerTimes.dhuhr,
+        'asr': prayerTimes.asr, 'maghrib': prayerTimes.maghrib, 'isha': prayerTimes.isha,
       };
-      final sounds = {
-        'fajr': 'adhan_fajr', 'dhuhr': 'adhan_dhuhr', 'asr': 'adhan_asr',
-        'maghrib': 'adhan_maghrib', 'isha': 'adhan_isha',
-      };
 
-      final now = DateTime.now();
+      for (final prayer in prayers) {
+        final prayerTime = dayPrayers[prayer]!;
+        if (prayerTime.isBefore(now)) continue;
 
-      for (int day = 0; day < 30; day++) {
-        final targetDate = now.add(Duration(days: day));
-        final coordinates = Coordinates(30.0444, 31.2357);
-        final date = DateComponents.from(targetDate);
-        final params = CalculationMethod.egyptian.getParameters();
-        params.madhab = Madhab.shafi;
-        final prayerTimes = PrayerTimes(coordinates, date, params);
+        final androidDetails = AndroidNotificationDetails(
+          'adhan_channel_v3',
+          'تنبيهات الأذان v3',
+          channelDescription: 'تنبيهات مواقيت الصلاة',
+          importance: Importance.max,
+          priority: Priority.max,
+          playSound: true,
+          sound: RawResourceAndroidNotificationSound(sounds[prayer]),
+          enableVibration: true,
+          category: AndroidNotificationCategory.alarm,
+          autoCancel: false,
+          ongoing: true,
+          fullScreenIntent: true,
+          visibility: NotificationVisibility.public,
+          audioAttributesUsage: AudioAttributesUsage.alarm,
+        );
 
-        final Map<String, DateTime> dayPrayers = {
-          'fajr': prayerTimes.fajr, 'dhuhr': prayerTimes.dhuhr,
-          'asr': prayerTimes.asr, 'maghrib': prayerTimes.maghrib, 'isha': prayerTimes.isha,
-        };
-
-        for (final prayer in prayers) {
-          final prayerTime = dayPrayers[prayer]!;
-          if (prayerTime.isBefore(now)) continue;
-
-          final androidDetails = AndroidNotificationDetails(
-            'adhan_channel_v3',
-            'تنبيهات الأذان v3',
-            channelDescription: 'تنبيهات مواقيت الصلاة',
-            importance: Importance.max,
-            priority: Priority.max,
-            playSound: true,
-            sound: RawResourceAndroidNotificationSound(sounds[prayer]),
-            enableVibration: true,
-            category: AndroidNotificationCategory.alarm,
-            autoCancel: false,
-            ongoing: true,
-            fullScreenIntent: true,
-            visibility: NotificationVisibility.public,
-            audioAttributesUsage: AudioAttributesUsage.alarm,
-          );
-
-          await _notifications.zonedSchedule(
-            (day * 10) + prayer.hashCode,
-            'حان الآن موعد صلاة ${names[prayer]}',
-            'موعد صلاة ${names[prayer]}',
-            tz.TZDateTime.from(prayerTime, tz.local),
-            NotificationDetails(android: androidDetails),
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-            uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-          );
-        }
+        await _notifications.zonedSchedule(
+          (day * 10) + prayerIds[prayer]!, // ✅ استخدام الرقم الثابت بدل الـ hash
+          'حان الآن موعد صلاة ${names[prayer]}',
+          'موعد صلاة ${names[prayer]}',
+          tz.TZDateTime.from(prayerTime, tz.local),
+          NotificationDetails(android: androidDetails),
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        );
       }
-    } catch (_) {}
+    }
+  } catch (_) {}
   }
 
   Future<void> _initSpeech() async {
@@ -1734,53 +1733,56 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _checkAdhanTime() async {
-    if (!_settings.adhanAlertEnabled) return;
-    try {
-      final times = await _calculatePrayerTimes();
-      final now = DateTime.now();
-      final currentTime = DateFormat('HH:mm').format(now);
+  if (!_settings.adhanAlertEnabled) return;
+  try {
+    final times = await _calculatePrayerTimes();
+    final now = DateTime.now();
+    final currentTime = DateFormat('HH:mm').format(now);
 
-      final Map<String, String> prayerMap = {
-        'الفجر': times['fajr'] ?? '', 'الظهر': times['dhuhr'] ?? '',
-        'العصر': times['asr'] ?? '', 'المغرب': times['maghrib'] ?? '', 'العشاء': times['isha'] ?? '',
-      };
+    final Map<String, String> prayerMap = {
+      'الفجر': times['fajr'] ?? '', 'الظهر': times['dhuhr'] ?? '',
+      'العصر': times['asr'] ?? '', 'المغرب': times['maghrib'] ?? '', 'العشاء': times['isha'] ?? '',
+    };
 
-      final prefs = await SharedPreferences.getInstance();
-      final startDateStr = prefs.getString('adhan_schedule_start_date');
-      int dayOffset = 0;
-      if (startDateStr != null) {
-        final startDate = DateTime.parse(startDateStr);
-        dayOffset = now.difference(startDate).inDays;
-      }
+    final prefs = await SharedPreferences.getInstance();
+    final startDateStr = prefs.getString('adhan_schedule_start_date');
+    int dayOffset = 0;
+    if (startDateStr != null) {
+      final startDate = DateTime.parse(startDateStr);
+      dayOffset = now.difference(startDate).inDays;
+    }
 
-      for (final entry in prayerMap.entries) {
-        try {
-          final prayerTime = DateFormat('hh:mm a', 'ar').parse(entry.value);
-          final prayerDateTime = DateTime(now.year, now.month, now.day, prayerTime.hour, prayerTime.minute);
-          final prayerStr = DateFormat('HH:mm').format(prayerDateTime);
-          final oneMinBeforeStr = DateFormat('HH:mm').format(prayerDateTime.subtract(const Duration(minutes: 1)));
+    final prayerIds = {'fajr': 1, 'dhuhr': 2, 'asr': 3, 'maghrib': 4, 'isha': 5};
 
-          if (oneMinBeforeStr == currentTime && dayOffset >= 0 && dayOffset < 30) {
-            final key = _prayerKey(entry.key);
-            if (key.isNotEmpty) {
-              await _notifications.cancel((dayOffset * 10) + key.hashCode);
-            }
+    for (final entry in prayerMap.entries) {
+      try {
+        // ✅ قراءة الوقت بنظام 24 ساعة (يمنع اللخبطة بين ص و م)
+        final prayerTime = DateFormat('HH:mm').parse(entry.value);
+        final prayerDateTime = DateTime(now.year, now.month, now.day, prayerTime.hour, prayerTime.minute);
+        final prayerStr = DateFormat('HH:mm').format(prayerDateTime);
+        final oneMinBeforeStr = DateFormat('HH:mm').format(prayerDateTime.subtract(const Duration(minutes: 1)));
+
+        if (oneMinBeforeStr == currentTime && dayOffset >= 0 && dayOffset < 30) {
+          final key = _prayerKey(entry.key);
+          if (key.isNotEmpty) {
+            await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
+          }
+        }
+
+        if (prayerStr == currentTime && !_adhanAlerted) {
+          _adhanAlerted = true;
+
+          final key = _prayerKey(entry.key);
+          if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
+            await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
           }
 
-          if (prayerStr == currentTime && !_adhanAlerted) {
-            _adhanAlerted = true;
-
-            final key = _prayerKey(entry.key);
-            if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
-              await _notifications.cancel((dayOffset * 10) + key.hashCode);
-            }
-
-            await _speak("حان الآن موعد أذان ${entry.key}");
-            Future.delayed(const Duration(minutes: 2), () => _adhanAlerted = false);
-          }
-        } catch (_) {}
-      }
-    } catch (_) {}
+          await _speak("حان الآن موعد أذان ${entry.key}");
+          Future.delayed(const Duration(minutes: 2), () => _adhanAlerted = false);
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
   }
 
   Future<void> _loadData() async {
@@ -3640,19 +3642,33 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<Map<String, String>> _calculatePrayerTimes() async {
-    try {
-      final coordinates = Coordinates(30.0444, 31.2357);
-      final date = DateComponents.from(DateTime.now());
-      final params = CalculationMethod.egyptian.getParameters();
-      params.madhab = Madhab.shafi;
-      final prayerTimes = PrayerTimes(coordinates, date, params);
-      final format = DateFormat('hh:mm a', 'ar');
-      return {'fajr': format.format(prayerTimes.fajr), 'sunrise': format.format(prayerTimes.sunrise), 'dhuhr': format.format(prayerTimes.dhuhr), 'asr': format.format(prayerTimes.asr), 'maghrib': format.format(prayerTimes.maghrib), 'isha': format.format(prayerTimes.isha)};
-    } catch (e) {
-      final format = DateFormat('hh:mm a', 'ar');
-      final now = DateTime.now();
-      return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
-    }
+  try {
+    final coordinates = Coordinates(30.0444, 31.2357);
+    final date = DateComponents.from(DateTime.now());
+    final params = CalculationMethod.egyptian.getParameters();
+    params.madhab = Madhab.shafi;
+    final prayerTimes = PrayerTimes(coordinates, date, params);
+    
+    final format = DateFormat('HH:mm'); 
+    
+    return {'fajr': format.format(prayerTimes.fajr), 'sunrise': format.format(prayerTimes.sunrise), 'dhuhr': format.format(prayerTimes.dhuhr), 'asr': format.format(prayerTimes.asr), 'maghrib': format.format(prayerTimes.maghrib), 'isha': format.format(prayerTimes.isha)};
+  } catch (e) {
+    final format = DateFormat('HH:mm');
+    final now = DateTime.now();
+    return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
+  }
+  }
+  String _formatTimeForDisplay(String time24) {
+  try {
+    final parts = time24.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = parts[1];
+    final isPm = hour >= 12;
+    final h12 = hour % 12 == 0 ? 12 : hour % 12;
+    return '$h12:$minute ${isPm ? 'م' : 'ص'}';
+  } catch (_) {
+    return time24;
+  }
   }
 
   Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
@@ -4859,43 +4875,43 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Widget _buildPrayerTimesTab() {
-    return FutureBuilder<Map<String, String>>(
-      future: _calculatePrayerTimes(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        final times = snapshot.data!;
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF0F172A)]),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
-              ),
-              child: const Column(children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.access_time_filled, color: Color(0xFFC5A059), size: 22),
-                    SizedBox(width: 8),
-                    Text('مواقيت الصلاة', style: TextStyle(color: Color(0xFFC5A059), fontSize: 16, fontWeight: FontWeight.bold))
-                  ],
-                )
-              ]),
+  return FutureBuilder<Map<String, String>>(
+    future: _calculatePrayerTimes(),
+    builder: (context, snapshot) {
+      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+      final times = snapshot.data!;
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF0F172A)]),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
             ),
-            const SizedBox(height: 15),
-            _prayerCard('الفجر', times['fajr']!, Icons.wb_twilight),
-            _prayerCard('الشروق', times['sunrise']!, Icons.wb_sunny_outlined),
-            _prayerCard('الظهر', times['dhuhr']!, Icons.wb_sunny),
-            _prayerCard('العصر', times['asr']!, Icons.filter_drama),
-            _prayerCard('المغرب', times['maghrib']!, Icons.nights_stay_outlined),
-            _prayerCard('العشاء', times['isha']!, Icons.nights_stay),
-          ],
-        );
-      },
-    );
+            child: const Column(children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.access_time_filled, color: Color(0xFFC5A059), size: 22),
+                  SizedBox(width: 8),
+                  Text('مواقيت الصلاة', style: TextStyle(color: Color(0xFFC5A059), fontSize: 16, fontWeight: FontWeight.bold))
+                ],
+              )
+            ]),
+          ),
+          const SizedBox(height: 15),
+          _prayerCard('الفجر', _formatTimeForDisplay(times['fajr']!), Icons.wb_twilight),
+          _prayerCard('الشروق', _formatTimeForDisplay(times['sunrise']!), Icons.wb_sunny_outlined),
+          _prayerCard('الظهر', _formatTimeForDisplay(times['dhuhr']!), Icons.wb_sunny),
+          _prayerCard('العصر', _formatTimeForDisplay(times['asr']!), Icons.filter_drama),
+          _prayerCard('المغرب', _formatTimeForDisplay(times['maghrib']!), Icons.nights_stay_outlined),
+          _prayerCard('العشاء', _formatTimeForDisplay(times['isha']!), Icons.nights_stay),
+        ],
+      );
+    },
+  );
   }
 
   Widget _prayerCard(String title, String time, IconData icon) {
