@@ -31,6 +31,7 @@ const MethodChannel _lockScreenChannel = MethodChannel('com.example.secretary_ap
 const MethodChannel _settingsChannel = MethodChannel('com.example.secretary_app/settings');
 const MethodChannel _nativeAlarmChannel = MethodChannel('com.example.secretary_app/native_alarm');
 const MethodChannel _soundChannel = MethodChannel('com.example.secretary_app/sounds');
+const MethodChannel _wakeWordChannel = MethodChannel('com.example.secretary_app/wake_word');
 
 const Map<String, String> _maleNamesMap = {
   'محمد': 'assets/mohamed.jpg',
@@ -200,24 +201,30 @@ class AppSettings {
   bool shakeInBackgroundEnabled;
   String voiceGender;
   String defaultInterval;
+  String customWakeWord;
+  String wakeWordMode;
+  String wakeWordTrigger;
 
   AppSettings({
     this.defaultReminderHour = 18,
     this.defaultReminderMinute = 0,
-    this.voiceLevel = 'متوسط', // تم تغيير الافتراضي ليتوافق مع القائمة الجديدة
+    this.voiceLevel = 'متوسط',
     this.greetingEnabled = true,
     this.adhanAlertEnabled = true,
     this.showAboveLockScreen = false,
     this.shakeInBackgroundEnabled = true,
     this.voiceGender = 'ذكر',
     this.defaultInterval = 'كل 10 ثواني',
+    this.customWakeWord = 'يا سكرتير',
+    this.wakeWordMode = 'off',
+    this.wakeWordTrigger = 'both',
   });
 
   double get speechRate {
     switch (voiceLevel) {
       case 'بطيء': return 0.35;
       case 'متوسط': return 0.5;
-      default: return 0.7; // سريع
+      default: return 0.7;
     }
   }
 
@@ -231,7 +238,7 @@ class AppSettings {
 }
 
 // ═══════════════════════════════════════
-// SettingsScreen (بدون خانات اختيار الصوت)
+// SettingsScreen
 // ═══════════════════════════════════════
 class SettingsScreen extends StatefulWidget {
   final AppSettings settings;
@@ -242,7 +249,8 @@ class SettingsScreen extends StatefulWidget {
     int hour, int minute, String voiceLevel,
     bool greeting, bool adhan, double ttsVol,
     bool showLock, bool shakeBg, String voiceGender,
-    String defaultInterval,
+    String defaultInterval, String customWakeWord,
+    String wakeWordMode, String wakeWordTrigger,
   ) onSave;
   final Future<void> Function(String name, String voiceGender) onSaveSecretary;
 
@@ -272,7 +280,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late String _voiceGender;
   late String _defaultInterval;
   late String _secretaryName;
+  late String _wakeWordMode;
+  late String _wakeWordTrigger;
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _wakeWordController = TextEditingController();
 
   late int _origDefaultReminderHour;
   late int _origDefaultReminderMinute;
@@ -285,6 +296,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late String _origVoiceGender;
   late String _origDefaultInterval;
   late String _origSecretaryName;
+  late String _origWakeWordMode;
+  late String _origWakeWordTrigger;
 
   String? _defaultAlarmSound;
   String? _defaultEventSound;
@@ -304,6 +317,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _defaultInterval = widget.settings.defaultInterval;
     _secretaryName = widget.currentSecretaryName;
     _nameController.text = _secretaryName;
+    _wakeWordMode = widget.settings.wakeWordMode;
+    _wakeWordTrigger = widget.settings.wakeWordTrigger;
+    _wakeWordController.text = widget.settings.customWakeWord;
 
     _origDefaultReminderHour = _defaultReminderHour;
     _origDefaultReminderMinute = _defaultReminderMinute;
@@ -316,6 +332,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _origVoiceGender = _voiceGender;
     _origDefaultInterval = _defaultInterval;
     _origSecretaryName = _secretaryName;
+    _origWakeWordMode = _wakeWordMode;
+    _origWakeWordTrigger = _wakeWordTrigger;
 
     _loadSavedSounds();
   }
@@ -354,6 +372,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _wakeWordController.dispose();
     super.dispose();
   }
 
@@ -368,7 +387,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _shakeInBackground != _origShakeInBackground ||
         _voiceGender != _origVoiceGender ||
         _defaultInterval != _origDefaultInterval ||
-        _nameController.text != _origSecretaryName;
+        _nameController.text != _origSecretaryName ||
+        _wakeWordMode != _origWakeWordMode ||
+        _wakeWordTrigger != _origWakeWordTrigger ||
+        _wakeWordController.text != widget.settings.customWakeWord;
   }
 
   Future<void> _save() async {
@@ -380,7 +402,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _defaultReminderHour, _defaultReminderMinute, _voiceLevel,
       _greetingEnabled, _adhanAlertEnabled, _ttsVolume,
       _showAboveLockScreen, _shakeInBackground, _voiceGender,
-      _defaultInterval,
+      _defaultInterval, _wakeWordController.text.trim(), _wakeWordMode, _wakeWordTrigger,
     );
     await widget.onSaveSecretary(newName, _voiceGender);
 
@@ -406,7 +428,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // نوع السكرتير
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -441,8 +462,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // صوت المنبه الافتراضي
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -459,8 +478,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('🎵 صوت المنبه الافتراضي',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          const Text('🎵 صوت المنبه الافتراضي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                           const SizedBox(height: 4),
                           Text(
                             _defaultAlarmSound == null
@@ -482,8 +500,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // صوت المناسبات الافتراضي
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -500,8 +516,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('🎵 صوت المناسبات الافتراضي',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          const Text('🎵 صوت المناسبات الافتراضي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                           const SizedBox(height: 4),
                           Text(
                             _defaultEventSound == null
@@ -523,8 +538,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // السكرتير واسمه
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -571,8 +584,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // وقت التذكير الافتراضي
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -597,8 +608,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // التنبيه المستمر الافتراضي
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -625,8 +634,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // سرعة الصوت
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -652,8 +659,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // صوت السكرتير
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -682,8 +687,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // الجملة الترحيبية
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -696,8 +699,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // تنبيه الأذان
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -710,8 +711,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // إظهار فوق شاشة القفل
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(
@@ -734,8 +733,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // الهز في الخلفية
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(
@@ -757,9 +754,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (v) => setState(() => _shakeInBackground = v),
             ),
           ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(children: [
+                    Icon(Icons.mic_external_on, color: Color(0xFF1B2A4A), size: 26),
+                    SizedBox(width: 10),
+                    Text('وضع النداء الدائم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  ]),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _wakeWordMode,
+                    decoration: const InputDecoration(labelText: 'حالة النداء', border: OutlineInputBorder()),
+                    items: [
+                      DropdownMenuItem(value: 'off', child: Text('متوقف')),
+                      DropdownMenuItem(value: 'app_open', child: Text('التطبيق مفتوح فقط')),
+                      DropdownMenuItem(value: 'background', child: Text('التطبيق في الخلفية')),
+                      DropdownMenuItem(value: 'always', child: Text('دائماً (حتى لو مقفول)')),
+                    ],
+                    onChanged: (val) => setState(() => _wakeWordMode = val ?? 'off'),
+                  ),
+                  if (_wakeWordMode != 'off') ...[
+                    const Divider(height: 30),
+                    const Text('إيه اللي يخلي السكرتير يصحى؟', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      value: _wakeWordTrigger,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: [
+                        DropdownMenuItem(value: 'both', child: Text('الاسم + الكلمة السرية')),
+                        DropdownMenuItem(value: 'name_only', child: Text('اسم السكرتير فقط')),
+                        DropdownMenuItem(value: 'custom_only', child: Text('الكلمة السرية فقط')),
+                      ],
+                      onChanged: (val) => setState(() => _wakeWordTrigger = val ?? 'both'),
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: _wakeWordController,
+                      enabled: _wakeWordTrigger != 'name_only',
+                      decoration: InputDecoration(
+                        labelText: 'الكلمة السرية',
+                        hintText: 'مثال: يا بطل، يا سكرتير',
+                        border: const OutlineInputBorder(),
+                        fillColor: _wakeWordTrigger == 'name_only' ? Colors.grey.shade200 : null,
+                        filled: _wakeWordTrigger == 'name_only',
+                      ),
+                    ),
+                  ]
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 30),
-
-          // زر الحفظ
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: _hasChanges ? const Color(0xFF1B2A4A) : Colors.grey,
@@ -797,7 +849,7 @@ class SecretaryApp extends StatelessWidget {
       );
     }
     return MaterialApp(
-      title: 'سكرتيرك الخاص',
+      title: 'سكرتيري', // ✅ الاسم الجديد
       debugShowCheckedModeBanner: false,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
@@ -1043,7 +1095,7 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
           children: [
             const Icon(Icons.verified_user_sharp, size: 80, color: Color(0xFF1B2A4A)),
             const SizedBox(height: 15),
-            const Text('مرحباً بك في نظام سكرتيرك الخاص',
+            const Text('مرحباً بك في نظام سكرتيري', // ✅ الاسم الجديد
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
             const SizedBox(height: 15),
@@ -1059,7 +1111,8 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('يتطلب تشغيل سكرتيرك الخاص الأذونات التالية:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      Text('يتطلب تشغيل سكرتيري الأذونات التالية:', // ✅ الاسم الجديد
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                       SizedBox(height: 10),
                       Text('• المايكروفون: للاستجابة عند الهز أو المناداة باسم السكرتير.', style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 5),
@@ -1417,6 +1470,7 @@ class _SoundPickerDialogState extends State<SoundPickerDialog> {
     );
   }
 }
+
 // ═══════════════════════════════════════
 // MainDashboard
 // ═══════════════════════════════════════
@@ -1438,6 +1492,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   bool _speechReady = false;
   bool _starting = false;
   bool _isListening = false;
+  bool _isWakeWordListening = false;
   int _currentIndex = 0;
   DateTime _selectedDate = DateTime.now();
   DateTime _diaryDate = DateTime.now();
@@ -1480,7 +1535,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   double _playbackSpeed = 1.0;
   double _ttsVolume = 1.0;
 
-  // ✅ مع إضافة "الحد" للأحد
   static const Map<String, List<String>> _dayKeywords = {
     'السبت': ['السبت', 'سبت', 'يوم السبت', 'السبت الجاي', 'السبت الجاى'],
     'الأحد': ['الاحد', 'الأحد', 'الحد', 'حد', 'يوم الاحد', 'يوم الحد'],
@@ -1507,6 +1561,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     WidgetsBinding.instance.addObserver(this);
     _secretaryName = widget.secretaryName;
     _isUserMale = widget.isUserMale;
+
+    _wakeWordChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onWakeWordDetected') {
+        if (mounted) {
+          setState(() => _isListening = false);
+          _listenVoiceCommand();
+        }
+      }
+    });
+
     _initAll();
   }
 
@@ -1520,6 +1584,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _scheduleAdhan30Days();
     Future.delayed(const Duration(seconds: 3), _checkPendingEventAnnouncements);
     Future.delayed(const Duration(seconds: 2), _checkPendingAlarm);
+    Future.delayed(const Duration(seconds: 3), _startWakeWordLoop);
   }
 
   @override
@@ -1529,8 +1594,15 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       _isInBackground = false;
       Future.delayed(const Duration(milliseconds: 500), _checkPendingAlarm);
       Future.delayed(const Duration(seconds: 2), _checkPendingEventAnnouncements);
+      if (_settings.wakeWordMode != 'off') {
+        Future.delayed(const Duration(seconds: 2), _startWakeWordLoop);
+      }
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
       _isInBackground = true;
+      if (_settings.wakeWordMode == 'app_open' && _isWakeWordListening) {
+        _speech.stop();
+        _isWakeWordListening = false;
+      }
     }
   }
 
@@ -1623,85 +1695,87 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _scheduleAdhan30Days() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('adhan_schedule_start_date', DateTime.now().toIso8601String());
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('adhan_schedule_start_date', DateTime.now().toIso8601String());
 
-    // ✅ مسح كل الإشعارات القديمة عشان نلغي أي لخبطة سابقة
-    await _notifications.cancelAll();
+      await _notifications.cancelAll();
 
-    // ✅ أرقام ثابتة لكل صلاة عشان نمنع أي تعارض
-    final prayerIds = {'fajr': 1, 'dhuhr': 2, 'asr': 3, 'maghrib': 4, 'isha': 5};
-    final prayers = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
-    final names = {
-      'fajr': 'الفجر', 'dhuhr': 'الظهر', 'asr': 'العصر',
-      'maghrib': 'المغرب', 'isha': 'العشاء',
-    };
-    final sounds = {
-      'fajr': 'adhan_fajr', 'dhuhr': 'adhan_dhuhr', 'asr': 'adhan_asr',
-      'maghrib': 'adhan_maghrib', 'isha': 'adhan_isha',
-    };
-
-    final now = DateTime.now();
-
-    for (int day = 0; day < 30; day++) {
-      final targetDate = now.add(Duration(days: day));
-      final coordinates = Coordinates(30.0444, 31.2357);
-      final date = DateComponents.from(targetDate);
-      final params = CalculationMethod.egyptian.getParameters();
-      params.madhab = Madhab.shafi;
-      final prayerTimes = PrayerTimes(coordinates, date, params);
-
-      final Map<String, DateTime> dayPrayers = {
-        'fajr': prayerTimes.fajr, 'dhuhr': prayerTimes.dhuhr,
-        'asr': prayerTimes.asr, 'maghrib': prayerTimes.maghrib, 'isha': prayerTimes.isha,
+      final prayerIds = {'fajr': 1, 'dhuhr': 2, 'asr': 3, 'maghrib': 4, 'isha': 5};
+      final prayers = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
+      final names = {
+        'fajr': 'الفجر', 'dhuhr': 'الظهر', 'asr': 'العصر',
+        'maghrib': 'المغرب', 'isha': 'العشاء',
+      };
+      final sounds = {
+        'fajr': 'adhan_fajr', 'dhuhr': 'adhan_dhuhr', 'asr': 'adhan_asr',
+        'maghrib': 'adhan_maghrib', 'isha': 'adhan_isha',
       };
 
-      for (final prayer in prayers) {
-        final prayerTime = dayPrayers[prayer]!;
-        if (prayerTime.isBefore(now)) continue;
+      final now = DateTime.now();
 
-        final androidDetails = AndroidNotificationDetails(
-          'adhan_channel_v3',
-          'تنبيهات الأذان v3',
-          channelDescription: 'تنبيهات مواقيت الصلاة',
-          importance: Importance.max,
-          priority: Priority.max,
-          playSound: true,
-          sound: RawResourceAndroidNotificationSound(sounds[prayer]),
-          enableVibration: true,
-          category: AndroidNotificationCategory.alarm,
-          autoCancel: false,
-          ongoing: true,
-          fullScreenIntent: true,
-          visibility: NotificationVisibility.public,
-          audioAttributesUsage: AudioAttributesUsage.alarm,
-        );
+      for (int day = 0; day < 30; day++) {
+        final targetDate = now.add(Duration(days: day));
+        final coordinates = Coordinates(30.0444, 31.2357);
+        final date = DateComponents.from(targetDate);
+        final params = CalculationMethod.egyptian.getParameters();
+        params.madhab = Madhab.shafi;
+        final prayerTimes = PrayerTimes(coordinates, date, params);
 
-        await _notifications.zonedSchedule(
-          (day * 10) + prayerIds[prayer]!, // ✅ استخدام الرقم الثابت بدل الـ hash
-          'حان الآن موعد صلاة ${names[prayer]}',
-          'موعد صلاة ${names[prayer]}',
-          tz.TZDateTime.from(prayerTime, tz.local),
-          NotificationDetails(android: androidDetails),
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        );
+        final Map<String, DateTime> dayPrayers = {
+          'fajr': prayerTimes.fajr, 'dhuhr': prayerTimes.dhuhr,
+          'asr': prayerTimes.asr, 'maghrib': prayerTimes.maghrib, 'isha': prayerTimes.isha,
+        };
+
+        for (final prayer in prayers) {
+          final prayerTime = dayPrayers[prayer]!;
+          if (prayerTime.isBefore(now)) continue;
+
+          final androidDetails = AndroidNotificationDetails(
+            'adhan_channel_v4',
+            'تنبيهات الأذان v4',
+            channelDescription: 'تنبيهات مواقيت الصلاة',
+            importance: Importance.max,
+            priority: Priority.max,
+            playSound: true,
+            sound: RawResourceAndroidNotificationSound(sounds[prayer]),
+            enableVibration: true,
+            category: AndroidNotificationCategory.alarm,
+            autoCancel: false,
+            ongoing: true,
+            fullScreenIntent: true,
+            visibility: NotificationVisibility.public,
+            audioAttributesUsage: AudioAttributesUsage.alarm,
+          );
+
+          await _notifications.zonedSchedule(
+            (day * 10) + prayerIds[prayer]!,
+            'حان الآن موعد صلاة ${names[prayer]}',
+            'موعد صلاة ${names[prayer]}',
+            tz.TZDateTime.from(prayerTime, tz.local),
+            NotificationDetails(android: androidDetails),
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          );
+        }
       }
-    }
-  } catch (_) {}
+    } catch (_) {}
   }
 
   Future<void> _initSpeech() async {
     try {
       _speechReady = await _speech.initialize(
         onStatus: (status) {
-          if ((status == 'done' || status == 'notListening') && mounted && _isListening) {
-            setState(() => _isListening = false);
+          if ((status == 'done' || status == 'notListening') && mounted) {
+            if (_isListening) setState(() => _isListening = false);
+            if (_isWakeWordListening) _isWakeWordListening = false;
           }
         },
         onError: (error) {
-          if (mounted) setState(() => _isListening = false);
+          if (mounted) {
+            if (_isListening) setState(() => _isListening = false);
+            if (_isWakeWordListening) _isWakeWordListening = false;
+          }
         },
       );
     } catch (_) {
@@ -1733,56 +1807,55 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _checkAdhanTime() async {
-  if (!_settings.adhanAlertEnabled) return;
-  try {
-    final times = await _calculatePrayerTimes();
-    final now = DateTime.now();
-    final currentTime = DateFormat('HH:mm').format(now);
+    if (!_settings.adhanAlertEnabled) return;
+    try {
+      final times = await _calculatePrayerTimes();
+      final now = DateTime.now();
+      final currentTime = DateFormat('HH:mm').format(now);
 
-    final Map<String, String> prayerMap = {
-      'الفجر': times['fajr'] ?? '', 'الظهر': times['dhuhr'] ?? '',
-      'العصر': times['asr'] ?? '', 'المغرب': times['maghrib'] ?? '', 'العشاء': times['isha'] ?? '',
-    };
+      final Map<String, String> prayerMap = {
+        'الفجر': times['fajr'] ?? '', 'الظهر': times['dhuhr'] ?? '',
+        'العصر': times['asr'] ?? '', 'المغرب': times['maghrib'] ?? '', 'العشاء': times['isha'] ?? '',
+      };
 
-    final prefs = await SharedPreferences.getInstance();
-    final startDateStr = prefs.getString('adhan_schedule_start_date');
-    int dayOffset = 0;
-    if (startDateStr != null) {
-      final startDate = DateTime.parse(startDateStr);
-      dayOffset = now.difference(startDate).inDays;
-    }
+      final prefs = await SharedPreferences.getInstance();
+      final startDateStr = prefs.getString('adhan_schedule_start_date');
+      int dayOffset = 0;
+      if (startDateStr != null) {
+        final startDate = DateTime.parse(startDateStr);
+        dayOffset = now.difference(startDate).inDays;
+      }
 
-    final prayerIds = {'fajr': 1, 'dhuhr': 2, 'asr': 3, 'maghrib': 4, 'isha': 5};
+      final prayerIds = {'fajr': 1, 'dhuhr': 2, 'asr': 3, 'maghrib': 4, 'isha': 5};
 
-    for (final entry in prayerMap.entries) {
-      try {
-        // ✅ قراءة الوقت بنظام 24 ساعة (يمنع اللخبطة بين ص و م)
-        final prayerTime = DateFormat('HH:mm').parse(entry.value);
-        final prayerDateTime = DateTime(now.year, now.month, now.day, prayerTime.hour, prayerTime.minute);
-        final prayerStr = DateFormat('HH:mm').format(prayerDateTime);
-        final oneMinBeforeStr = DateFormat('HH:mm').format(prayerDateTime.subtract(const Duration(minutes: 1)));
+      for (final entry in prayerMap.entries) {
+        try {
+          final prayerTime = DateFormat('HH:mm').parse(entry.value);
+          final prayerDateTime = DateTime(now.year, now.month, now.day, prayerTime.hour, prayerTime.minute);
+          final prayerStr = DateFormat('HH:mm').format(prayerDateTime);
+          final oneMinBeforeStr = DateFormat('HH:mm').format(prayerDateTime.subtract(const Duration(minutes: 1)));
 
-        if (oneMinBeforeStr == currentTime && dayOffset >= 0 && dayOffset < 30) {
-          final key = _prayerKey(entry.key);
-          if (key.isNotEmpty) {
-            await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
-          }
-        }
-
-        if (prayerStr == currentTime && !_adhanAlerted) {
-          _adhanAlerted = true;
-
-          final key = _prayerKey(entry.key);
-          if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
-            await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
+          if (oneMinBeforeStr == currentTime && dayOffset >= 0 && dayOffset < 30) {
+            final key = _prayerKey(entry.key);
+            if (key.isNotEmpty) {
+              await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
+            }
           }
 
-          await _speak("حان الآن موعد أذان ${entry.key}");
-          Future.delayed(const Duration(minutes: 2), () => _adhanAlerted = false);
-        }
-      } catch (_) {}
-    }
-  } catch (_) {}
+          if (prayerStr == currentTime && !_adhanAlerted) {
+            _adhanAlerted = true;
+
+            final key = _prayerKey(entry.key);
+            if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
+              await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
+            }
+
+            await _speak("حان الآن موعد أذان ${entry.key}");
+            Future.delayed(const Duration(minutes: 2), () => _adhanAlerted = false);
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadData() async {
@@ -1858,6 +1931,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _settings.shakeInBackgroundEnabled = prefs.getBool('shake_in_background') ?? true;
     _settings.voiceGender = prefs.getString('voice_gender') ?? 'ذكر';
     _settings.defaultInterval = prefs.getString('default_interval') ?? 'كل 10 ثواني';
+    _settings.customWakeWord = prefs.getString('custom_wake_word') ?? 'يا سكرتير';
+    _settings.wakeWordMode = prefs.getString('wake_word_mode') ?? 'off';
+    _settings.wakeWordTrigger = prefs.getString('wake_word_trigger') ?? 'both';
     _playbackVolume = prefs.getDouble('playback_volume') ?? 1.0;
     _playbackSpeed = prefs.getDouble('playback_speed') ?? 1.0;
     _ttsVolume = prefs.getDouble('tts_volume') ?? 1.0;
@@ -1883,6 +1959,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await prefs.setBool('shake_in_background', _settings.shakeInBackgroundEnabled);
     await prefs.setString('voice_gender', _settings.voiceGender);
     await prefs.setString('default_interval', _settings.defaultInterval);
+    await prefs.setString('custom_wake_word', _settings.customWakeWord);
+    await prefs.setString('wake_word_mode', _settings.wakeWordMode);
+    await prefs.setString('wake_word_trigger', _settings.wakeWordTrigger);
     await prefs.setDouble('playback_volume', _playbackVolume);
     await prefs.setDouble('playback_speed', _playbackSpeed);
     await prefs.setDouble('tts_volume', _ttsVolume);
@@ -2104,7 +2183,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     super.dispose();
   }
 
-  // ✅ إعداد الصوت (بدون اختيار صوت + pitch 0.6 حسب النوع)
   Future<void> _configureVoice({bool skipGreeting = false}) async {
     try {
       await _tts.setLanguage("ar-EG");
@@ -2164,6 +2242,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _speak(String text) async {
+    try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
+
     final gender = _settings.voiceGender;
     if (gender == 'ذكر') {
       await _tts.setPitch(0.6);
@@ -2175,6 +2255,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _tts.setVolume(_settings.speechVolume * _ttsVolume);
     }
     await _tts.speak(text);
+
+    Future.delayed(const Duration(seconds: 2), () {
+      try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+      if (mounted) _startWakeWordLoop();
+    });
   }
 
   Future<void> _listenVoiceCommand() async {
@@ -2186,6 +2271,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     if (_starting) return;
     _starting = true;
     try {
+      if (_isWakeWordListening) {
+        await _speech.stop();
+        _isWakeWordListening = false;
+      }
       if (!_speechReady) await _initSpeech();
       if (!_speechReady) {
         await _speak("لا أستطيع الوصول للميكروفون $_userTitle.");
@@ -2209,7 +2298,58 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       _starting = false;
     }
   }
-    Future<bool> _handleSocialReply(String cmd) async {
+
+  Future<void> _startWakeWordLoop() async {
+    if (_settings.wakeWordMode == 'off') return;
+    if (_isListening || _starting || _isRecording || _isWakeWordListening) return;
+    if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
+
+    _isWakeWordListening = true;
+    try {
+      await _speech.listen(
+        localeId: "ar-EG",
+        onDevice: false,
+        listenFor: const Duration(seconds: 10),
+        pauseFor: const Duration(seconds: 4),
+        partialResults: true,
+        onResult: (val) {
+          final cmd = _norm(val.recognizedWords);
+          final nameNorm = _norm(_secretaryName);
+          final wakeWordNorm = _norm(_settings.customWakeWord);
+          
+          final secTitle = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيره';
+          final secTitleAlt = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيرة';
+          final titleNormalized = _norm(secTitle);
+
+          final isNameMatch = cmd.contains(nameNorm) || cmd.contains('يا $nameNorm') ||
+                              cmd.contains(titleNormalized) || cmd.contains('يا $titleNormalized') ||
+                              cmd.contains(_norm(secTitleAlt)) || cmd.contains('يا ${_norm(secTitleAlt)}');
+          
+          final isCustomMatch = cmd.contains(wakeWordNorm);
+          
+          bool isTriggered = false;
+          if (_settings.wakeWordTrigger == 'name_only') {
+            isTriggered = isNameMatch;
+          } else if (_settings.wakeWordTrigger == 'custom_only') {
+            isTriggered = isCustomMatch;
+          } else {
+            isTriggered = isNameMatch || isCustomMatch;
+          }
+
+          if (isTriggered) {
+            _speech.stop();
+            _isWakeWordListening = false;
+            if (mounted) setState(() => _isListening = false);
+            _listenVoiceCommand();
+          }
+        },
+      );
+    } catch (_) {
+      _isWakeWordListening = false;
+    }
+  }
+}
+  Future<bool> _handleSocialReply(String cmd) async {
     final userTitle = _userTitle;
     final secTitle = _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
 
@@ -3642,33 +3782,34 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<Map<String, String>> _calculatePrayerTimes() async {
-  try {
-    final coordinates = Coordinates(30.0444, 31.2357);
-    final date = DateComponents.from(DateTime.now());
-    final params = CalculationMethod.egyptian.getParameters();
-    params.madhab = Madhab.shafi;
-    final prayerTimes = PrayerTimes(coordinates, date, params);
-    
-    final format = DateFormat('HH:mm'); 
-    
-    return {'fajr': format.format(prayerTimes.fajr), 'sunrise': format.format(prayerTimes.sunrise), 'dhuhr': format.format(prayerTimes.dhuhr), 'asr': format.format(prayerTimes.asr), 'maghrib': format.format(prayerTimes.maghrib), 'isha': format.format(prayerTimes.isha)};
-  } catch (e) {
-    final format = DateFormat('HH:mm');
-    final now = DateTime.now();
-    return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
+    try {
+      final coordinates = Coordinates(30.0444, 31.2357);
+      final date = DateComponents.from(DateTime.now());
+      final params = CalculationMethod.egyptian.getParameters();
+      params.madhab = Madhab.shafi;
+      final prayerTimes = PrayerTimes(coordinates, date, params);
+      
+      final format = DateFormat('HH:mm'); 
+      
+      return {'fajr': format.format(prayerTimes.fajr), 'sunrise': format.format(prayerTimes.sunrise), 'dhuhr': format.format(prayerTimes.dhuhr), 'asr': format.format(prayerTimes.asr), 'maghrib': format.format(prayerTimes.maghrib), 'isha': format.format(prayerTimes.isha)};
+    } catch (e) {
+      final format = DateFormat('HH:mm');
+      final now = DateTime.now();
+      return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
+    }
   }
-  }
+
   String _formatTimeForDisplay(String time24) {
-  try {
-    final parts = time24.split(':');
-    final hour = int.parse(parts[0]);
-    final minute = parts[1];
-    final isPm = hour >= 12;
-    final h12 = hour % 12 == 0 ? 12 : hour % 12;
-    return '$h12:$minute ${isPm ? 'م' : 'ص'}';
-  } catch (_) {
-    return time24;
-  }
+    try {
+      final parts = time24.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = parts[1];
+      final isPm = hour >= 12;
+      final h12 = hour % 12 == 0 ? 12 : hour % 12;
+      return '$h12:$minute ${isPm ? 'م' : 'ص'}';
+    } catch (_) {
+      return time24;
+    }
   }
 
   Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
@@ -3848,7 +3989,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           ttsVolume: _ttsVolume,
           currentSecretaryName: _secretaryName,
           currentIsUserMale: _isUserMale,
-          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeBg, voiceGender, defaultInterval) async {
+          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeBg, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger) async {
             setState(() {
               _settings.defaultReminderHour = hour;
               _settings.defaultReminderMinute = minute;
@@ -3860,6 +4001,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               _settings.shakeInBackgroundEnabled = shakeBg;
               _settings.voiceGender = voiceGender;
               _settings.defaultInterval = defaultInterval;
+              _settings.customWakeWord = customWakeWord;
+              _settings.wakeWordMode = wakeWordMode;
+              _settings.wakeWordTrigger = wakeWordTrigger;
             });
             await _saveSettings();
             await _scheduleAdhan30Days();
@@ -3869,6 +4013,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
               } else {
                 await _lockScreenChannel.invokeMethod('disableShowWhenLocked');
+              }
+              
+              // التحكم في خدمة النداء الدائم
+              if (_settings.wakeWordMode == 'off') {
+                try { await _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
+              } else {
+                try { await _wakeWordChannel.invokeMethod('startWakeWord'); } catch (_) {}
               }
             } catch (_) {}
           },
@@ -4875,43 +5026,43 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Widget _buildPrayerTimesTab() {
-  return FutureBuilder<Map<String, String>>(
-    future: _calculatePrayerTimes(),
-    builder: (context, snapshot) {
-      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-      final times = snapshot.data!;
-      return ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF0F172A)]),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
+    return FutureBuilder<Map<String, String>>(
+      future: _calculatePrayerTimes(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final times = snapshot.data!;
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF0F172A)]),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
+              ),
+              child: const Column(children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.access_time_filled, color: Color(0xFFC5A059), size: 22),
+                    SizedBox(width: 8),
+                    Text('مواقيت الصلاة', style: TextStyle(color: Color(0xFFC5A059), fontSize: 16, fontWeight: FontWeight.bold))
+                  ],
+                )
+              ]),
             ),
-            child: const Column(children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.access_time_filled, color: Color(0xFFC5A059), size: 22),
-                  SizedBox(width: 8),
-                  Text('مواقيت الصلاة', style: TextStyle(color: Color(0xFFC5A059), fontSize: 16, fontWeight: FontWeight.bold))
-                ],
-              )
-            ]),
-          ),
-          const SizedBox(height: 15),
-          _prayerCard('الفجر', _formatTimeForDisplay(times['fajr']!), Icons.wb_twilight),
-          _prayerCard('الشروق', _formatTimeForDisplay(times['sunrise']!), Icons.wb_sunny_outlined),
-          _prayerCard('الظهر', _formatTimeForDisplay(times['dhuhr']!), Icons.wb_sunny),
-          _prayerCard('العصر', _formatTimeForDisplay(times['asr']!), Icons.filter_drama),
-          _prayerCard('المغرب', _formatTimeForDisplay(times['maghrib']!), Icons.nights_stay_outlined),
-          _prayerCard('العشاء', _formatTimeForDisplay(times['isha']!), Icons.nights_stay),
-        ],
-      );
-    },
-  );
+            const SizedBox(height: 15),
+            _prayerCard('الفجر', _formatTimeForDisplay(times['fajr']!), Icons.wb_twilight),
+            _prayerCard('الشروق', _formatTimeForDisplay(times['sunrise']!), Icons.wb_sunny_outlined),
+            _prayerCard('الظهر', _formatTimeForDisplay(times['dhuhr']!), Icons.wb_sunny),
+            _prayerCard('العصر', _formatTimeForDisplay(times['asr']!), Icons.filter_drama),
+            _prayerCard('المغرب', _formatTimeForDisplay(times['maghrib']!), Icons.nights_stay_outlined),
+            _prayerCard('العشاء', _formatTimeForDisplay(times['isha']!), Icons.nights_stay),
+          ],
+        );
+      },
+    );
   }
 
   Widget _prayerCard(String title, String time, IconData icon) {
