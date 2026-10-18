@@ -1,10 +1,15 @@
 package com.example.secretary_app
 
 import android.app.*
+import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
 import java.util.Locale
 
@@ -12,6 +17,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
     private var pendingText: String? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     companion object {
         const val CHANNEL_ID = "secretary_native_alarm_v2"
@@ -27,6 +33,9 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         super.onCreate()
         createChannel()
         tts = TextToSpeech(this, this)
+        
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SecretaryApp::AlarmWakeLock")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -53,6 +62,10 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             }
         } else {
             startForeground(NOTIF_ID, notification)
+        }
+
+        if (wakeLock?.isHeld == false) {
+            wakeLock?.acquire(60 * 1000L)
         }
 
         if (isTtsReady) {
@@ -97,9 +110,29 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
 
     private fun speak(prefix: String, text: String) {
         val toSay = "$prefix$text"
+        
+        // صوت الميديا العادي
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+            
+        tts?.setAudioAttributes(audioAttributes)
         tts?.setLanguage(Locale("ar"))
         tts?.setSpeechRate(1.0f)
         tts?.setPitch(1.0f)
+
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) {
+                stopSelf()
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                stopSelf()
+            }
+        })
+
         tts?.speak(toSay, TextToSpeech.QUEUE_FLUSH, null, "alarm_${System.currentTimeMillis()}")
     }
 
@@ -119,6 +152,9 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         tts?.stop()
         tts?.shutdown()
+        if (wakeLock?.isHeld == true) {
+            wakeLock?.release()
+        }
         super.onDestroy()
     }
 
