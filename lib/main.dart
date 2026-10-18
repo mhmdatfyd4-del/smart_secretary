@@ -547,10 +547,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    const Icon(Icons.face_3, color: Color(0xFF1B2A4A), size: 26),
-                    const SizedBox(width: 10),
                     Text(secTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   ]),
+                  const SizedBox(height: 10),
+                  Center(
+                    child: Container(
+                      width: 100, height: 100,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFC5A059), width: 3),
+                        image: DecorationImage(
+                          image: AssetImage(_getSecretaryImage(_nameController.text, _voiceGender)),
+                          fit: BoxFit.cover,
+                          alignment: const Alignment(0, -0.4),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 15),
                   const Text('اختر اسماً:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 8),
@@ -919,7 +932,7 @@ class _SplashScreenState extends State<SplashScreen> {
 }
 
 // ═══════════════════════════════════════
-// 3 نقط متحركة
+// 3 نقط متحركة (زي فيسبوك)
 // ═══════════════════════════════════════
 class AnimatedDots extends StatefulWidget {
   const AnimatedDots({super.key});
@@ -1574,16 +1587,29 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _initAll() async {
-    await _loadData();
-    await _loadRecordings();
-    await _configureVoice();
-    _initSpeech();
-    _initShakeDetector();
-    _startAdhanWatcher();
-    _scheduleAdhan30Days();
-    Future.delayed(const Duration(seconds: 3), _checkPendingEventAnnouncements);
-    Future.delayed(const Duration(seconds: 2), _checkPendingAlarm);
-    Future.delayed(const Duration(seconds: 3), _startWakeWordLoop);
+    try {
+      await _loadData();
+      await _loadRecordings();
+      await _configureVoice();
+      _initSpeech();
+      _initShakeDetector();
+      _startAdhanWatcher();
+      
+      Future.delayed(const Duration(seconds: 1), () {
+        try { _scheduleAdhan30Days(); } catch (_) {}
+      });
+      
+      Future.delayed(const Duration(seconds: 3), () { try { _checkPendingEventAnnouncements(); } catch (_) {} });
+      Future.delayed(const Duration(seconds: 2), () { try { _checkPendingAlarm(); } catch (_) {} });
+      
+      Future.delayed(const Duration(seconds: 3), () { 
+        if (_settings.wakeWordMode == 'app_open' || _settings.wakeWordMode == 'always') {
+          _startWakeWordLoop(); 
+        }
+      });
+    } catch (e) {
+      debugPrint("Init Error: $e");
+    }
   }
 
   @override
@@ -1593,12 +1619,15 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       _isInBackground = false;
       Future.delayed(const Duration(milliseconds: 500), _checkPendingAlarm);
       Future.delayed(const Duration(seconds: 2), _checkPendingEventAnnouncements);
-      if (_settings.wakeWordMode != 'off') {
-        Future.delayed(const Duration(seconds: 2), _startWakeWordLoop);
+      
+      if (_settings.wakeWordMode == 'app_open' || _settings.wakeWordMode == 'always') {
+        Future.delayed(const Duration(seconds: 1), () {
+           if (!_isListening) _startWakeWordLoop();
+        });
       }
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
       _isInBackground = true;
-      if (_settings.wakeWordMode == 'app_open' && _isWakeWordListening) {
+      if (_isWakeWordListening) {
         _speech.stop();
         _isWakeWordListening = false;
       }
@@ -1698,7 +1727,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('adhan_schedule_start_date', DateTime.now().toIso8601String());
 
-      await _notifications.cancelAll();
+      for (int i = 1; i <= 300; i++) {
+        try { await _notifications.cancel(i); } catch (_) {}
+      }
 
       final prayerIds = {'fajr': 1, 'dhuhr': 2, 'asr': 3, 'maghrib': 4, 'isha': 5};
       final prayers = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
@@ -1850,6 +1881,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             }
 
             await _speak("حان الآن موعد أذان ${entry.key}");
+            
             Future.delayed(const Duration(minutes: 2), () => _adhanAlerted = false);
           }
         } catch (_) {}
@@ -2202,19 +2234,21 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     } catch (_) {}
 
-    if (gender == 'ذكر') {
-      await _tts.setPitch(0.6);
-      await _tts.setSpeechRate(_settings.speechRate * 0.8);
-      await _tts.setVolume(1.0);
-    } else {
-      await _tts.setPitch(1.15);
-      await _tts.setSpeechRate(_settings.speechRate);
-      await _tts.setVolume(_settings.speechVolume * _ttsVolume);
-    }
+    try {
+      if (gender == 'ذكر') {
+        await _tts.setPitch(0.6);
+        await _tts.setSpeechRate(_settings.speechRate);
+        await _tts.setVolume(1.0);
+      } else {
+        await _tts.setPitch(1.15);
+        await _tts.setSpeechRate(_settings.speechRate);
+        await _tts.setVolume(_settings.speechVolume * _ttsVolume);
+      }
 
-    if (!skipGreeting && _settings.greetingEnabled) {
-      await _tts.speak("أهلاً بك $_userTitle. أنا $_secWord $_secretaryName، هُز الهاتف في أي وقت لأكون في خدمتك.");
-    }
+      if (!skipGreeting && _settings.greetingEnabled) {
+        await _tts.speak("أهلاً بك $_userTitle. أنا $_secWord $_secretaryName، هُز الهاتف في أي وقت لأكون في خدمتك.");
+      }
+    } catch (_) {}
   }
 
   Future<List<Map<String, String>>> _getArabicVoices() async {
@@ -2242,22 +2276,32 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
   Future<void> _speak(String text) async {
     try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
-
-    final gender = _settings.voiceGender;
-    if (gender == 'ذكر') {
-      await _tts.setPitch(0.6);
-      await _tts.setSpeechRate(_settings.speechRate * 0.8);
-      await _tts.setVolume(1.0);
-    } else {
-      await _tts.setPitch(1.15);
-      await _tts.setSpeechRate(_settings.speechRate);
-      await _tts.setVolume(_settings.speechVolume * _ttsVolume);
+    if (_isWakeWordListening) {
+      try { await _speech.stop(); } catch (_) {}
+      _isWakeWordListening = false;
     }
-    await _tts.speak(text);
 
-    Future.delayed(const Duration(seconds: 2), () {
+    try {
+      final gender = _settings.voiceGender;
+      if (gender == 'ذكر') {
+        await _tts.setPitch(0.6);
+        await _tts.setSpeechRate(_settings.speechRate);
+        await _tts.setVolume(1.0);
+      } else {
+        await _tts.setPitch(1.15);
+        await _tts.setSpeechRate(_settings.speechRate);
+        await _tts.setVolume(_settings.speechVolume * _ttsVolume);
+      }
+      await _tts.speak(text);
+    } catch (e) {
+      debugPrint("TTS Error: $e");
+    }
+
+    Future.delayed(const Duration(seconds: 1), () {
       try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-      if (mounted) _startWakeWordLoop();
+      if (_settings.wakeWordMode == 'app_open' || _settings.wakeWordMode == 'always') {
+         if (!_isListening && !_isInBackground) _startWakeWordLoop();
+      }
     });
   }
 
@@ -2270,22 +2314,27 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     if (_starting) return;
     _starting = true;
     try {
-      if (_isWakeWordListening) {
-        await _speech.stop();
-        _isWakeWordListening = false;
-      }
       if (!_speechReady) await _initSpeech();
-      if (!_speechReady) {
-        await _speak("لا أستطيع الوصول للميكروفون $_userTitle.");
-        return;
-      }
+      if (!_speechReady) return;
+
       await _tts.stop();
-      if (mounted) setState(() => _isListening = true);
+      try { await _speech.cancel(); } catch (_) {}
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      if (mounted) {
+        setState(() => _isListening = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎤 التطبيق بيستمع ليك دلوقتي...', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+            duration: Duration(seconds: 2),
+            backgroundColor: Color(0xFF1B2A4A),
+          ),
+        );
+      }
+
       await _speech.listen(
-        localeId: "ar-EG",
-        onDevice: false,
-        listenFor: const Duration(seconds: 20),
-        pauseFor: const Duration(seconds: 4),
+        localeId: "ar-EG", onDevice: false,
+        listenFor: const Duration(seconds: 20), pauseFor: const Duration(seconds: 4),
         onResult: (val) {
           if (val.finalResult) {
             if (mounted) setState(() => _isListening = false);
@@ -2293,6 +2342,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           }
         },
       );
+    } catch (e) {
+      debugPrint("Listen Error: $e");
+      if (mounted) setState(() => _isListening = false);
     } finally {
       _starting = false;
     }
@@ -2300,7 +2352,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
   Future<void> _startWakeWordLoop() async {
     if (_settings.wakeWordMode == 'off') return;
-    if (_isListening || _starting || _isRecording || _isWakeWordListening) return;
+    if (_isListening || _starting || _isRecording) return;
     if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
 
     _isWakeWordListening = true;
@@ -2315,7 +2367,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           final cmd = _norm(val.recognizedWords);
           final nameNorm = _norm(_secretaryName);
           final wakeWordNorm = _norm(_settings.customWakeWord);
-
+          
           final secTitle = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيره';
           final secTitleAlt = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيرة';
           final titleNormalized = _norm(secTitle);
@@ -2323,9 +2375,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           final isNameMatch = cmd.contains(nameNorm) || cmd.contains('يا $nameNorm') ||
                               cmd.contains(titleNormalized) || cmd.contains('يا $titleNormalized') ||
                               cmd.contains(_norm(secTitleAlt)) || cmd.contains('يا ${_norm(secTitleAlt)}');
-
+          
           final isCustomMatch = cmd.contains(wakeWordNorm);
-
+          
           bool isTriggered = false;
           if (_settings.wakeWordTrigger == 'name_only') {
             isTriggered = isNameMatch;
@@ -2336,19 +2388,29 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           }
 
           if (isTriggered) {
-            _speech.stop();
             _isWakeWordListening = false;
-            if (mounted) setState(() => _isListening = false);
+            _speech.stop();
             _listenVoiceCommand();
           }
         },
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            _isWakeWordListening = false;
+            if (mounted && !_isListening && _settings.wakeWordMode != 'off') {
+              Future.delayed(const Duration(seconds: 1), () {
+                if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
+                  _startWakeWordLoop();
+                }
+              });
+            }
+          }
+        },
       );
-    } catch (_) {
+    } catch (e) {
       _isWakeWordListening = false;
+      debugPrint("WakeWord Error: $e");
     }
   }
-
-  // ✅ التعديل: هنا مفيش قوس } زيادة — الدوال اللي جاية (زي _handleSocialReply) جوّه الكلاس
     Future<bool> _handleSocialReply(String cmd) async {
     final userTitle = _userTitle;
     final secTitle = _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
@@ -2625,34 +2687,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   List<String> _extractWeeklyDaysFromCmd(String cmd) {
-    final List<String> foundDays = [];
-    final bool isAll = _hasAny(cmd, ['كل الايام', 'كل ايام', 'الاسبوع كله', 'كل الاسبوع', 'الجدول كله', 'كل يوم']);
-
-    if (isAll) {
-      foundDays.addAll(_weekDays);
-    } else {
-      for (final day in _weekDays) {
-        final keywords = _dayKeywords[day] ?? [day];
-        if (_hasAny(cmd, keywords)) {
-          foundDays.add(day);
-        }
-      }
-    }
-
-    // Exceptions: "ما عدا يوم الخميس", "إلا السبت"
     for (final day in _weekDays) {
       final keywords = _dayKeywords[day] ?? [day];
-      for (final kw in keywords) {
-         if (cmd.contains('ما عدا $kw') || cmd.contains('ما عدا يوم $kw') ||
-             cmd.contains('ماعدا $kw') || cmd.contains('ماعدا يوم $kw') ||
-             cmd.contains('الا $kw') || cmd.contains('الا يوم $kw') ||
-             cmd.contains('باستثناء $kw') || cmd.contains('باستثناء يوم $kw')) {
-           foundDays.remove(day);
-         }
+      if (_hasAny(cmd, keywords)) {
+        return [day];
       }
     }
-
-    return foundDays;
+    return [];
   }
 
   String _extractWeeklyTaskName(String rawCommand) {
@@ -2669,8 +2710,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       'موعد', 'ميعاد', 'الميعاد', 'الموعد', 'و',
       'الساعة', 'ساعة', 'الساعه', 'صباحا', 'صباحاً', 'مساء', 'مساءً',
       'الصبح', 'بالليل', 'الليل',
-      'كل الايام', 'كل الاسبوع', 'الجدول كله', 'كل ايام', 'كل يوم',
-      'ما عدا', 'ماعدا', 'الا', 'باستثناء'
     };
     for (final day in _weekDays) {
       stripRaw.add(day);
@@ -3320,12 +3359,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
   Future<void> _createWeeklyAlarmFromVoice(String rawCommand, String cmd) async {
     final userTitle = _userTitle;
-    final days = _extractWeeklyDaysFromCmd(cmd);
 
+    final days = _extractWeeklyDaysFromCmd(cmd);
     if (days.isEmpty) {
       await _speak("قوللي أنهي يوم في الأسبوع $userTitle؟");
       return;
     }
+    final day = days.first;
 
     final parsedHour = _parseHour(cmd);
     if (parsedHour == null) {
@@ -3338,55 +3378,43 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     if (hour < 12 && isEvening) hour += 12;
 
     final intervalType = _parseIntervalType(cmd);
-    String taskName = _extractWeeklyTaskName(rawCommand);
-    if (taskName.isEmpty) taskName = 'موعد أسبوعي';
 
     final now = DateTime.now();
-    final List<String> successDays = [];
+    final dayIndex = _weekDays.indexOf(day);
+    final todayIndex = (now.weekday) % 7;
+    final daysAhead = (dayIndex - todayIndex + 7) % 7;
+    final targetDate = now.add(Duration(days: daysAhead));
+    final scheduledDateTime = DateTime(
+      targetDate.year, targetDate.month, targetDate.day, hour, minute,
+    );
 
-    for (final day in days) {
-      final dayIndex = _weekDays.indexOf(day);
-      final todayIndex = (now.weekday) % 7;
-      final daysAhead = (dayIndex - todayIndex + 7) % 7;
-      final targetDate = now.add(Duration(days: daysAhead));
-      final scheduledDateTime = DateTime(targetDate.year, targetDate.month, targetDate.day, hour, minute);
-
-      if (scheduledDateTime.isBefore(now)) {
-        continue;
-      }
-
-      setState(() {
-        _weeklySchedule.add({
-          'day': day,
-          'task': taskName,
-          'time': DateFormat('hh:mm a', 'ar').format(scheduledDateTime),
-          'scheduled': scheduledDateTime.toIso8601String(),
-          'repeatInterval': intervalType,
-          'sound': null,
-        });
-      });
-
-      if (intervalType != 'بدون تنبيه') {
-        _scheduleWeeklyAlarm(taskName, day, scheduledDateTime, intervalType);
-      }
-      successDays.add(day);
-    }
-
-    _saveWeeklySchedule();
-
-    if (successDays.isEmpty) {
-      await _speak("كل المواعيد دي فاتت $userTitle، اختار وقت مستقبلي.");
+    if (scheduledDateTime.isBefore(now)) {
+      await _speak("الموعد فات $userTitle، اختار وقت مستقبلي.");
       return;
     }
 
-    final h12 = hour % 12 == 0 ? 12 : hour % 12;
-    final periodText = hour >= 12 ? 'مساءً' : 'صباحاً';
-    String daysText = successDays.join('، ');
-    if (successDays.length == 7) {
-      daysText = "كل أيام الأسبوع";
+    String taskName = _extractWeeklyTaskName(rawCommand);
+    if (taskName.isEmpty) taskName = 'موعد أسبوعي';
+
+    setState(() {
+      _weeklySchedule.add({
+        'day': day,
+        'task': taskName,
+        'time': DateFormat('hh:mm a', 'ar').format(scheduledDateTime),
+        'scheduled': scheduledDateTime.toIso8601String(),
+        'repeatInterval': intervalType,
+        'sound': null,
+      });
+    });
+    _saveWeeklySchedule();
+
+    if (intervalType != 'بدون تنبيه') {
+      _scheduleWeeklyAlarm(taskName, day, scheduledDateTime, intervalType);
     }
 
-    await _speak("تمت الإضافة $userTitle! $taskName في أيام: $daysText الساعة $h12 $periodText.");
+    final h12 = scheduledDateTime.hour % 12 == 0 ? 12 : scheduledDateTime.hour % 12;
+    final periodText = scheduledDateTime.hour >= 12 ? 'مساءً' : 'صباحاً';
+    await _speak("تمت الإضافة $userTitle! $taskName يوم $day الساعة $h12 $periodText.");
   }
 
   Future<void> _deleteTaskByVoice(String cmd) async {
@@ -3822,9 +3850,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final params = CalculationMethod.egyptian.getParameters();
       params.madhab = Madhab.shafi;
       final prayerTimes = PrayerTimes(coordinates, date, params);
-
-      final format = DateFormat('HH:mm');
-
+      
+      final format = DateFormat('HH:mm'); 
+      
       return {'fajr': format.format(prayerTimes.fajr), 'sunrise': format.format(prayerTimes.sunrise), 'dhuhr': format.format(prayerTimes.dhuhr), 'asr': format.format(prayerTimes.asr), 'maghrib': format.format(prayerTimes.maghrib), 'isha': format.format(prayerTimes.isha)};
     } catch (e) {
       final format = DateFormat('HH:mm');
@@ -4039,16 +4067,22 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               _settings.wakeWordMode = wakeWordMode;
               _settings.wakeWordTrigger = wakeWordTrigger;
             });
+            
             await _saveSettings();
-            await _scheduleAdhan30Days();
-            await _configureVoice(skipGreeting: true);
+            
+            Future.delayed(const Duration(milliseconds: 100), () async {
+              try { await _scheduleAdhan30Days(); } catch (_) {}
+            });
+
+            try { await _configureVoice(skipGreeting: true); } catch (_) {}
+
             try {
               if (showLock) {
                 await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
               } else {
                 await _lockScreenChannel.invokeMethod('disableShowWhenLocked');
               }
-
+              
               if (_settings.wakeWordMode == 'off') {
                 try { await _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
               } else {
@@ -4064,7 +4098,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               _secretaryName = name;
               _settings.voiceGender = voiceGender;
             });
-            await _configureVoice(skipGreeting: true);
+            try { await _configureVoice(skipGreeting: true); } catch (_) {}
           },
         ),
       ),
