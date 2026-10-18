@@ -788,8 +788,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     items: [
                       DropdownMenuItem(value: 'off', child: Text('متوقف')),
                       DropdownMenuItem(value: 'app_open', child: Text('التطبيق مفتوح فقط')),
-                      DropdownMenuItem(value: 'background', child: Text('التطبيق في الخلفية')),
-                      DropdownMenuItem(value: 'always', child: Text('دائماً (حتى لو مقفول)')),
+                      DropdownMenuItem(value: 'background', child: Text('التطبيق مفتوح + الخلفية')),
+                      DropdownMenuItem(value: 'always', child: Text('دائماً (حتى لو التطبيق مقفول)')),
                     ],
                     onChanged: (val) => setState(() => _wakeWordMode = val ?? 'off'),
                   ),
@@ -1620,7 +1620,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       Future.delayed(const Duration(milliseconds: 500), _checkPendingAlarm);
       Future.delayed(const Duration(seconds: 2), _checkPendingEventAnnouncements);
       
-      if (_settings.wakeWordMode == 'app_open' || _settings.wakeWordMode == 'always') {
+      if (_settings.wakeWordMode == 'app_open' || 
+          _settings.wakeWordMode == 'background' || 
+          _settings.wakeWordMode == 'always') {
         Future.delayed(const Duration(seconds: 1), () {
            if (!_isListening) _startWakeWordLoop();
         });
@@ -1866,21 +1868,24 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           final oneMinBeforeStr = DateFormat('HH:mm').format(prayerDateTime.subtract(const Duration(minutes: 1)));
 
           if (oneMinBeforeStr == currentTime && dayOffset >= 0 && dayOffset < 30) {
-            final key = _prayerKey(entry.key);
-            if (key.isNotEmpty) {
-              await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
+            if (!_isInBackground) {
+              final key = _prayerKey(entry.key);
+              if (key.isNotEmpty) {
+                await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
+              }
             }
           }
 
           if (prayerStr == currentTime && !_adhanAlerted) {
             _adhanAlerted = true;
 
-            final key = _prayerKey(entry.key);
-            if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
-              await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
+            if (!_isInBackground) {
+              final key = _prayerKey(entry.key);
+              if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
+                await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
+              }
+              await _speak("حان الآن موعد أذان ${entry.key}");
             }
-
-            await _speak("حان الآن موعد أذان ${entry.key}");
             
             Future.delayed(const Duration(minutes: 2), () => _adhanAlerted = false);
           }
@@ -2299,7 +2304,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     Future.delayed(const Duration(seconds: 1), () {
       try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-      if (_settings.wakeWordMode == 'app_open' || _settings.wakeWordMode == 'always') {
+      if (_settings.wakeWordMode == 'app_open' || 
+          _settings.wakeWordMode == 'background' || 
+          _settings.wakeWordMode == 'always') {
          if (!_isListening && !_isInBackground) _startWakeWordLoop();
       }
     });
@@ -2351,64 +2358,63 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _startWakeWordLoop() async {
-  if (_settings.wakeWordMode == 'off') return;
-  if (_isListening || _starting || _isRecording) return;
-  if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
+    if (_settings.wakeWordMode == 'off') return;
+    if (_isListening || _starting || _isRecording) return;
+    if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
 
-  _isWakeWordListening = true;
-  try {
-    await _speech.listen(
-      localeId: "ar-EG",
-      onDevice: false,
-      listenFor: const Duration(seconds: 10),
-      pauseFor: const Duration(seconds: 4),
-      partialResults: true,
-      onResult: (val) {
-        final cmd = _norm(val.recognizedWords);
-        final nameNorm = _norm(_secretaryName);
-        final wakeWordNorm = _norm(_settings.customWakeWord);
-        
-        final secTitle = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيره';
-        final secTitleAlt = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيرة';
-        final titleNormalized = _norm(secTitle);
+    _isWakeWordListening = true;
+    try {
+      await _speech.listen(
+        localeId: "ar-EG",
+        onDevice: false,
+        listenFor: const Duration(seconds: 10),
+        pauseFor: const Duration(seconds: 4),
+        partialResults: true,
+        onResult: (val) {
+          final cmd = _norm(val.recognizedWords);
+          final nameNorm = _norm(_secretaryName);
+          final wakeWordNorm = _norm(_settings.customWakeWord);
+          
+          final secTitle = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيره';
+          final secTitleAlt = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيرة';
+          final titleNormalized = _norm(secTitle);
 
-        final isNameMatch = cmd.contains(nameNorm) || cmd.contains('يا $nameNorm') ||
-                            cmd.contains(titleNormalized) || cmd.contains('يا $titleNormalized') ||
-                            cmd.contains(_norm(secTitleAlt)) || cmd.contains('يا ${_norm(secTitleAlt)}');
-        
-        final isCustomMatch = cmd.contains(wakeWordNorm);
-        
-        bool isTriggered = false;
-        if (_settings.wakeWordTrigger == 'name_only') {
-          isTriggered = isNameMatch;
-        } else if (_settings.wakeWordTrigger == 'custom_only') {
-          isTriggered = isCustomMatch;
-        } else {
-          isTriggered = isNameMatch || isCustomMatch;
-        }
+          final isNameMatch = cmd.contains(nameNorm) || cmd.contains('يا $nameNorm') ||
+                              cmd.contains(titleNormalized) || cmd.contains('يا $titleNormalized') ||
+                              cmd.contains(_norm(secTitleAlt)) || cmd.contains('يا ${_norm(secTitleAlt)}');
+          
+          final isCustomMatch = cmd.contains(wakeWordNorm);
+          
+          bool isTriggered = false;
+          if (_settings.wakeWordTrigger == 'name_only') {
+            isTriggered = isNameMatch;
+          } else if (_settings.wakeWordTrigger == 'custom_only') {
+            isTriggered = isCustomMatch;
+          } else {
+            isTriggered = isNameMatch || isCustomMatch;
+          }
 
-        if (isTriggered) {
-          _isWakeWordListening = false;
-          _speech.stop();
-          _listenVoiceCommand();
-        }
-      },
-    );
-    
-    // لما الـ 10 ثواني يخلصوا (أو يسمع الاسم)، هييجي هنا ويعيد التشغيل تاني
-    _isWakeWordListening = false;
-    if (mounted && !_isListening && _settings.wakeWordMode != 'off') {
-      Future.delayed(const Duration(seconds: 1), () {
-        if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
-          _startWakeWordLoop();
-        }
-      });
+          if (isTriggered) {
+            _isWakeWordListening = false;
+            _speech.stop();
+            _listenVoiceCommand();
+          }
+        },
+      );
+      
+      _isWakeWordListening = false;
+      if (mounted && !_isListening && _settings.wakeWordMode != 'off') {
+        Future.delayed(const Duration(seconds: 1), () {
+          if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
+            _startWakeWordLoop();
+          }
+        });
+      }
+
+    } catch (e) {
+      _isWakeWordListening = false;
+      debugPrint("WakeWord Error: $e");
     }
-
-  } catch (e) {
-    _isWakeWordListening = false;
-    debugPrint("WakeWord Error: $e");
-  }
   }
     Future<bool> _handleSocialReply(String cmd) async {
     final userTitle = _userTitle;
