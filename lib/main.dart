@@ -2351,65 +2351,64 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _startWakeWordLoop() async {
-    if (_settings.wakeWordMode == 'off') return;
-    if (_isListening || _starting || _isRecording) return;
-    if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
+  if (_settings.wakeWordMode == 'off') return;
+  if (_isListening || _starting || _isRecording) return;
+  if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
 
-    _isWakeWordListening = true;
-    try {
-      await _speech.listen(
-        localeId: "ar-EG",
-        onDevice: false,
-        listenFor: const Duration(seconds: 10),
-        pauseFor: const Duration(seconds: 4),
-        partialResults: true,
-        onResult: (val) {
-          final cmd = _norm(val.recognizedWords);
-          final nameNorm = _norm(_secretaryName);
-          final wakeWordNorm = _norm(_settings.customWakeWord);
-          
-          final secTitle = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيره';
-          final secTitleAlt = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيرة';
-          final titleNormalized = _norm(secTitle);
+  _isWakeWordListening = true;
+  try {
+    await _speech.listen(
+      localeId: "ar-EG",
+      onDevice: false,
+      listenFor: const Duration(seconds: 10),
+      pauseFor: const Duration(seconds: 4),
+      partialResults: true,
+      onResult: (val) {
+        final cmd = _norm(val.recognizedWords);
+        final nameNorm = _norm(_secretaryName);
+        final wakeWordNorm = _norm(_settings.customWakeWord);
+        
+        final secTitle = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيره';
+        final secTitleAlt = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيرة';
+        final titleNormalized = _norm(secTitle);
 
-          final isNameMatch = cmd.contains(nameNorm) || cmd.contains('يا $nameNorm') ||
-                              cmd.contains(titleNormalized) || cmd.contains('يا $titleNormalized') ||
-                              cmd.contains(_norm(secTitleAlt)) || cmd.contains('يا ${_norm(secTitleAlt)}');
-          
-          final isCustomMatch = cmd.contains(wakeWordNorm);
-          
-          bool isTriggered = false;
-          if (_settings.wakeWordTrigger == 'name_only') {
-            isTriggered = isNameMatch;
-          } else if (_settings.wakeWordTrigger == 'custom_only') {
-            isTriggered = isCustomMatch;
-          } else {
-            isTriggered = isNameMatch || isCustomMatch;
-          }
+        final isNameMatch = cmd.contains(nameNorm) || cmd.contains('يا $nameNorm') ||
+                            cmd.contains(titleNormalized) || cmd.contains('يا $titleNormalized') ||
+                            cmd.contains(_norm(secTitleAlt)) || cmd.contains('يا ${_norm(secTitleAlt)}');
+        
+        final isCustomMatch = cmd.contains(wakeWordNorm);
+        
+        bool isTriggered = false;
+        if (_settings.wakeWordTrigger == 'name_only') {
+          isTriggered = isNameMatch;
+        } else if (_settings.wakeWordTrigger == 'custom_only') {
+          isTriggered = isCustomMatch;
+        } else {
+          isTriggered = isNameMatch || isCustomMatch;
+        }
 
-          if (isTriggered) {
-            _isWakeWordListening = false;
-            _speech.stop();
-            _listenVoiceCommand();
-          }
-        },
-        onStatus: (status) {
-          if (status == 'done' || status == 'notListening') {
-            _isWakeWordListening = false;
-            if (mounted && !_isListening && _settings.wakeWordMode != 'off') {
-              Future.delayed(const Duration(seconds: 1), () {
-                if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
-                  _startWakeWordLoop();
-                }
-              });
-            }
-          }
-        },
-      );
-    } catch (e) {
-      _isWakeWordListening = false;
-      debugPrint("WakeWord Error: $e");
+        if (isTriggered) {
+          _isWakeWordListening = false;
+          _speech.stop();
+          _listenVoiceCommand();
+        }
+      },
+    );
+    
+    // لما الـ 10 ثواني يخلصوا (أو يسمع الاسم)، هييجي هنا ويعيد التشغيل تاني
+    _isWakeWordListening = false;
+    if (mounted && !_isListening && _settings.wakeWordMode != 'off') {
+      Future.delayed(const Duration(seconds: 1), () {
+        if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
+          _startWakeWordLoop();
+        }
+      });
     }
+
+  } catch (e) {
+    _isWakeWordListening = false;
+    debugPrint("WakeWord Error: $e");
+  }
   }
     Future<bool> _handleSocialReply(String cmd) async {
     final userTitle = _userTitle;
