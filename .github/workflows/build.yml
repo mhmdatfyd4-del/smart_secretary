@@ -32,6 +32,14 @@ jobs:
       - name: Generate missing Android files
         run: flutter create . --platforms=android --org com.example --project-name secretary_app
 
+      # ⬇️ ضفنا الخطوتين دول عشان اللوجو والسبلاش يشتغلوا ⬇️
+      - name: Generate Launcher Icons
+        run: dart run flutter_launcher_icons
+
+      - name: Generate Splash Screen
+        run: dart run flutter_native_splash:create
+      # ⬆️ ⬆️
+
       - name: Update Gradle to 8.0
         run: |
           sed -i 's|distributionUrl=.*gradle-.*-all.zip|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.0-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
