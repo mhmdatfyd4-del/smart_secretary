@@ -3,14 +3,18 @@ package com.example.secretary_app
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 
 class WakeWordService : Service() {
     private var speechRecognizer: SpeechRecognizer? = null
@@ -21,6 +25,7 @@ class WakeWordService : Service() {
     private var voiceGender: String = "أنثى"
     private var intent: Intent? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private val handler = Handler(Looper.getMainLooper())
 
     private var isPaused = false
     private val pauseReceiver = object : android.content.BroadcastReceiver() {
@@ -36,7 +41,6 @@ class WakeWordService : Service() {
         super.onCreate()
         createNotificationChannel()
         
-        // ✅ هنا الاسم اللي إحنا عايزينه
         val notification = NotificationCompat.Builder(this, "WakeWordChannel")
             .setContentTitle("سكرتيري") 
             .setContentText("بيستنى تنادي عليه...")
@@ -44,13 +48,18 @@ class WakeWordService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        startForeground(100, notification)
+        // إصلاح الأندرويد 14 (ميكروفون)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(100, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        } else {
+            startForeground(100, notification)
+        }
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Secretary::WakeWordWakeLock")
-        wakeLock?.acquire()
+        wakeLock?.acquire(10 * 60 * 1000L)
 
-        registerReceiver(pauseReceiver, android.content.IntentFilter("com.example.secretary_app.PAUSE_WAKE_WORD"))
+        ContextCompat.registerReceiver(this, pauseReceiver, android.content.IntentFilter("com.example.secretary_app.PAUSE_WAKE_WORD"), ContextCompat.RECEIVER_NOT_EXPORTED)
 
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         wakeWord = prefs.getString("flutter.custom_wake_word", "يا سكرتير") ?: "يا سكرتير"
@@ -60,6 +69,16 @@ class WakeWordService : Service() {
         voiceGender = prefs.getString("flutter.voice_gender", "أنثى") ?: "أنثى"
 
         initSpeechRecognizer()
+    }
+
+    // إصلاح إعادة التشغيل بعد كلام السكرتير
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (isPaused) {
+            isPaused = false
+            if (!wakeLock!!.isHeld) wakeLock?.acquire(10 * 60 * 1000L)
+            startListening()
+        }
+        return START_STICKY
     }
 
     private fun initSpeechRecognizer() {
@@ -77,8 +96,21 @@ class WakeWordService : Service() {
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {}
-                override fun onError(error: Int) { startListening() }
-                override fun onResults(results: Bundle?) { processResults(results); startListening() }
+                
+                // إصلاح الحلقة اللانهائية (منع الهنج)
+                override fun onError(error: Int) { 
+                    if (!isPaused && listenMode != "off") {
+                        handler.postDelayed({ startListening() }, 2000)
+                    }
+                }
+                
+                override fun onResults(results: Bundle?) { 
+                    processResults(results)
+                    if (!isPaused && listenMode != "off") {
+                        handler.postDelayed({ startListening() }, 500)
+                    }
+                }
+                
                 override fun onPartialResults(partialResults: Bundle?) { processResults(partialResults) }
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
@@ -145,6 +177,7 @@ class WakeWordService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
         speechRecognizer?.destroy()
         try { unregisterReceiver(pauseReceiver) } catch (_: Exception) {}
         if (wakeLock?.isHeld == true) wakeLock?.release()
