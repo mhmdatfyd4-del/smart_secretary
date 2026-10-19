@@ -48,7 +48,6 @@ class WakeWordService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        // إصلاح الأندرويد 14 (ميكروفون)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(100, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         } else {
@@ -71,11 +70,10 @@ class WakeWordService : Service() {
         initSpeechRecognizer()
     }
 
-    // إصلاح إعادة التشغيل بعد كلام السكرتير
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (isPaused) {
             isPaused = false
-            if (!wakeLock!!.isHeld) wakeLock?.acquire(10 * 60 * 1000L)
+            if (wakeLock?.isHeld == false) wakeLock?.acquire(10 * 60 * 1000L)
             startListening()
         }
         return START_STICKY
@@ -97,7 +95,6 @@ class WakeWordService : Service() {
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {}
                 
-                // إصلاح الحلقة اللانهائية (منع الهنج)
                 override fun onError(error: Int) { 
                     if (!isPaused && listenMode != "off") {
                         handler.postDelayed({ startListening() }, 2000)
@@ -107,7 +104,7 @@ class WakeWordService : Service() {
                 override fun onResults(results: Bundle?) { 
                     processResults(results)
                     if (!isPaused && listenMode != "off") {
-                        handler.postDelayed({ startListening() }, 500)
+                        handler.postDelayed({ startListening() }, 200)
                     }
                 }
                 
@@ -128,20 +125,32 @@ class WakeWordService : Service() {
         speechRecognizer?.cancel()
     }
 
+    private fun normalizeArabic(text: String): String {
+        return text.lowercase()
+            .replace("أ", "ا")
+            .replace("إ", "ا")
+            .replace("آ", "ا")
+            .replace("ة", "ه")
+            .replace("ى", "ي")
+            .replace(Regex("\\s+"), "")
+    }
+
     private fun processResults(results: Bundle?) {
         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         if (matches != null && matches.isNotEmpty()) {
-            val text = matches[0].toLowerCase()
+            val text = normalizeArabic(matches[0])
             
-            val nameNorm = secretaryName.lowercase()
-            val secTitle = if (voiceGender == "ذكر") "سكرتير" else "سكرتيرة"
-            val secTitleAlt = if (voiceGender == "ذكر") "سكرتير" else "سكرتيره"
+            val nameNorm = normalizeArabic(secretaryName)
+            val customNorm = normalizeArabic(wakeWord)
             
-            val isNameMatch = text.contains(nameNorm) || text.contains("يا $nameNorm") ||
-                              text.contains(secTitle) || text.contains("يا $secTitle") ||
-                              text.contains(secTitleAlt) || text.contains("يا $secTitleAlt")
+            val secTitleNorm = normalizeArabic("سكرتير")
+            val secTitleAltNorm = normalizeArabic("سكرتيره")
             
-            val isCustomMatch = text.contains(wakeWord.lowercase())
+            val isNameMatch = (nameNorm.isNotEmpty() && text.contains(nameNorm)) ||
+                              text.contains(secTitleNorm) || 
+                              text.contains(secTitleAltNorm)
+            
+            val isCustomMatch = customNorm.isNotEmpty() && text.contains(customNorm)
             
             var isTriggered = false
             when (wakeWordTrigger) {
