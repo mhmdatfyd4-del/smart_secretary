@@ -199,6 +199,7 @@ class AppSettings {
   bool adhanAlertEnabled;
   bool showAboveLockScreen;
   bool shakeInBackgroundEnabled;
+  bool muteBeep;
   String voiceGender;
   String defaultInterval;
   String customWakeWord;
@@ -213,6 +214,7 @@ class AppSettings {
     this.adhanAlertEnabled = true,
     this.showAboveLockScreen = false,
     this.shakeInBackgroundEnabled = true,
+    this.muteBeep = true,
     this.voiceGender = 'ذكر',
     this.defaultInterval = 'كل 10 ثواني',
     this.customWakeWord = 'يا سكرتير',
@@ -251,6 +253,7 @@ class SettingsScreen extends StatefulWidget {
     bool showLock, bool shakeBg, String voiceGender,
     String defaultInterval, String customWakeWord,
     String wakeWordMode, String wakeWordTrigger,
+    bool muteBeep,
   ) onSave;
   final Future<void> Function(String name, String voiceGender) onSaveSecretary;
 
@@ -277,6 +280,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late double _ttsVolume;
   late bool _showAboveLockScreen;
   late bool _shakeInBackground;
+  late bool _muteBeep;
   late String _voiceGender;
   late String _defaultInterval;
   late String _secretaryName;
@@ -293,6 +297,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late double _origTtsVolume;
   late bool _origShowAboveLockScreen;
   late bool _origShakeInBackground;
+  late bool _origMuteBeep;
   late String _origVoiceGender;
   late String _origDefaultInterval;
   late String _origSecretaryName;
@@ -313,6 +318,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _ttsVolume = widget.ttsVolume;
     _showAboveLockScreen = widget.settings.showAboveLockScreen;
     _shakeInBackground = widget.settings.shakeInBackgroundEnabled;
+    _muteBeep = widget.settings.muteBeep;
     _voiceGender = widget.settings.voiceGender;
     _defaultInterval = widget.settings.defaultInterval;
     _secretaryName = widget.currentSecretaryName;
@@ -329,6 +335,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _origTtsVolume = _ttsVolume;
     _origShowAboveLockScreen = _showAboveLockScreen;
     _origShakeInBackground = _shakeInBackground;
+    _origMuteBeep = _muteBeep;
     _origVoiceGender = _voiceGender;
     _origDefaultInterval = _defaultInterval;
     _origSecretaryName = _secretaryName;
@@ -385,6 +392,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _ttsVolume != _origTtsVolume ||
         _showAboveLockScreen != _origShowAboveLockScreen ||
         _shakeInBackground != _origShakeInBackground ||
+        _muteBeep != _origMuteBeep ||
         _voiceGender != _origVoiceGender ||
         _defaultInterval != _origDefaultInterval ||
         _nameController.text != _origSecretaryName ||
@@ -403,6 +411,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _greetingEnabled, _adhanAlertEnabled, _ttsVolume,
       _showAboveLockScreen, _shakeInBackground, _voiceGender,
       _defaultInterval, _wakeWordController.text.trim(), _wakeWordMode, _wakeWordTrigger,
+      _muteBeep,
     );
     await widget.onSaveSecretary(newName, _voiceGender);
 
@@ -697,6 +706,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ]),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: SwitchListTile(
+              secondary: const Icon(Icons.volume_off, color: Color(0xFF1B2A4A), size: 26),
+              title: const Text('كتم صوت تنبيه المايك (البيب)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              subtitle: const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text('بيمنع الصوت المزعج لما المايك يفتح', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ),
+              value: _muteBeep,
+              activeColor: const Color(0xFF1B2A4A),
+              onChanged: (v) => setState(() => _muteBeep = v),
             ),
           ),
           const SizedBox(height: 12),
@@ -1509,7 +1534,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   String? _activeAlarmTitle;
   BuildContext? _alarmDialogContext;
 
-  // ✅ متغيرات جديدة لميزة "خلاص" والتحكم في المنبه
   Timer? _activeAlarmLoopTimer;
   String? _activeAlarmTaskTitle;
   DateTime? _activeAlarmScheduledTime;
@@ -1986,6 +2010,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _settings.adhanAlertEnabled = prefs.getBool('adhan_alert_enabled') ?? true;
     _settings.showAboveLockScreen = prefs.getBool('show_above_lock_screen') ?? false;
     _settings.shakeInBackgroundEnabled = prefs.getBool('shake_in_background') ?? true;
+    _settings.muteBeep = prefs.getBool('mute_beep') ?? true; // ✅ قراءة الإعداد الجديد
     _settings.voiceGender = prefs.getString('voice_gender') ?? 'ذكر';
     _settings.defaultInterval = prefs.getString('default_interval') ?? 'كل 10 ثواني';
     _settings.customWakeWord = prefs.getString('custom_wake_word') ?? 'يا سكرتير';
@@ -2014,6 +2039,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await prefs.setBool('adhan_alert_enabled', _settings.adhanAlertEnabled);
     await prefs.setBool('show_above_lock_screen', _settings.showAboveLockScreen);
     await prefs.setBool('shake_in_background', _settings.shakeInBackgroundEnabled);
+    await prefs.setBool('mute_beep', _settings.muteBeep); // ✅ حفظ الإعداد الجديد
     await prefs.setString('voice_gender', _settings.voiceGender);
     await prefs.setString('default_interval', _settings.defaultInterval);
     await prefs.setString('custom_wake_word', _settings.customWakeWord);
@@ -4371,7 +4397,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           ttsVolume: _ttsVolume,
           currentSecretaryName: _secretaryName,
           currentIsUserMale: _isUserMale,
-          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeBg, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger) async {
+          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeBg, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger, muteBeep) async {
             setState(() {
               _settings.defaultReminderHour = hour;
               _settings.defaultReminderMinute = minute;
@@ -4381,6 +4407,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               _ttsVolume = ttsVol;
               _settings.showAboveLockScreen = showLock;
               _settings.shakeInBackgroundEnabled = shakeBg;
+              _settings.muteBeep = muteBeep;
               _settings.voiceGender = voiceGender;
               _settings.defaultInterval = defaultInterval;
               _settings.customWakeWord = customWakeWord;
