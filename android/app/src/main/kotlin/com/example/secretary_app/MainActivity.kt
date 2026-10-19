@@ -110,6 +110,13 @@ class MainActivity : FlutterActivity() {
                     cancelAlarm(id)
                     result.success(true)
                 }
+                "stopAlarmService" -> {
+                    try {
+                        val intent = Intent(this, AlarmService::class.java)
+                        stopService(intent)
+                    } catch (_: Exception) {}
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }
