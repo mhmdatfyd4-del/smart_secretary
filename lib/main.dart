@@ -1505,6 +1505,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   bool _starting = false;
   bool _isListening = false;
   bool _isWakeWordListening = false;
+  bool _isAlarmDialogOpen = false;
+  String? _activeAlarmTitle;
+  BuildContext? _alarmDialogContext;
+
   int _currentIndex = 0;
   DateTime _selectedDate = DateTime.now();
   DateTime _diaryDate = DateTime.now();
@@ -1603,7 +1607,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       Future.delayed(const Duration(seconds: 2), () { try { _checkPendingAlarm(); } catch (_) {} });
       
       Future.delayed(const Duration(seconds: 3), () { 
-        if (_settings.wakeWordMode == 'app_open' || _settings.wakeWordMode == 'always') {
+        if (_settings.wakeWordMode == 'app_open' || 
+            _settings.wakeWordMode == 'background' || 
+            _settings.wakeWordMode == 'always') {
           _startWakeWordLoop(); 
         }
       });
@@ -1799,13 +1805,19 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       _speechReady = await _speech.initialize(
         onStatus: (status) {
           if ((status == 'done' || status == 'notListening') && mounted) {
-            if (_isListening) setState(() => _isListening = false);
+            if (_isListening) {
+              setState(() => _isListening = false);
+              try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+            }
             if (_isWakeWordListening) _isWakeWordListening = false;
           }
         },
         onError: (error) {
           if (mounted) {
-            if (_isListening) setState(() => _isListening = false);
+            if (_isListening) {
+              setState(() => _isListening = false);
+              try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+            }
             if (_isWakeWordListening) _isWakeWordListening = false;
           }
         },
@@ -2316,6 +2328,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     if (_isListening) {
       await _speech.stop();
       if (mounted) setState(() => _isListening = false);
+      try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
       return;
     }
     if (_starting) return;
@@ -2323,6 +2336,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     try {
       if (!_speechReady) await _initSpeech();
       if (!_speechReady) return;
+
+      try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
 
       await _tts.stop();
       try { await _speech.cancel(); } catch (_) {}
@@ -2341,10 +2356,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
       await _speech.listen(
         localeId: "ar-EG", onDevice: false,
-        listenFor: const Duration(seconds: 20), pauseFor: const Duration(seconds: 4),
+        listenFor: const Duration(seconds: 20), pauseFor: const Duration(seconds: 10),
         onResult: (val) {
           if (val.finalResult) {
             if (mounted) setState(() => _isListening = false);
+            try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
             _processSmartVoiceCommand(val.recognizedWords);
           }
         },
@@ -2352,6 +2368,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     } catch (e) {
       debugPrint("Listen Error: $e");
       if (mounted) setState(() => _isListening = false);
+      try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
     } finally {
       _starting = false;
     }
@@ -2367,31 +2384,26 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speech.listen(
         localeId: "ar-EG",
         onDevice: false,
-        listenFor: const Duration(seconds: 10),
-        pauseFor: const Duration(seconds: 4),
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 60),
         partialResults: true,
         onResult: (val) {
-          final cmd = _norm(val.recognizedWords);
-          final nameNorm = _norm(_secretaryName);
-          final wakeWordNorm = _norm(_settings.customWakeWord);
+          if (val.recognizedWords.isEmpty) return;
           
-          final secTitle = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيره';
-          final secTitleAlt = _settings.voiceGender == 'ذكر' ? 'سكرتير' : 'سكرتيرة';
-          final titleNormalized = _norm(secTitle);
-
-          final isNameMatch = cmd.contains(nameNorm) || cmd.contains('يا $nameNorm') ||
-                              cmd.contains(titleNormalized) || cmd.contains('يا $titleNormalized') ||
-                              cmd.contains(_norm(secTitleAlt)) || cmd.contains('يا ${_norm(secTitleAlt)}');
-          
-          final isCustomMatch = cmd.contains(wakeWordNorm);
+          final compact = _norm(val.recognizedWords).replaceAll(RegExp(r'\s+'), '');
+          final nameCompact = _norm(_secretaryName).replaceAll(RegExp(r'\s+'), '');
+          final customCompact = _norm(_settings.customWakeWord).replaceAll(RegExp(r'\s+'), '');
+          final isGenericMatch = compact.contains('ياسكرتير') || compact.contains('ياسكرتيره') || compact.contains('ياسكرتيرة');
           
           bool isTriggered = false;
           if (_settings.wakeWordTrigger == 'name_only') {
-            isTriggered = isNameMatch;
+            isTriggered = (nameCompact.isNotEmpty && compact.contains(nameCompact)) || isGenericMatch;
           } else if (_settings.wakeWordTrigger == 'custom_only') {
-            isTriggered = isCustomMatch;
+            isTriggered = customCompact.isNotEmpty && compact.contains(customCompact);
           } else {
-            isTriggered = isNameMatch || isCustomMatch;
+            isTriggered = (nameCompact.isNotEmpty && compact.contains(nameCompact)) || 
+                          (customCompact.isNotEmpty && compact.contains(customCompact)) || 
+                          isGenericMatch;
           }
 
           if (isTriggered) {
@@ -2403,17 +2415,25 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       );
       
       _isWakeWordListening = false;
-      if (mounted && !_isListening && _settings.wakeWordMode != 'off') {
-        Future.delayed(const Duration(seconds: 1), () {
-          if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
+      if (mounted && !_isListening && !_starting && !_isRecording && _settings.wakeWordMode != 'off') {
+        if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
+          Future.delayed(const Duration(milliseconds: 200), () {
+            if (mounted && !_isListening && !_starting && !_isRecording) {
+               _startWakeWordLoop();
+            }
+          });
+        }
+      }
+    } catch (e) {
+      _isWakeWordListening = false;
+      debugPrint("WakeWord Error: $e");
+      if (mounted && _settings.wakeWordMode != 'off') {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted && !_isListening && !_starting && !_isRecording && (!_isInBackground || _settings.wakeWordMode != 'app_open')) {
             _startWakeWordLoop();
           }
         });
       }
-
-    } catch (e) {
-      _isWakeWordListening = false;
-      debugPrint("WakeWord Error: $e");
     }
   }
     Future<bool> _handleSocialReply(String cmd) async {
@@ -2745,6 +2765,24 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final cmd = _norm(rawCommand);
     final nameNorm = _norm(_secretaryName);
     bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('يا سكرتيرة');
+
+    // ✅ ميزة إيقاف المنبه بالصوت
+    if (_hasAny(cmd, ['خلاص', 'صحيت', 'صحيتي', 'قومت', 'قومتي', 'فوقت', 'فوقتي', 'اقفل', 'اقفلي', 'كفاية', 'كفايه', 'إيقاف', 'ايقاف', 'إلغاء', 'الغي', 'بس'])) {
+      if (_isAlarmDialogOpen) {
+        _tts.stop();
+        _isAlarmDialogOpen = false;
+        _activeAlarmTitle = null;
+        WakelockPlus.disable();
+        if (_alarmDialogContext != null) {
+          Navigator.pop(_alarmDialogContext!);
+          _alarmDialogContext = null;
+        }
+        _notifications.cancelAll();
+        try { _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
+        await _speak("تم إيقاف المنبه $userTitle");
+        return;
+      }
+    }
 
     if (await _handleSocialReply(cmd)) return;
 
@@ -3568,6 +3606,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       '10', '20', '30', '3', '5', 'يا', 'من فضلك', 'بليز', 'اني', 'ان', 'انى', 'أن',
       'على', 'علي', 'في', 'فى', 'عند', 'عندي', 'عندى',
       'يكون', 'تكون', 'يبقى', 'تبقى', 'مره', 'مرة', 'واحده', 'واحدة', 'بس', 'كفايه', 'كفاية', 'مش محتاج',
+      'موعد', 'ميعاد', 'الميعاد', 'الموعد', 'و',
+      'ضيفلي', 'ضيفيلي', 'ضيف', 'ضيفي', 'أضفلي', 'اضفلي', 'أضيفلي', 'اضيفلي',
+      'عايز اضيف', 'عايز أضيف', 'عايزة اضيف', 'عايزة أضيف',
+      'عاوز اضيف', 'عاوز أضيف', 'عاوزة اضيف', 'عاوزة أضيف',
     };
     final nameNorm = _norm(_secretaryName);
     final kept = <String>[];
@@ -3689,6 +3731,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _nativeAlarmChannel.invokeMethod('cancelAlarm', {
         'id': taskTitle.hashCode + 5000,
       });
+      await _nativeAlarmChannel.invokeMethod('stopAlarmService');
     } catch (_) {}
   }
 
@@ -3785,6 +3828,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     WakelockPlus.enable();
     HapticFeedback.vibrate();
+    
+    _isAlarmDialogOpen = true;
+    _activeAlarmTitle = taskTitle;
 
     void speakAlert() {
       if (!hasCustomSound) {
@@ -3811,41 +3857,54 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1B2A4A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(children: [Icon(Icons.alarm_on, color: Color(0xFFC5A059), size: 30), SizedBox(width: 10), Text('تنبيه هام!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
-        content: Text('$userTitle، حان الآن موعد:\n"$taskTitle"', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
-            onPressed: () {
-              loopTimer?.cancel();
-              if (loopTimer != null) _activeTimers.remove(loopTimer);
-              _tts.stop();
-              try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
-              WakelockPlus.disable();
-              Navigator.pop(ctx);
+      builder: (ctx) {
+        _alarmDialogContext = ctx;
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1B2A4A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(children: [Icon(Icons.alarm_on, color: Color(0xFFC5A059), size: 30), SizedBox(width: 10), Text('تنبيه هام!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
+          content: Text('$userTitle، حان الآن موعد:\n"$taskTitle"', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
+              onPressed: () async {
+                loopTimer?.cancel();
+                if (loopTimer != null) _activeTimers.remove(loopTimer);
+                _tts.stop();
+                try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
+                WakelockPlus.disable();
+                
+                _isAlarmDialogOpen = false;
+                _activeAlarmTitle = null;
+                _alarmDialogContext = null;
+                
+                await _notifications.cancel(taskTitle.hashCode + 1000);
+                try { await _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
 
-              if (repeat == 'مرة واحدة') {
-                final idx = _tasks.indexWhere((t) => t['task'] == taskTitle);
-                if (idx != -1) {
-                  setState(() => _tasks.removeAt(idx));
-                  _saveData();
+                if (repeat == 'مرة واحدة') {
+                  final idx = _tasks.indexWhere((t) => t['task'] == taskTitle);
+                  if (idx != -1) {
+                    setState(() => _tasks.removeAt(idx));
+                    _saveData();
+                  }
+                  _cancelNativeAlarm(taskTitle);
+                  SharedPreferences.getInstance().then((prefs) {
+                    prefs.remove('pending_alarm');
+                  });
+                } else {
+                  _rescheduleRepeating(taskTitle, repeat, interval, customDays, scheduled, soundUri);
                 }
-                _cancelNativeAlarm(taskTitle);
-                SharedPreferences.getInstance().then((prefs) {
-                  prefs.remove('pending_alarm');
-                });
-              } else {
-                _rescheduleRepeating(taskTitle, repeat, interval, customDays, scheduled, soundUri);
-              }
-            },
-            child: const Text('خلاص (إيقاف)', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          )
-        ],
-      ),
-    );
+                Navigator.pop(ctx);
+              },
+              child: const Text('خلاص (إيقاف)', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            )
+          ],
+        );
+      },
+    ).then((_) {
+      _isAlarmDialogOpen = false;
+      _alarmDialogContext = null;
+    });
   }
 
   Future<Map<String, String>> _calculatePrayerTimes() async {
@@ -4013,12 +4072,15 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
-            onPressed: () {
+            onPressed: () async {
               _eventRepeatTimer?.cancel();
               _tts.stop();
               WakelockPlus.disable();
               _eventAnnouncing = false;
               _eventDialogShowing = false;
+              
+              await _notifications.cancel(title.hashCode + detail.hashCode);
+              try { await _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
               _cancelNativeAlarm('مناسبة: $title');
               Navigator.pop(ctx);
             },
