@@ -4,6 +4,7 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -33,6 +34,7 @@ class WakeWordService : Service() {
             if (intent?.action == "com.example.secretary_app.PAUSE_WAKE_WORD") {
                 isPaused = true
                 speechRecognizer?.cancel()
+                setSystemSoundMute(false) // تأمين إرجاع الصوت لو حصل توقف مفاجئ
             }
         }
     }
@@ -96,12 +98,14 @@ class WakeWordService : Service() {
                 override fun onEndOfSpeech() {}
                 
                 override fun onError(error: Int) { 
+                    setSystemSoundMute(false) // إرجاع الصوت لما يحصل خطأ
                     if (!isPaused && listenMode != "off") {
                         handler.postDelayed({ startListening() }, 2000)
                     }
                 }
                 
                 override fun onResults(results: Bundle?) { 
+                    setSystemSoundMute(false) // إرجاع الصوت لما يسمع نتيجة
                     processResults(results)
                     if (!isPaused && listenMode != "off") {
                         handler.postDelayed({ startListening() }, 200)
@@ -117,12 +121,27 @@ class WakeWordService : Service() {
 
     fun startListening() {
         if (listenMode == "off" || isPaused) return
+        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("flutter.mute_beep", true)) {
+            setSystemSoundMute(true) // كتم الصوت لو الخيار مفعل
+        }
         speechRecognizer?.cancel()
         speechRecognizer?.startListening(intent)
     }
 
     fun stopListening() {
         speechRecognizer?.cancel()
+    }
+
+    private fun setSystemSoundMute(mute: Boolean) {
+        try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            if (mute) {
+                audioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_MUTE, 0)
+            } else {
+                audioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_UNMUTE, 0)
+            }
+        } catch (_: Exception) {}
     }
 
     private fun normalizeArabic(text: String): String {
@@ -162,6 +181,7 @@ class WakeWordService : Service() {
             if (isTriggered) {
                 isPaused = true
                 stopListening()
+                setSystemSoundMute(false) // تأمين إرجاع الصوت عند النداء
                 
                 val openIntent = Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -190,6 +210,7 @@ class WakeWordService : Service() {
         speechRecognizer?.destroy()
         try { unregisterReceiver(pauseReceiver) } catch (_: Exception) {}
         if (wakeLock?.isHeld == true) wakeLock?.release()
+        setSystemSoundMute(false) // تأمين إرجاع الصوت عند تدمير الخدمة
         super.onDestroy()
     }
 }
