@@ -11,9 +11,11 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 
@@ -23,18 +25,20 @@ class WakeWordService : Service() {
     private var secretaryName: String = "سارة"
     private var listenMode: String = "always"
     private var wakeWordTrigger: String = "both"
-    private var voiceGender: String = "أنثى"
     private var intent: Intent? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private val handler = Handler(Looper.getMainLooper())
 
     private var isPaused = false
+    private val mutedStreams = mutableMapOf<Int, Int>()
+    private var muteRestoreRunnable: Runnable? = null
+
     private val pauseReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.example.secretary_app.PAUSE_WAKE_WORD") {
                 isPaused = true
                 speechRecognizer?.cancel()
-                setSystemSoundMute(false) // تأمين إرجاع الصوت لو حصل توقف مفاجئ
+                forceUnmute()
             }
         }
     }
@@ -60,25 +64,50 @@ class WakeWordService : Service() {
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Secretary::WakeWordWakeLock")
         wakeLock?.acquire(10 * 60 * 1000L)
 
-        ContextCompat.registerReceiver(this, pauseReceiver, android.content.IntentFilter("com.example.secretary_app.PAUSE_WAKE_WORD"), ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(
+            this, pauseReceiver,
+            android.content.IntentFilter("com.example.secretary_app.PAUSE_WAKE_WORD"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
 
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         wakeWord = prefs.getString("flutter.custom_wake_word", "يا سكرتير") ?: "يا سكرتير"
         secretaryName = prefs.getString("flutter.secretary_name", "سارة") ?: "سارة"
         listenMode = prefs.getString("flutter.wake_word_mode", "always") ?: "always"
         wakeWordTrigger = prefs.getString("flutter.wake_word_trigger", "both") ?: "both"
-        voiceGender = prefs.getString("flutter.voice_gender", "أنثى") ?: "أنثى"
 
         initSpeechRecognizer()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        listenMode = prefs.getString("flutter.wake_word_mode", "always") ?: "always"
+
         if (isPaused) {
             isPaused = false
             if (wakeLock?.isHeld == false) wakeLock?.acquire(10 * 60 * 1000L)
             startListening()
         }
         return START_STICKY
+    }
+
+    // ✅ إعادة تشغيل الخدمة لو التطبيق اتقفل (Swipe) وكان الوضع "دائماً"
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (listenMode == "always") {
+            val restartIntent = Intent(applicationContext, WakeWordService::class.java)
+            restartIntent.setPackage(packageName)
+            val pendingIntent = PendingIntent.getService(
+                applicationContext, 1, restartIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmManager = applicationContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmManager.set(
+                AlarmManager.ELAPSED_REALTIME,
+                SystemClock.elapsedRealtime() + 1000,
+                pendingIntent
+            )
+        }
     }
 
     private fun initSpeechRecognizer() {
@@ -91,21 +120,24 @@ class WakeWordService : Service() {
             }
 
             speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onReadyForSpeech(params: Bundle?) {
+                    Log.d("WakeWord", "onReadyForSpeech - unmuting")
+                    forceUnmute()
+                }
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {}
                 
                 override fun onError(error: Int) { 
-                    setSystemSoundMute(false) // إرجاع الصوت لما يحصل خطأ
+                    forceUnmute()
                     if (!isPaused && listenMode != "off") {
                         handler.postDelayed({ startListening() }, 2000)
                     }
                 }
                 
                 override fun onResults(results: Bundle?) { 
-                    setSystemSoundMute(false) // إرجاع الصوت لما يسمع نتيجة
+                    forceUnmute()
                     processResults(results)
                     if (!isPaused && listenMode != "off") {
                         handler.postDelayed({ startListening() }, 200)
@@ -123,7 +155,8 @@ class WakeWordService : Service() {
         if (listenMode == "off" || isPaused) return
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         if (prefs.getBoolean("flutter.mute_beep", true)) {
-            setSystemSoundMute(true) // كتم الصوت لو الخيار مفعل
+            setSystemSoundMute(true)
+            scheduleUnmute(900)
         }
         speechRecognizer?.cancel()
         speechRecognizer?.startListening(intent)
@@ -131,15 +164,45 @@ class WakeWordService : Service() {
 
     fun stopListening() {
         speechRecognizer?.cancel()
+        forceUnmute()
+    }
+
+    private fun scheduleUnmute(delayMs: Long) {
+        muteRestoreRunnable?.let { handler.removeCallbacks(it) }
+        muteRestoreRunnable = Runnable { forceUnmute() }
+        handler.postDelayed(muteRestoreRunnable!!, delayMs)
+    }
+
+    private fun forceUnmute() {
+        muteRestoreRunnable?.let { handler.removeCallbacks(it) }
+        muteRestoreRunnable = null
+        setSystemSoundMute(false)
     }
 
     private fun setSystemSoundMute(mute: Boolean) {
         try {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             if (mute) {
-                audioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_MUTE, 0)
+                if (mutedStreams.isNotEmpty()) return
+                val streams = intArrayOf(
+                    AudioManager.STREAM_SYSTEM,
+                    AudioManager.STREAM_NOTIFICATION,
+                    AudioManager.STREAM_DTMF
+                )
+                for (stream in streams) {
+                    try {
+                        val original = audioManager.getStreamVolume(stream)
+                        mutedStreams[stream] = original
+                        audioManager.setStreamVolume(stream, 0, 0)
+                    } catch (e: SecurityException) {
+                        Log.e("WakeWord", "PERMISSION DENIED - add MODIFY_AUDIO_SETTINGS!")
+                    } catch (_: Exception) {}
+                }
             } else {
-                audioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_UNMUTE, 0)
+                for ((stream, original) in mutedStreams) {
+                    try { audioManager.setStreamVolume(stream, original, 0) } catch (_: Exception) {}
+                }
+                mutedStreams.clear()
             }
         } catch (_: Exception) {}
     }
@@ -158,17 +221,13 @@ class WakeWordService : Service() {
         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         if (matches != null && matches.isNotEmpty()) {
             val text = normalizeArabic(matches[0])
-            
             val nameNorm = normalizeArabic(secretaryName)
             val customNorm = normalizeArabic(wakeWord)
-            
             val secTitleNorm = normalizeArabic("سكرتير")
             val secTitleAltNorm = normalizeArabic("سكرتيره")
             
             val isNameMatch = (nameNorm.isNotEmpty() && text.contains(nameNorm)) ||
-                              text.contains(secTitleNorm) || 
-                              text.contains(secTitleAltNorm)
-            
+                              text.contains(secTitleNorm) || text.contains(secTitleAltNorm)
             val isCustomMatch = customNorm.isNotEmpty() && text.contains(customNorm)
             
             var isTriggered = false
@@ -181,16 +240,14 @@ class WakeWordService : Service() {
             if (isTriggered) {
                 isPaused = true
                 stopListening()
-                setSystemSoundMute(false) // تأمين إرجاع الصوت عند النداء
+                forceUnmute()
                 
                 val openIntent = Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     putExtra("WAKE_WORD_DETECTED", true)
                 }
                 startActivity(openIntent)
-                
-                val broadcastIntent = Intent("com.example.secretary_app.WAKE_WORD_DETECTED")
-                sendBroadcast(broadcastIntent)
+                sendBroadcast(Intent("com.example.secretary_app.WAKE_WORD_DETECTED"))
             }
         }
     }
@@ -210,7 +267,7 @@ class WakeWordService : Service() {
         speechRecognizer?.destroy()
         try { unregisterReceiver(pauseReceiver) } catch (_: Exception) {}
         if (wakeLock?.isHeld == true) wakeLock?.release()
-        setSystemSoundMute(false) // تأمين إرجاع الصوت عند تدمير الخدمة
+        forceUnmute()
         super.onDestroy()
     }
 }
