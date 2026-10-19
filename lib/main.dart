@@ -2366,7 +2366,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       await _speech.listen(
         localeId: "ar-EG", onDevice: false,
         listenFor: const Duration(seconds: 20), pauseFor: const Duration(seconds: 10),
-        beepOn: false, // ✅ التعديل هنا (إيقاف الصوت المزعج)
         onResult: (val) {
           if (val.finalResult) {
             if (mounted) setState(() => _isListening = false);
@@ -2397,7 +2396,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         listenFor: const Duration(seconds: 30),
         pauseFor: const Duration(seconds: 60),
         partialResults: true,
-        beepOn: false, // ✅ التعديل هنا (إيقاف الصوت المزعج)
         onResult: (val) {
           if (val.recognizedWords.isEmpty) return;
           
