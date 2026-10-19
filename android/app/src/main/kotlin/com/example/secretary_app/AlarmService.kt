@@ -3,235 +3,271 @@ package com.example.secretary_app
 import android.app.*
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
+import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
+import android.util.Log
 import androidx.core.app.NotificationCompat
-import java.util.Locale
+import androidx.core.content.ContextCompat
 
-class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener {
-    private var tts: TextToSpeech? = null
-    private var isTtsReady = false
-    private var pendingText: String? = null
-    private var wakeLock: PowerManager.WakeLock? = null
+class WakeWordService : Service() {
     private var speechRecognizer: SpeechRecognizer? = null
-    private var stopRequested = false
+    private var wakeWord: String = "يا سكرتير"
+    private var secretaryName: String = "سارة"
+    private var listenMode: String = "always"
+    private var wakeWordTrigger: String = "both"
+    private var intent: Intent? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private val handler = Handler(Looper.getMainLooper())
 
-    companion object {
-        const val CHANNEL_ID = "secretary_native_alarm_v2"
-        const val NOTIF_ID = 99001
-        const val EXTRA_TITLE = "title"
-        const val EXTRA_PREFIX = "prefix"
-        const val ACTION_START = "com.example.secretary_app.START_ALARM"
-        const val ACTION_STOP = "com.example.secretary_app.STOP_ALARM"
-        const val DEFAULT_PREFIX = "حان الآن موعد: "
+    private var isPaused = false
+    private val mutedStreams = mutableMapOf<Int, Int>()
+    private var muteRestoreRunnable: Runnable? = null
+
+    private val pauseReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.example.secretary_app.PAUSE_WAKE_WORD") {
+                isPaused = true
+                speechRecognizer?.cancel()
+                forceUnmute()
+            }
+        }
     }
 
     override fun onCreate() {
         super.onCreate()
-        createChannel()
-        tts = TextToSpeech(this, this)
+        createNotificationChannel()
         
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SecretaryApp::AlarmWakeLock")
-        
-        // بنوقف خدمة النداء مؤقتاً عشان ميعملوش خناقة على المايك
-        sendBroadcast(Intent("com.example.secretary_app.PAUSE_WAKE_WORD"))
+        val notification = NotificationCompat.Builder(this, "WakeWordChannel")
+            .setContentTitle("سكرتيري") 
+            .setContentText("بيستنى تنادي عليه...")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(100, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        } else {
+            startForeground(100, notification)
+        }
+
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Secretary::WakeWordWakeLock")
+        wakeLock?.acquire(10 * 60 * 1000L)
+
+        ContextCompat.registerReceiver(
+            this, pauseReceiver,
+            android.content.IntentFilter("com.example.secretary_app.PAUSE_WAKE_WORD"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
+        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        wakeWord = prefs.getString("flutter.custom_wake_word", "يا سكرتير") ?: "يا سكرتير"
+        secretaryName = prefs.getString("flutter.secretary_name", "سارة") ?: "سارة"
+        listenMode = prefs.getString("flutter.wake_word_mode", "always") ?: "always"
+        wakeWordTrigger = prefs.getString("flutter.wake_word_trigger", "both") ?: "both"
+
+        initSpeechRecognizer()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP || stopRequested) {
-            stopSelf()
-            return START_NOT_STICKY
+        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        listenMode = prefs.getString("flutter.wake_word_mode", "always") ?: "always"
+
+        if (isPaused) {
+            isPaused = false
+            if (wakeLock?.isHeld == false) wakeLock?.acquire(10 * 60 * 1000L)
+            startListening()
         }
-
-        val title = intent?.getStringExtra(EXTRA_TITLE) ?: return START_NOT_STICKY
-        val prefix = intent?.getStringExtra(EXTRA_PREFIX) ?: DEFAULT_PREFIX
-
-        val notification = buildNotification(title)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                startForeground(
-                    NOTIF_ID,
-                    notification,
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-                )
-            } catch (e: Exception) {
-                startForeground(NOTIF_ID, notification)
-            }
-        } else {
-            startForeground(NOTIF_ID, notification)
-        }
-
-        if (wakeLock?.isHeld == false) {
-            wakeLock?.acquire(60 * 1000L)
-        }
-
-        if (isTtsReady) {
-            speak(prefix, title)
-        } else {
-            pendingText = "$prefix|$title"
-        }
-
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
-    private fun createChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "منبه السكرتير (خلفية)",
-                NotificationManager.IMPORTANCE_MIN
-            ).apply {
-                description = "تشغيل صوت المنبه في الخلفية"
-                setSound(null, null)
-                enableLights(false)
-                enableVibration(false)
-                setShowBadge(false)
-            }
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.createNotificationChannel(channel)
+    // ✅ إعادة تشغيل الخدمة لو التطبيق اتقفل (Swipe) وكان الوضع "دائماً"
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (listenMode == "always") {
+            val restartIntent = Intent(applicationContext, WakeWordService::class.java)
+            restartIntent.setPackage(packageName)
+            val pendingIntent = PendingIntent.getService(
+                applicationContext, 1, restartIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmManager = applicationContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmManager.set(
+                AlarmManager.ELAPSED_REALTIME,
+                SystemClock.elapsedRealtime() + 1000,
+                pendingIntent
+            )
         }
     }
 
-    private fun buildNotification(title: String): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("تشغيل التنبيه")
-            .setContentText(title)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setOngoing(true)
-            .setSilent(true)
-            .setShowWhen(false)
-            .build()
-    }
-
-    private fun speak(prefix: String, text: String) {
-        val toSay = "$prefix$text"
-        
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA) // صوت الميديا
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-            .build()
-            
-        tts?.setAudioAttributes(audioAttributes)
-        tts?.setLanguage(Locale("ar"))
-        tts?.setSpeechRate(1.0f)
-        tts?.setPitch(1.0f)
-
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {}
-            override fun onDone(utteranceId: String?) {
-                if (!stopRequested) {
-                    startListening()
-                }
-            }
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                if (!stopRequested) {
-                    startListening()
-                }
-            }
-        })
-
-        tts?.speak(toSay, TextToSpeech.QUEUE_FLUSH, null, "alarm_${System.currentTimeMillis()}")
-    }
-
-    private fun startListening() {
-        if (stopRequested) return
+    private fun initSpeechRecognizer() {
         if (SpeechRecognizer.isRecognitionAvailable(this)) {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-            speechRecognizer?.setRecognitionListener(this)
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-EG")
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             }
-            speechRecognizer?.startListening(intent)
+
+            speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    Log.d("WakeWord", "onReadyForSpeech - unmuting")
+                    forceUnmute()
+                }
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                
+                override fun onError(error: Int) { 
+                    forceUnmute()
+                    if (!isPaused && listenMode != "off") {
+                        handler.postDelayed({ startListening() }, 2000)
+                    }
+                }
+                
+                override fun onResults(results: Bundle?) { 
+                    forceUnmute()
+                    processResults(results)
+                    if (!isPaused && listenMode != "off") {
+                        handler.postDelayed({ startListening() }, 200)
+                    }
+                }
+                
+                override fun onPartialResults(partialResults: Bundle?) { processResults(partialResults) }
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            startListening()
         }
     }
 
-    override fun onReadyForSpeech(params: Bundle?) {}
-    override fun onBeginningOfSpeech() {}
-    override fun onRmsChanged(rmsdB: Float) {}
-    override fun onBufferReceived(buffer: ByteArray?) {}
-    override fun onEndOfSpeech() {}
-    override fun onEvent(eventType: Int, params: Bundle?) {}
-    
-    override fun onError(error: Int) {
-        if (!stopRequested) {
-            startListening() // بيعيد المحاولة لو حصل خطأ
+    fun startListening() {
+        if (listenMode == "off" || isPaused) return
+        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("flutter.mute_beep", true)) {
+            setSystemSoundMute(true)
+            scheduleUnmute(900)
         }
+        speechRecognizer?.cancel()
+        speechRecognizer?.startListening(intent)
     }
 
-    override fun onResults(results: Bundle?) {
+    fun stopListening() {
+        speechRecognizer?.cancel()
+        forceUnmute()
+    }
+
+    private fun scheduleUnmute(delayMs: Long) {
+        muteRestoreRunnable?.let { handler.removeCallbacks(it) }
+        muteRestoreRunnable = Runnable { forceUnmute() }
+        handler.postDelayed(muteRestoreRunnable!!, delayMs)
+    }
+
+    private fun forceUnmute() {
+        muteRestoreRunnable?.let { handler.removeCallbacks(it) }
+        muteRestoreRunnable = null
+        setSystemSoundMute(false)
+    }
+
+    private fun setSystemSoundMute(mute: Boolean) {
+        try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            if (mute) {
+                if (mutedStreams.isNotEmpty()) return
+                val streams = intArrayOf(
+                    AudioManager.STREAM_SYSTEM,
+                    AudioManager.STREAM_NOTIFICATION,
+                    AudioManager.STREAM_DTMF
+                )
+                for (stream in streams) {
+                    try {
+                        val original = audioManager.getStreamVolume(stream)
+                        mutedStreams[stream] = original
+                        audioManager.setStreamVolume(stream, 0, 0)
+                    } catch (e: SecurityException) {
+                        Log.e("WakeWord", "PERMISSION DENIED - add MODIFY_AUDIO_SETTINGS!")
+                    } catch (_: Exception) {}
+                }
+            } else {
+                for ((stream, original) in mutedStreams) {
+                    try { audioManager.setStreamVolume(stream, original, 0) } catch (_: Exception) {}
+                }
+                mutedStreams.clear()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun normalizeArabic(text: String): String {
+        return text.lowercase()
+            .replace("أ", "ا")
+            .replace("إ", "ا")
+            .replace("آ", "ا")
+            .replace("ة", "ه")
+            .replace("ى", "ي")
+            .replace(Regex("\\s+"), "")
+    }
+
+    private fun processResults(results: Bundle?) {
         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         if (matches != null && matches.isNotEmpty()) {
-            val text = matches[0].toLowerCase()
-            if (text.contains("خلاص") || text.contains("صحيت") || text.contains("قومت") || text.contains("فوقت") ||
-                text.contains("إيقاف") || text.contains("ايقاف") || text.contains("كفايه") || text.contains("كفاية") ||
-                text.contains("الغي") || text.contains("إلغاء") || text.contains("قف")) {
-                stopRequested = true
-                stopSelf()
-            } else {
-                if (!stopRequested) startListening() // بيفضل يسمع
+            val text = normalizeArabic(matches[0])
+            val nameNorm = normalizeArabic(secretaryName)
+            val customNorm = normalizeArabic(wakeWord)
+            val secTitleNorm = normalizeArabic("سكرتير")
+            val secTitleAltNorm = normalizeArabic("سكرتيره")
+            
+            val isNameMatch = (nameNorm.isNotEmpty() && text.contains(nameNorm)) ||
+                              text.contains(secTitleNorm) || text.contains(secTitleAltNorm)
+            val isCustomMatch = customNorm.isNotEmpty() && text.contains(customNorm)
+            
+            var isTriggered = false
+            when (wakeWordTrigger) {
+                "name_only" -> isTriggered = isNameMatch
+                "custom_only" -> isTriggered = isCustomMatch
+                else -> isTriggered = isNameMatch || isCustomMatch
             }
-        } else {
-            if (!stopRequested) startListening()
-        }
-    }
-
-    override fun onPartialResults(partialResults: Bundle?) {
-        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-        if (matches != null && matches.isNotEmpty()) {
-            val text = matches[0].toLowerCase()
-            if (text.contains("خلاص") || text.contains("صحيت") || text.contains("قومت") || text.contains("فوقت") ||
-                text.contains("إيقاف") || text.contains("ايقاف") || text.contains("كفايه") || text.contains("كفاية") ||
-                text.contains("الغي") || text.contains("إلغاء") || text.contains("قف")) {
-                stopRequested = true
-                stopSelf()
-            }
-        }
-    }
-
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            isTtsReady = true
-            pendingText?.let {
-                val parts = it.split("|", limit = 2)
-                if (parts.size == 2) {
-                    speak(parts[0], parts[1])
+            
+            if (isTriggered) {
+                isPaused = true
+                stopListening()
+                forceUnmute()
+                
+                val openIntent = Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra("WAKE_WORD_DETECTED", true)
                 }
-                pendingText = null
+                startActivity(openIntent)
+                sendBroadcast(Intent("com.example.secretary_app.WAKE_WORD_DETECTED"))
             }
         }
     }
 
-    override fun onDestroy() {
-        stopRequested = true
-        tts?.stop()
-        tts?.shutdown()
-        speechRecognizer?.destroy()
-        if (wakeLock?.isHeld == true) {
-            wakeLock?.release()
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val serviceChannel = NotificationChannel("WakeWordChannel", "Wake Word Service", NotificationManager.IMPORTANCE_LOW)
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(serviceChannel)
         }
-        // بنرجع نشغل خدمة النداء تاني
-        try {
-            val intent = Intent(this, WakeWordService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
-        } catch (_: Exception) {}
-        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        speechRecognizer?.destroy()
+        try { unregisterReceiver(pauseReceiver) } catch (_: Exception) {}
+        if (wakeLock?.isHeld == true) wakeLock?.release()
+        forceUnmute()
+        super.onDestroy()
+    }
 }
