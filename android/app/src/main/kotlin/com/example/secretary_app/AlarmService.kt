@@ -4,20 +4,25 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
-import android.media.AudioManager
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
 import java.util.Locale
 
-class AlarmService : Service(), TextToSpeech.OnInitListener {
+class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener {
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
     private var pendingText: String? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var stopRequested = false
 
     companion object {
         const val CHANNEL_ID = "secretary_native_alarm_v2"
@@ -36,10 +41,13 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SecretaryApp::AlarmWakeLock")
+        
+        // بنوقف خدمة النداء مؤقتاً عشان ميعملوش خناقة على المايك
+        sendBroadcast(Intent("com.example.secretary_app.PAUSE_WAKE_WORD"))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
+        if (intent?.action == ACTION_STOP || stopRequested) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -111,9 +119,8 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     private fun speak(prefix: String, text: String) {
         val toSay = "$prefix$text"
         
-        // صوت الميديا العادي
         val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setUsage(AudioAttributes.USAGE_MEDIA) // صوت الميديا
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build()
             
@@ -125,15 +132,76 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {}
             override fun onDone(utteranceId: String?) {
-                stopSelf()
+                if (!stopRequested) {
+                    startListening()
+                }
             }
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                stopSelf()
+                if (!stopRequested) {
+                    startListening()
+                }
             }
         })
 
         tts?.speak(toSay, TextToSpeech.QUEUE_FLUSH, null, "alarm_${System.currentTimeMillis()}")
+    }
+
+    private fun startListening() {
+        if (stopRequested) return
+        if (SpeechRecognizer.isRecognitionAvailable(this)) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            speechRecognizer?.setRecognitionListener(this)
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-EG")
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            }
+            speechRecognizer?.startListening(intent)
+        }
+    }
+
+    override fun onReadyForSpeech(params: Bundle?) {}
+    override fun onBeginningOfSpeech() {}
+    override fun onRmsChanged(rmsdB: Float) {}
+    override fun onBufferReceived(buffer: ByteArray?) {}
+    override fun onEndOfSpeech() {}
+    override fun onEvent(eventType: Int, params: Bundle?) {}
+    
+    override fun onError(error: Int) {
+        if (!stopRequested) {
+            startListening() // بيعيد المحاولة لو حصل خطأ
+        }
+    }
+
+    override fun onResults(results: Bundle?) {
+        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+        if (matches != null && matches.isNotEmpty()) {
+            val text = matches[0].toLowerCase()
+            if (text.contains("خلاص") || text.contains("صحيت") || text.contains("قومت") || text.contains("فوقت") ||
+                text.contains("إيقاف") || text.contains("ايقاف") || text.contains("كفايه") || text.contains("كفاية") ||
+                text.contains("الغي") || text.contains("إلغاء") || text.contains("قف")) {
+                stopRequested = true
+                stopSelf()
+            } else {
+                if (!stopRequested) startListening() // بيفضل يسمع
+            }
+        } else {
+            if (!stopRequested) startListening()
+        }
+    }
+
+    override fun onPartialResults(partialResults: Bundle?) {
+        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+        if (matches != null && matches.isNotEmpty()) {
+            val text = matches[0].toLowerCase()
+            if (text.contains("خلاص") || text.contains("صحيت") || text.contains("قومت") || text.contains("فوقت") ||
+                text.contains("إيقاف") || text.contains("ايقاف") || text.contains("كفايه") || text.contains("كفاية") ||
+                text.contains("الغي") || text.contains("إلغاء") || text.contains("قف")) {
+                stopRequested = true
+                stopSelf()
+            }
+        }
     }
 
     override fun onInit(status: Int) {
@@ -150,11 +218,18 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        stopRequested = true
         tts?.stop()
         tts?.shutdown()
+        speechRecognizer?.destroy()
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
         }
+        // بنرجع نشغل خدمة النداء تاني
+        try {
+            val intent = Intent(this, WakeWordService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+        } catch (_: Exception) {}
         super.onDestroy()
     }
 
