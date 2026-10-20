@@ -109,7 +109,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
 
     private fun speak(prefix: String, text: String) {
         val toSay = "$prefix$text"
-        // شيلنا startListening من هنا عشان المنبه يشتغل في الخلفية
 
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -125,7 +124,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
             override fun onStart(utteranceId: String?) {}
             override fun onDone(utteranceId: String?) {
                 if (!stopRequested) {
-                    startListening() // نبدأ نسمع بعد ما السكرتيرة تخلص كلامها
+                    startListening()
                 }
             }
             @Deprecated("Deprecated in Java")
@@ -154,7 +153,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
                     AudioManager.STREAM_SYSTEM,
                     AudioManager.STREAM_NOTIFICATION,
                     AudioManager.STREAM_DTMF
-                    // شيلنا MUSIC عشان صوت المنبه يشتغل
                 )
                 for (stream in streams) {
                     try {
@@ -250,7 +248,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
                 val text = matches[i] ?: continue
                 if (isStopCommand(text)) {
                     stopRequested = true
-                    sendBroadcast(Intent("com.example.secretary_app.ALARM_STOPPED_BY_VOICE")) // الجسر اللي بيقفل الشاشة
+                    sendBroadcast(Intent("com.example.secretary_app.ALARM_STOPPED_BY_VOICE"))
                     stopSelf()
                     return
                 }
