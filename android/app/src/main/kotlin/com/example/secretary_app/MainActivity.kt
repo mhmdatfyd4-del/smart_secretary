@@ -24,6 +24,7 @@ class MainActivity : FlutterActivity() {
 
     private var previewPlayer: MediaPlayer? = null
     private var previewRingtone: android.media.Ringtone? = null
+    private var pendingWakeWord = false
 
     private val wakeWordReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -56,11 +57,7 @@ class MainActivity : FlutterActivity() {
         }
 
         if (intent?.getBooleanExtra("WAKE_WORD_DETECTED", false) == true) {
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                flutterEngine?.dartExecutor?.binaryMessenger?.let {
-                    MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onWakeWordDetected", null)
-                }
-            }, 500)
+            pendingWakeWord = true
         }
     }
 
@@ -239,6 +236,10 @@ class MainActivity : FlutterActivity() {
                     val intent = Intent(this, WakeWordService::class.java)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
                     result.success(true)
+                }
+                "isWakeWordPending" -> {
+                    result.success(pendingWakeWord)
+                    pendingWakeWord = false
                 }
                 else -> result.notImplemented()
             }
