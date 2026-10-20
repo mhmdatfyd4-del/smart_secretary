@@ -109,7 +109,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
 
     private fun speak(prefix: String, text: String) {
         val toSay = "$prefix$text"
-        startListening()
+        // شيلنا startListening من هنا عشان المنبه يشتغل في الخلفية
 
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -125,7 +125,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
             override fun onStart(utteranceId: String?) {}
             override fun onDone(utteranceId: String?) {
                 if (!stopRequested) {
-                    startListening()
+                    startListening() // نبدأ نسمع بعد ما السكرتيرة تخلص كلامها
                 }
             }
             @Deprecated("Deprecated in Java")
@@ -153,9 +153,8 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
                 val streams = intArrayOf(
                     AudioManager.STREAM_SYSTEM,
                     AudioManager.STREAM_NOTIFICATION,
-                    AudioManager.STREAM_DTMF,
-                    AudioManager.STREAM_MUSIC,
-                    AudioManager.STREAM_ALARM
+                    AudioManager.STREAM_DTMF
+                    // شيلنا MUSIC عشان صوت المنبه يشتغل
                 )
                 for (stream in streams) {
                     try {
@@ -229,7 +228,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
         return false
     }
 
-    override fun onReadyForSpeech(params: Bundle?) { forceUnmute() }
+    override fun onReadyForSpeech(params: Bundle?) { }
     override fun onBeginningOfSpeech() {}
     override fun onRmsChanged(rmsdB: Float) {}
     override fun onBufferReceived(buffer: ByteArray?) {}
@@ -239,7 +238,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
     override fun onError(error: Int) {
         forceUnmute()
         if (!stopRequested) {
-            handler.postDelayed({ startListening() }, 500) // 👈 يرجع يسمع بسرعة
+            handler.postDelayed({ startListening() }, 500)
         }
     }
 
@@ -251,7 +250,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
                 val text = matches[i] ?: continue
                 if (isStopCommand(text)) {
                     stopRequested = true
-                    sendBroadcast(Intent("com.example.secretary_app.ALARM_STOPPED_BY_VOICE")) // 👈 الجسر
+                    sendBroadcast(Intent("com.example.secretary_app.ALARM_STOPPED_BY_VOICE")) // الجسر اللي بيقفل الشاشة
                     stopSelf()
                     return
                 }
@@ -269,7 +268,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
                 val text = matches[i] ?: continue
                 if (isStopCommand(text)) {
                     stopRequested = true
-                    sendBroadcast(Intent("com.example.secretary_app.ALARM_STOPPED_BY_VOICE")) // 👈 الجسر
+                    sendBroadcast(Intent("com.example.secretary_app.ALARM_STOPPED_BY_VOICE"))
                     stopSelf()
                     return
                 }
