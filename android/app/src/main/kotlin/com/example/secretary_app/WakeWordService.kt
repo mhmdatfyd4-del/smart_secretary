@@ -116,10 +116,13 @@ class WakeWordService : Service() {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-EG")
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                // زودنا مدة السكوت عشان المايك ميقفلش بسرعة ويطلع البيب
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
             }
 
             speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) { forceUnmute() }
+                override fun onReadyForSpeech(params: Bundle?) { }
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
@@ -128,7 +131,7 @@ class WakeWordService : Service() {
                 override fun onError(error: Int) { 
                     forceUnmute()
                     if (!isPaused && listenMode != "off") {
-                        handler.postDelayed({ startListening() }, 2000)
+                        handler.postDelayed({ startListening() }, 1000)
                     }
                 }
                 
@@ -136,7 +139,7 @@ class WakeWordService : Service() {
                     forceUnmute()
                     processResults(results)
                     if (!isPaused && listenMode != "off") {
-                        handler.postDelayed({ startListening() }, 200)
+                        handler.postDelayed({ startListening() }, 500)
                     }
                 }
                 
@@ -152,7 +155,7 @@ class WakeWordService : Service() {
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         if (prefs.getBoolean("flutter.mute_beep", true)) {
             setSystemSoundMute(true)
-            scheduleUnmute(3500) // 👈 طولنا المدة لـ 3.5 ثانية
+            scheduleUnmute(3500) // طولنا مدة الكتم
         }
         speechRecognizer?.cancel()
         speechRecognizer?.startListening(intent)
@@ -184,8 +187,7 @@ class WakeWordService : Service() {
                     AudioManager.STREAM_SYSTEM,
                     AudioManager.STREAM_NOTIFICATION,
                     AudioManager.STREAM_DTMF,
-                    AudioManager.STREAM_MUSIC, // 👈 ضفنا الميوزك
-                    AudioManager.STREAM_ALARM  // 👈 وضفنا المنبه
+                    AudioManager.STREAM_MUSIC // كتم الميوزك عشان البيب
                 )
                 for (stream in streams) {
                     try {
@@ -205,12 +207,8 @@ class WakeWordService : Service() {
 
     private fun normalizeArabic(text: String): String {
         return text.lowercase()
-            .replace("أ", "ا")
-            .replace("إ", "ا")
-            .replace("آ", "ا")
-            .replace("ة", "ه")
-            .replace("ى", "ي")
-            .replace(Regex("\\s+"), "")
+            .replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+            .replace("ة", "ه").replace("ى", "ي").replace(Regex("\\s+"), "")
     }
 
     private fun processResults(results: Bundle?) {
@@ -222,8 +220,7 @@ class WakeWordService : Service() {
             val secTitleNorm = normalizeArabic("سكرتير")
             val secTitleAltNorm = normalizeArabic("سكرتيره")
             
-            val isNameMatch = (nameNorm.isNotEmpty() && text.contains(nameNorm)) ||
-                              text.contains(secTitleNorm) || text.contains(secTitleAltNorm)
+            val isNameMatch = (nameNorm.isNotEmpty() && text.contains(nameNorm)) || text.contains(secTitleNorm) || text.contains(secTitleAltNorm)
             val isCustomMatch = customNorm.isNotEmpty() && text.contains(customNorm)
             
             var isTriggered = false
@@ -238,7 +235,7 @@ class WakeWordService : Service() {
                 stopListening()
                 forceUnmute()
                 
-                // 👈 تأخير 300 مللي عشان المايك يتفك
+                // تأخير بسيط عشان المايك يتفك من الـ Native قبل ما التطبيق يفتح
                 handler.postDelayed({
                     val openIntent = Intent(this, MainActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
