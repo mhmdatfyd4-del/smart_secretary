@@ -35,17 +35,47 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private val alarmStopReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.example.secretary_app.ALARM_STOPPED_BY_VOICE") {
+                flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                    MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onAlarmStoppedByVoice", null)
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.example.secretary_app.WAKE_WORD_DETECTED"), Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.example.secretary_app.ALARM_STOPPED_BY_VOICE"), Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.example.secretary_app.WAKE_WORD_DETECTED"))
+            registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.example.secretary_app.ALARM_STOPPED_BY_VOICE"))
+        }
+
+        if (intent?.getBooleanExtra("WAKE_WORD_DETECTED", false) == true) {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                    MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onWakeWordDetected", null)
+                }
+            }, 500)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra("WAKE_WORD_DETECTED", false)) {
+            flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onWakeWordDetected", null)
+            }
         }
     }
 
     override fun onDestroy() {
         try { unregisterReceiver(wakeWordReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(alarmStopReceiver) } catch (_: Exception) {}
         super.onDestroy()
     }
 
