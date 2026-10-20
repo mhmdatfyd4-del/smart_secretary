@@ -116,7 +116,6 @@ class WakeWordService : Service() {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-EG")
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                // زودنا مدة السكوت عشان المايك ميقفلش بسرعة ويطلع البيب
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
             }
@@ -155,7 +154,7 @@ class WakeWordService : Service() {
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         if (prefs.getBoolean("flutter.mute_beep", true)) {
             setSystemSoundMute(true)
-            scheduleUnmute(3500) // طولنا مدة الكتم
+            scheduleUnmute(3500) 
         }
         speechRecognizer?.cancel()
         speechRecognizer?.startListening(intent)
@@ -187,7 +186,7 @@ class WakeWordService : Service() {
                     AudioManager.STREAM_SYSTEM,
                     AudioManager.STREAM_NOTIFICATION,
                     AudioManager.STREAM_DTMF,
-                    AudioManager.STREAM_MUSIC // كتم الميوزك عشان البيب
+                    AudioManager.STREAM_MUSIC
                 )
                 for (stream in streams) {
                     try {
@@ -235,22 +234,44 @@ class WakeWordService : Service() {
                 stopListening()
                 forceUnmute()
                 
-                // تأخير بسيط عشان المايك يتفك من الـ Native قبل ما التطبيق يفتح
-                handler.postDelayed({
-                    val openIntent = Intent(this, MainActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                        putExtra("WAKE_WORD_DETECTED", true)
-                    }
-                    startActivity(openIntent)
-                    sendBroadcast(Intent("com.example.secretary_app.WAKE_WORD_DETECTED"))
-                }, 300)
+                val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra("WAKE_WORD_DETECTED", true)
+                }
+                val pendingIntent = PendingIntent.getActivity(
+                    this, 0, fullScreenIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+
+                val notification = NotificationCompat.Builder(this, "WakeWordChannel")
+                    .setContentTitle("سكرتيري")
+                    .setContentText("جاري فتح التطبيق...")
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setFullScreenIntent(pendingIntent, true)
+                    .setAutoCancel(true)
+                    .build()
+
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.notify(888, notification)
+
+                sendBroadcast(Intent("com.example.secretary_app.WAKE_WORD_DETECTED"))
+
+                try {
+                    startActivity(fullScreenIntent)
+                } catch (e: Exception) {
+                    Log.e("WakeWord", "فشل فتح التطبيق: ${e.message}")
+                    isPaused = false
+                    startListening()
+                }
             }
         }
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val serviceChannel = NotificationChannel("WakeWordChannel", "Wake Word Service", NotificationManager.IMPORTANCE_LOW)
+            val serviceChannel = NotificationChannel("WakeWordChannel", "Wake Word Service", NotificationManager.IMPORTANCE_HIGH)
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
         }
