@@ -48,7 +48,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
         tts = TextToSpeech(this, this)
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SecretaryApp::AlarmWakeLock")
-        // نوقف خدمة النداء مؤقتاً عشان ميعملوش خناقة على المايك
         sendBroadcast(Intent("com.example.secretary_app.PAUSE_WAKE_WORD"))
     }
 
@@ -71,7 +70,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
                     android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                 )
             } catch (e: Exception) {
-                Log.e("AlarmService", "startForeground with type failed: ${e.message}")
                 startForeground(NOTIF_ID, notification)
             }
         } else {
@@ -111,8 +109,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
 
     private fun speak(prefix: String, text: String) {
         val toSay = "$prefix$text"
-
-        // ✅ نبدأ recognizer فوراً قبل TTS عشان يسمع "خلاص" من أول لحظة
         startListening()
 
         val audioAttributes = AudioAttributes.Builder()
@@ -126,18 +122,15 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
         tts?.setPitch(1.0f)
 
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                Log.d("AlarmService", "TTS started - recognizer already listening")
-            }
+            override fun onStart(utteranceId: String?) {}
             override fun onDone(utteranceId: String?) {
-                Log.d("AlarmService", "TTS done")
-                if (!stopRequested && speechRecognizer == null) {
+                if (!stopRequested) {
                     startListening()
                 }
             }
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                if (!stopRequested && speechRecognizer == null) {
+                if (!stopRequested) {
                     startListening()
                 }
             }
@@ -160,7 +153,9 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
                 val streams = intArrayOf(
                     AudioManager.STREAM_SYSTEM,
                     AudioManager.STREAM_NOTIFICATION,
-                    AudioManager.STREAM_DTMF
+                    AudioManager.STREAM_DTMF,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.STREAM_ALARM
                 )
                 for (stream in streams) {
                     try {
@@ -180,10 +175,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
 
     private fun startListening() {
         if (stopRequested) return
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            Log.e("AlarmService", "Speech recognition not available")
-            return
-        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) return
 
         try {
             val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
@@ -191,7 +183,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
                 setSystemSoundMute(true)
                 muteRestoreRunnable?.let { handler.removeCallbacks(it) }
                 muteRestoreRunnable = Runnable { setSystemSoundMute(false) }
-                handler.postDelayed(muteRestoreRunnable!!, 900)
+                handler.postDelayed(muteRestoreRunnable!!, 3500)
             }
 
             speechRecognizer?.destroy()
@@ -207,53 +199,28 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 700L)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 400L)
-                // ❌ شيلنا EXTRA_SPEECH_INPUT_MINIMUM_LENGTH - دي كانت بتخلي "خلاص" مش تطلع
             }
 
             speechRecognizer?.startListening(intent)
-            Log.d("AlarmService", "🎤 Recognizer started")
-        } catch (e: Exception) {
-            Log.e("AlarmService", "Error starting recognizer: ${e.message}")
-        }
+        } catch (e: Exception) {}
     }
 
-    // ✅ فحص شامل لكل صيغ كلمات الإيقاف + بدائل ASR
     private fun isStopCommand(text: String): Boolean {
         if (text.isBlank()) return false
-
         val normalized = text.lowercase()
-            .replace("أ", "ا")
-            .replace("إ", "ا")
-            .replace("آ", "ا")
-            .replace("ة", "ه")
-            .replace("ى", "ي")
-            .replace(Regex("\\s+"), "")
+            .replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+            .replace("ة", "ه").replace("ى", "ي").replace(Regex("\\s+"), "")
 
-        // نتحقق من صيغ مختلفة (ص/س، خ/ح) لأن ASR ممكن يغلط
         val variants = listOf(
-            normalized,
-            normalized.replace("ص", "س"),
-            normalized.replace("س", "ص"),
-            normalized.replace("خ", "ح"),
-            normalized.replace("ح", "خ"),
+            normalized, normalized.replace("ص", "س"), normalized.replace("س", "ص"),
+            normalized.replace("خ", "ح"), normalized.replace("ح", "خ"),
         )
-
         val keywords = listOf(
-            "خلاص", "خلاس", "خالص", "خالس",
-            "صحيت", "صحيتو", "صاحي",
-            "قومت", "قمت",
-            "فوقت", "فقت",
-            "ايقاف", "الغاء", "الغي", "الغ",
-            "كفايه", "كافي", "كافيه",
-            "قف", "وقف", "اوقف",
-            "بس", "بلاها", "بلاش",
-            "خلص", "خلصت",
-            "ستوب", "stop", "quit", "cancel",
-            "توقف", "توقفي",
-            "اسكت", "اسكتي", "سكوت",
-            "انتهي", "كافي"
+            "خلاص", "خلاس", "خالص", "خالس", "صحيت", "صحيتو", "صاحي", "قومت", "قمت",
+            "فوقت", "فقت", "ايقاف", "الغاء", "الغي", "الغ", "كفايه", "كافي", "كافيه",
+            "قف", "وقف", "اوقف", "بس", "بلاها", "بلاش", "خلص", "خلصت",
+            "ستوب", "stop", "quit", "cancel", "توقف", "توقفي", "اسكت", "اسكتي", "سكوت", "انتهي", "كافي"
         )
-
         for (variant in variants) {
             for (keyword in keywords) {
                 if (variant.contains(keyword)) return true
@@ -262,10 +229,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
         return false
     }
 
-    override fun onReadyForSpeech(params: Bundle?) {
-        // البيب خلص، نرجّع الصوت
-        forceUnmute()
-    }
+    override fun onReadyForSpeech(params: Bundle?) { forceUnmute() }
     override fun onBeginningOfSpeech() {}
     override fun onRmsChanged(rmsdB: Float) {}
     override fun onBufferReceived(buffer: ByteArray?) {}
@@ -274,9 +238,8 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
 
     override fun onError(error: Int) {
         forceUnmute()
-        Log.d("AlarmService", "onError: $error")
         if (!stopRequested) {
-            handler.postDelayed({ startListening() }, 2000)
+            handler.postDelayed({ startListening() }, 500) // 👈 يرجع يسمع بسرعة
         }
     }
 
@@ -284,13 +247,11 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
         forceUnmute()
         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         if (matches != null && matches.isNotEmpty()) {
-            // ✅ نفحص كل النتائج البديلة، مش الأولى بس
             for (i in 0 until matches.size) {
                 val text = matches[i] ?: continue
-                Log.d("AlarmService", "Result[$i]: $text")
                 if (isStopCommand(text)) {
-                    Log.d("AlarmService", "✅ STOP: $text")
                     stopRequested = true
+                    sendBroadcast(Intent("com.example.secretary_app.ALARM_STOPPED_BY_VOICE")) // 👈 الجسر
                     stopSelf()
                     return
                 }
@@ -307,8 +268,8 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
             for (i in 0 until matches.size) {
                 val text = matches[i] ?: continue
                 if (isStopCommand(text)) {
-                    Log.d("AlarmService", "✅ STOP (partial): $text")
                     stopRequested = true
+                    sendBroadcast(Intent("com.example.secretary_app.ALARM_STOPPED_BY_VOICE")) // 👈 الجسر
                     stopSelf()
                     return
                 }
@@ -334,7 +295,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener, RecognitionListener
         tts?.shutdown()
         speechRecognizer?.destroy()
         if (wakeLock?.isHeld == true) wakeLock?.release()
-        // نرجّع نشغل خدمة النداء تاني
         try {
             val intent = Intent(this, WakeWordService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
