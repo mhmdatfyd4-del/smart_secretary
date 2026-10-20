@@ -559,7 +559,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ]),
                   const SizedBox(height: 10),
                   Center(
-                    child: AnimatedContainer( // 👈 ضفنا الأنيميشن هنا
+                    child: AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
                       width: 100, height: 100,
                       decoration: BoxDecoration(
@@ -569,7 +569,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         image: DecorationImage(
                           image: AssetImage(_getSecretaryImage(_nameController.text, _voiceGender)),
                           fit: BoxFit.cover,
-                          alignment: const Alignment(0, -0.4),
+                          alignment: Alignment.topCenter,
                         ),
                       ),
                     ),
@@ -869,6 +869,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
+
 class SecretaryApp extends StatelessWidget {
   final bool isFirstTime;
   final String? savedName;
@@ -1037,6 +1038,12 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
       await Future.delayed(const Duration(seconds: 1));
     }
 
+    // 👈 ضفنا طلب إذن "العرض فوق التطبيقات" عشان المايك يشتغل والتابلت مقفول
+    if (await Permission.systemAlertWindow.isDenied) {
+      await Permission.systemAlertWindow.request();
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
     if (await Permission.ignoreBatteryOptimizations.isDenied) {
       await Permission.ignoreBatteryOptimizations.request();
       await Future.delayed(const Duration(milliseconds: 500));
@@ -1044,6 +1051,7 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
 
     final micGranted = await Permission.microphone.isGranted;
     final batteryGranted = await Permission.ignoreBatteryOptimizations.isGranted;
+    final overlayGranted = await Permission.systemAlertWindow.isGranted;
 
     if (mounted) setState(() => _isRequesting = false);
 
@@ -1063,6 +1071,14 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
         );
       }
       return;
+    }
+
+    if (!overlayGranted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('⚠️ محتاج تفعّل "العرض فوق التطبيقات" عشان المنبه يفتح لوحده'), backgroundColor: Colors.orange),
+        );
+      }
     }
 
     await _askFullScreenIntent();
@@ -1156,6 +1172,8 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
                       SizedBox(height: 5),
                       Text('• تجاهل تحسين البطارية: ليعمل التطبيق في الخلفية بدون توقف.', style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 5),
+                      Text('• العرض فوق التطبيقات: عشان التطبيق يفتح نفسه لما تنادي على السكرتير.', style: TextStyle(fontSize: 14, height: 1.6)),
+                      SizedBox(height: 5),
                       Text('• إشعارات ملء الشاشة: لظهور التنبيهات والتابلت مقفول.', style: TextStyle(fontSize: 14, height: 1.6)),
                       SizedBox(height: 15),
                       Text('جميع البيانات محفوظة بأمان محلياً على جهازك.',
@@ -1190,7 +1208,6 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
     );
   }
 }
-
 class SetupSecretaryScreen extends StatefulWidget {
   const SetupSecretaryScreen({super.key});
   @override
@@ -1254,7 +1271,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
                   image: DecorationImage(
                     image: AssetImage(_getSecretaryImage(_nameController.text, _voiceGender)),
-                    fit: BoxFit.cover, alignment: const Alignment(0, -0.4),
+                    fit: BoxFit.cover, alignment: Alignment.topCenter, // 👈 تعديل القص
                   ),
                 ),
               ),
@@ -1515,7 +1532,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
   final stt.SpeechToText _speech = stt.SpeechToText();
   
-  final Random random = Random(); // 👈 السطر ده هو اللي بيحل مشكلة الـ Build
+  final Random random = Random(); // 👈 إصلاح مشكلة الـ Build
 
   bool _speechReady = false;
   bool _starting = false;
@@ -1607,7 +1624,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           setState(() => _isListening = false);
           _listenVoiceCommand();
         }
-      } else if (call.method == 'onAlarmStoppedByVoice') { // 👈 الجسر اللي بيقفل المنبه
+      } else if (call.method == 'onAlarmStoppedByVoice') { // 👈 جسر إيقاف المنبه بالصوت
         if (_isAlarmDialogOpen) {
           _activeAlarmLoopTimer?.cancel();
           _tts.stop();
@@ -1619,6 +1636,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           }
         }
       }
+    });
+
+    // 👈 السطر ده هو اللي بيخلي المايك يشتغل لو التطبيق فتح بسبب نداء
+    Future.delayed(const Duration(milliseconds: 500), () async {
+      try {
+        final isPending = await _wakeWordChannel.invokeMethod('isWakeWordPending');
+        if (isPending == true && mounted) {
+          _listenVoiceCommand();
+        }
+      } catch (_) {}
     });
 
     _initAll();
@@ -1850,7 +1877,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     } catch (_) {}
   }
-Future<void> _initSpeech() async {
+  Future<void> _initSpeech() async {
   try {
     _speechReady = await _speech.initialize(
       onStatus: (status) {
@@ -1945,11 +1972,11 @@ Future<void> _checkAdhanTime({bool forceCheck = false}) async {
             await _notifications.cancel(5000 + (dayOffset * 10) + prayerIds[key]!);
           }
 
-          // لو التطبيق مفتوح أو في الخلفية القريبة = سكرتيرة
+          // 👈 لو التطبيق مفتوح أو في الخلفية القريبة = سكرتيرة
           if (!_isInBackground) {
             await _speak("حان الآن موعد أذان ${entry.key}");
           } else {
-            // لو مقفول = صوت الـ Native
+            // 👈 لو مقفول = صوت الـ Native
             try {
               await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
                 'id': entry.key.hashCode + 7000,
@@ -3067,7 +3094,6 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
     'عدل الوقت', 'عدلي الوقت', 'عدل الميعاد', 'غير الميعاد', 'خلي الميعاد', 'خلي الوقت',
   ]);
 
-  // ✅✅✅ بلوك الحذف (متحرك فوق عشان يتنفذ قبل العرض) ✅✅✅
   if (_hasAny(cmd, [
     "امسح", "امسحي", "امسحلي", "امسحيلي", "أمسح", "أمسحي",
     "مسح", "مسحي", "مسحلي", "مسحيلي",
@@ -3094,7 +3120,6 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
       return;
     }
   }
-  // ✅✅✅ نهاية بلوك الحذف ✅✅✅
 
   if (!isAdding && !isDeleting && !isEditing &&
       _hasAny(cmd, [
@@ -4046,10 +4071,7 @@ void _startAlarmLoop(
   DateTime scheduled,
   String? soundUri,
 ) {
-  if (_isInBackground) {
-    debugPrint("Alarm fires in background - native handles it");
-    return;
-  }
+  // ❌ شيلنا سطر if (_isInBackground) return; عشان المنبه يشتغل برضه في الخلفية
 
   try { _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
   try { _nativeAlarmChannel.invokeMethod('cancelAlarm', {'id': taskTitle.hashCode + 5000}); } catch (_) {}
@@ -4101,121 +4123,139 @@ void _startAlarmLoop(
     barrierColor: Colors.black.withOpacity(0.7),
     builder: (ctx) {
       _alarmDialogContext = ctx;
-      return Stack(
-        children: [
-          Positioned(
-            right: -30,
-            bottom: 50,
-            child: Image.asset(
-              _getSecretaryImage(_secretaryName, _settings.voiceGender),
-              height: 450,
-              fit: BoxFit.contain,
-              errorBuilder: (c, e, s) => const SizedBox.shrink(),
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 20),
-              child: Container(
-                width: 350,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1B2A4A),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
-                    )
-                  ],
+      return Material( // 👈 إصلاح الكراش والخطوط الصفرا
+        color: Colors.transparent,
+        child: LayoutBuilder( // 👈 إصلاح مقاسات الشاشات
+          builder: (context, constraints) {
+            final isTablet = constraints.maxWidth > 600;
+            final imageHeight = isTablet ? 550.0 : 350.0;
+            final boxWidth = isTablet ? 400.0 : 300.0;
+
+            return Stack(
+              children: [
+                Positioned(
+                  right: isTablet ? 50 : -20,
+                  bottom: 0,
+                  child: Image.asset(
+                    _getSecretaryImage(_secretaryName, _settings.voiceGender),
+                    height: imageHeight,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox.shrink(),
+                  ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.alarm_on, color: Color(0xFFC5A059), size: 30),
-                        SizedBox(width: 10),
-                        Text(
-                          'تنبيه هام!',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 22,
+                Align(
+                  alignment: isTablet ? Alignment.centerLeft : Alignment.topCenter,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      left: isTablet ? 50 : 20, 
+                      right: 20, 
+                      top: isTablet ? 0 : 50
+                    ),
+                    child: Container(
+                      width: boxWidth,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1B2A4A),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 5),
+                          )
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.alarm_on, color: Color(0xFFC5A059), size: 30),
+                              SizedBox(width: 10),
+                              Text(
+                                'تنبيه هام!',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 22,
+                                  decoration: TextDecoration.none, // 👈 إصلاح الخطوط
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      '$userTitle،\nحان الآن موعد:\n"$taskTitle"',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        height: 1.5,
+                          const SizedBox(height: 20),
+                          Text(
+                            '$userTitle،\nحان الآن موعد:\n"$taskTitle"',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              height: 1.5,
+                              decoration: TextDecoration.none, // 👈 إصلاح الخطوط
+                            ),
+                          ),
+                          const SizedBox(height: 25),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFC5A059),
+                              minimumSize: const Size(double.infinity, 55),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            onPressed: () async {
+                              _activeAlarmLoopTimer?.cancel();
+                              if (_activeAlarmLoopTimer != null) _activeTimers.remove(_activeAlarmLoopTimer!);
+                              _activeAlarmLoopTimer = null;
+
+                              _tts.stop();
+                              try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
+                              WakelockPlus.disable();
+
+                              _isAlarmDialogOpen = false;
+                              _activeAlarmTitle = null;
+                              _alarmDialogContext = null;
+
+                              try { await _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
+                              try { await _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
+
+                              if (repeat == 'مرة واحدة') {
+                                final idx = _tasks.indexWhere((t) => t['task'] == taskTitle);
+                                if (idx != -1) {
+                                  setState(() => _tasks.removeAt(idx));
+                                  _saveData();
+                                }
+                                _cancelNativeAlarm(taskTitle);
+                                SharedPreferences.getInstance().then((prefs) {
+                                  prefs.remove('pending_alarm');
+                                });
+                              } else {
+                                _rescheduleRepeating(taskTitle, repeat, interval, customDays, scheduled, soundUri);
+                              }
+                              Navigator.pop(ctx);
+                            },
+                            child: const Text(
+                              'خلاص (إيقاف)',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                decoration: TextDecoration.none, // 👈 إصلاح الخطوط
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 25),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFC5A059),
-                        minimumSize: const Size(double.infinity, 55),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () async {
-                        _activeAlarmLoopTimer?.cancel();
-                        if (_activeAlarmLoopTimer != null) _activeTimers.remove(_activeAlarmLoopTimer!);
-                        _activeAlarmLoopTimer = null;
-
-                        _tts.stop();
-                        try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
-                        WakelockPlus.disable();
-
-                        _isAlarmDialogOpen = false;
-                        _activeAlarmTitle = null;
-                        _alarmDialogContext = null;
-
-                        try { await _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
-                        try { await _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
-
-                        if (repeat == 'مرة واحدة') {
-                          final idx = _tasks.indexWhere((t) => t['task'] == taskTitle);
-                          if (idx != -1) {
-                            setState(() => _tasks.removeAt(idx));
-                            _saveData();
-                          }
-                          _cancelNativeAlarm(taskTitle);
-                          SharedPreferences.getInstance().then((prefs) {
-                            prefs.remove('pending_alarm');
-                          });
-                        } else {
-                          _rescheduleRepeating(taskTitle, repeat, interval, customDays, scheduled, soundUri);
-                        }
-                        Navigator.pop(ctx);
-                      },
-                      child: const Text(
-                        'خلاص (إيقاف)',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ),
-        ],
+              ],
+            );
+          },
+        ),
       );
     },
   ).then((_) {
@@ -5078,7 +5118,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
                 _getSecretaryImage(_secretaryName, _settings.voiceGender),
                 width: 44, height: 44,
                 fit: BoxFit.cover,
-                alignment: const Alignment(0, -0.3),
+                alignment: Alignment.topCenter, // 👈 تعديل قص الصورة
                 errorBuilder: (c, e, s) => const Icon(Icons.face_3, color: Colors.white),
               ),
             ),
@@ -5377,7 +5417,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: const Color(0xFFC5A059), width: 2),
-                image: DecorationImage(image: AssetImage(_getSecretaryImage(_secretaryName, _settings.voiceGender)), fit: BoxFit.cover, alignment: const Alignment(0, -0.3)),
+                image: DecorationImage(image: AssetImage(_getSecretaryImage(_secretaryName, _settings.voiceGender)), fit: BoxFit.cover, alignment: Alignment.topCenter), // 👈 تعديل القص
               ),
             ),
             const SizedBox(width: 15),
