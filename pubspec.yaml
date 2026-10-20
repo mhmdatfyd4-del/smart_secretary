@@ -38,16 +38,17 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/secretary.jpg
-    - assets/maryam.jpg
-    - assets/nada.jpg
-    - assets/noor.jpg
-    - assets/yasmine.jpg
-    - assets/mohamed.jpg
-    - assets/ahmed.jpg
-    - assets/ali.jpg
-    - assets/omar.jpg
-    - assets/youssef.jpg
+    # 👇 غيرنا كل الامتدادات هنا لـ png
+    - assets/secretary.png
+    - assets/maryam.png
+    - assets/nada.png
+    - assets/noor.png
+    - assets/yasmine.png
+    - assets/mohamed.png
+    - assets/ahmed.png
+    - assets/ali.png
+    - assets/omar.png
+    - assets/youssef.png
     - assets/sounds/
     - assets/splash.png
     - assets/logo.png
