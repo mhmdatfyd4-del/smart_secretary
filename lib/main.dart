@@ -75,6 +75,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ar');
   tz.initializeTimeZones();
+  tz.setLocalLocation(tz.getLocation('Africa/Cairo')); // ✅ توقيت مصر
   await _initNotifications();
 
   final prefs = await SharedPreferences.getInstance();
@@ -239,9 +240,6 @@ class AppSettings {
   }
 }
 
-// ═══════════════════════════════════════
-// SettingsScreen
-// ═══════════════════════════════════════
 class SettingsScreen extends StatefulWidget {
   final AppSettings settings;
   final double ttsVolume;
@@ -907,9 +905,6 @@ class SecretaryApp extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════
-// Splash Screen
-// ═══════════════════════════════════════
 class SplashScreen extends StatefulWidget {
   final Widget nextScreen;
   const SplashScreen({super.key, required this.nextScreen});
@@ -956,9 +951,6 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
-// ═══════════════════════════════════════
-// 3 نقط متحركة (زي فيسبوك)
-// ═══════════════════════════════════════
 class AnimatedDots extends StatefulWidget {
   const AnimatedDots({super.key});
 
@@ -1385,9 +1377,6 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
   }
 }
 
-// ═══════════════════════════════════════
-// SoundPickerDialog
-// ═══════════════════════════════════════
 class SoundPickerDialog extends StatefulWidget {
   final String? currentUri;
   final String voiceGender;
@@ -1508,9 +1497,6 @@ class _SoundPickerDialogState extends State<SoundPickerDialog> {
   }
 }
 
-// ═══════════════════════════════════════
-// MainDashboard
-// ═══════════════════════════════════════
 class MainDashboard extends StatefulWidget {
   final String secretaryName;
   final bool isUserMale;
@@ -1563,7 +1549,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   final Set<Timer> _activeTimers = {};
   StreamSubscription? _accelerometerSub;
   Timer? _adhanTimer;
-  bool _adhanAlerted = false;
 
   Timer? _eventRepeatTimer;
   bool _eventAnnouncing = false;
@@ -1622,7 +1607,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     _initAll();
   }
-
+  
   Future<void> _initAll() async {
     try {
       await _loadData();
@@ -1659,6 +1644,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       Future.delayed(const Duration(milliseconds: 500), _checkPendingAlarm);
       Future.delayed(const Duration(seconds: 2), _checkPendingEventAnnouncements);
       
+      Future.delayed(const Duration(seconds: 1), () => _checkAdhanTime(forceCheck: true));
+      
       if (_settings.wakeWordMode == 'app_open' || 
           _settings.wakeWordMode == 'background' || 
           _settings.wakeWordMode == 'always') {
@@ -1666,16 +1653,24 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
            if (!_isListening) _startWakeWordLoop();
         });
       }
+
+      if (_settings.wakeWordMode != 'off') {
+        try { _wakeWordChannel.invokeMethod('startWakeWord'); } catch (_) {}
+      }
+      
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
       _isInBackground = true;
       if (_isWakeWordListening) {
         _speech.stop();
         _isWakeWordListening = false;
       }
+
+      if (_settings.wakeWordMode == 'app_open') {
+        try { _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
+      }
     }
   }
-
-  Future<void> _checkPendingAlarm() async {
+    Future<void> _checkPendingAlarm() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final pendingStr = prefs.getString('pending_alarm');
@@ -1768,7 +1763,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('adhan_schedule_start_date', DateTime.now().toIso8601String());
 
-      for (int i = 1; i <= 300; i++) {
+      for (int i = 1; i <= 500; i++) {
+        try { await _notifications.cancel(i); } catch (_) {}
+      }
+      for (int i = 5000; i <= 5500; i++) {
         try { await _notifications.cancel(i); } catch (_) {}
       }
 
@@ -1803,8 +1801,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           if (prayerTime.isBefore(now)) continue;
 
           final androidDetails = AndroidNotificationDetails(
-            'adhan_channel_v4',
-            'تنبيهات الأذان v4',
+            'adhan_channel_v5',
+            'تنبيهات الأذان v5',
             channelDescription: 'تنبيهات مواقيت الصلاة',
             importance: Importance.max,
             priority: Priority.max,
@@ -1820,10 +1818,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           );
 
           await _notifications.zonedSchedule(
-            (day * 10) + prayerIds[prayer]!,
+            5000 + (day * 10) + prayerIds[prayer]!,
             'حان الآن موعد صلاة ${names[prayer]}',
             'موعد صلاة ${names[prayer]}',
-            tz.TZDateTime.from(prayerTime, tz.local),
+            tz.TZDateTime.from(prayerTime.toLocal(), tz.local),
             NotificationDetails(android: androidDetails),
             androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
             uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
@@ -1833,66 +1831,18 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     } catch (_) {}
   }
 
-  Future<void> _initSpeech() async {
-    try {
-      _speechReady = await _speech.initialize(
-        onStatus: (status) {
-          if ((status == 'done' || status == 'notListening') && mounted) {
-            if (_isListening) {
-              setState(() => _isListening = false);
-              try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-            }
-            if (_isWakeWordListening) _isWakeWordListening = false;
-          }
-        },
-        onError: (error) {
-          if (mounted) {
-            if (_isListening) {
-              setState(() => _isListening = false);
-              try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-            }
-            if (_isWakeWordListening) _isWakeWordListening = false;
-          }
-        },
-      );
-    } catch (_) {
-      _speechReady = false;
-    }
-  }
-
-  void _initShakeDetector() {
-    _accelerometerSub = accelerometerEventStream().listen((AccelerometerEvent event) {
-      double gX = event.x / 9.81;
-      double gY = event.y / 9.81;
-      double gZ = event.z / 9.81;
-      double gForce = sqrt(gX * gX + gY * gY + gZ * gZ);
-      if (gForce > 2.2) {
-        final now = DateTime.now();
-        if (_lastShake != null && now.difference(_lastShake!) < const Duration(seconds: 3)) return;
-        if (_isInBackground && !_settings.shakeInBackgroundEnabled) return;
-        _lastShake = now;
-        if (!_isListening && !_starting && !_isRecording) _listenVoiceCommand();
-      }
-    });
-  }
-
-  void _startAdhanWatcher() {
-    _adhanTimer?.cancel();
-    _adhanTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted && _settings.adhanAlertEnabled) _checkAdhanTime();
-    });
-  }
-
-  Future<void> _checkAdhanTime() async {
+  Future<void> _checkAdhanTime({bool forceCheck = false}) async {
     if (!_settings.adhanAlertEnabled) return;
     try {
       final times = await _calculatePrayerTimes();
       final now = DateTime.now();
-      final currentTime = DateFormat('HH:mm').format(now);
 
       final Map<String, String> prayerMap = {
-        'الفجر': times['fajr'] ?? '', 'الظهر': times['dhuhr'] ?? '',
-        'العصر': times['asr'] ?? '', 'المغرب': times['maghrib'] ?? '', 'العشاء': times['isha'] ?? '',
+        'الفجر': times['fajr'] ?? '',
+        'الظهر': times['dhuhr'] ?? '',
+        'العصر': times['asr'] ?? '',
+        'المغرب': times['maghrib'] ?? '',
+        'العشاء': times['isha'] ?? '',
       };
 
       final prefs = await SharedPreferences.getInstance();
@@ -1904,35 +1854,39 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
 
       final prayerIds = {'fajr': 1, 'dhuhr': 2, 'asr': 3, 'maghrib': 4, 'isha': 5};
+      final todayStr = DateFormat('yyyy-MM-dd').format(now);
 
       for (final entry in prayerMap.entries) {
         try {
           final prayerTime = DateFormat('HH:mm').parse(entry.value);
           final prayerDateTime = DateTime(now.year, now.month, now.day, prayerTime.hour, prayerTime.minute);
-          final prayerStr = DateFormat('HH:mm').format(prayerDateTime);
-          final oneMinBeforeStr = DateFormat('HH:mm').format(prayerDateTime.subtract(const Duration(minutes: 1)));
+          
+          final diffSeconds = now.difference(prayerDateTime).inSeconds;
+          final tolerance = forceCheck ? 300 : 90;
+          final isValidTime = diffSeconds >= 0 && diffSeconds <= tolerance;
+          
+          final alertKey = 'adhan_alerted_${todayStr}_${entry.key}';
+          final alreadyAlerted = prefs.getBool(alertKey) ?? false;
 
-          if (oneMinBeforeStr == currentTime && dayOffset >= 0 && dayOffset < 30) {
-            if (!_isInBackground) {
-              final key = _prayerKey(entry.key);
-              if (key.isNotEmpty) {
-                await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
-              }
-            }
-          }
-
-          if (prayerStr == currentTime && !_adhanAlerted) {
-            _adhanAlerted = true;
-
+          if (isValidTime && !alreadyAlerted) {
+            await prefs.setBool(alertKey, true);
+            
             if (!_isInBackground) {
               final key = _prayerKey(entry.key);
               if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
-                await _notifications.cancel((dayOffset * 10) + prayerIds[key]!);
+                await _notifications.cancel(5000 + (dayOffset * 10) + prayerIds[key]!);
               }
               await _speak("حان الآن موعد أذان ${entry.key}");
+            } else {
+              try {
+                await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
+                  'id': entry.key.hashCode + 7000,
+                  'title': 'أذان ${entry.key}',
+                  'timestamp': DateTime.now().millisecondsSinceEpoch + 200,
+                  'prefix': 'حان الآن موعد ',
+                });
+              } catch (_) {}
             }
-            
-            Future.delayed(const Duration(minutes: 2), () => _adhanAlerted = false);
           }
         } catch (_) {}
       }
@@ -2010,7 +1964,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _settings.adhanAlertEnabled = prefs.getBool('adhan_alert_enabled') ?? true;
     _settings.showAboveLockScreen = prefs.getBool('show_above_lock_screen') ?? false;
     _settings.shakeInBackgroundEnabled = prefs.getBool('shake_in_background') ?? true;
-    _settings.muteBeep = prefs.getBool('mute_beep') ?? true; // ✅ قراءة الإعداد الجديد
+    _settings.muteBeep = prefs.getBool('mute_beep') ?? true;
     _settings.voiceGender = prefs.getString('voice_gender') ?? 'ذكر';
     _settings.defaultInterval = prefs.getString('default_interval') ?? 'كل 10 ثواني';
     _settings.customWakeWord = prefs.getString('custom_wake_word') ?? 'يا سكرتير';
@@ -2039,7 +1993,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await prefs.setBool('adhan_alert_enabled', _settings.adhanAlertEnabled);
     await prefs.setBool('show_above_lock_screen', _settings.showAboveLockScreen);
     await prefs.setBool('shake_in_background', _settings.shakeInBackgroundEnabled);
-    await prefs.setBool('mute_beep', _settings.muteBeep); // ✅ حفظ الإعداد الجديد
+    await prefs.setBool('mute_beep', _settings.muteBeep);
     await prefs.setString('voice_gender', _settings.voiceGender);
     await prefs.setString('default_interval', _settings.defaultInterval);
     await prefs.setString('custom_wake_word', _settings.customWakeWord);
@@ -2322,10 +2276,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  Future<void> _openVoicePicker() async {
-    return;
-  }
-
   Future<void> _speak(String text) async {
     try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
     if (_isWakeWordListening) {
@@ -2471,179 +2421,274 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     }
   }
-    Future<bool> _handleSocialReply(String cmd) async {
+
+  Future<bool> _handleSocialReply(String cmd) async {
     final userTitle = _userTitle;
     final secTitle = _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
+    final now = DateTime.now();
 
-    if (_hasAny(cmd, ['صباح الخير', 'صباح النور', 'صباح الفل', 'صباحو', 'صباح النور والسرور', 'صبح صباح الخير', 'صباح الخيرات'])) {
-      await _speak("صباح النور والسرور $userTitle ☀️");
+    if (_hasAny(cmd, ['صباح الخير', 'صباح النور', 'صباح الفل', 'صباحو', 'صبح صباح الخير', 'صباح الخيرات'])) {
+      await _speak("صباح النور والسرور $userTitle ☀️ أتمنى لك يوم سعيد!");
       return true;
     }
-    if (_hasAny(cmd, ['صباح الفل والياسمين', 'صباح الورد', 'صباح العسل'])) {
-      await _speak("صباح الفل والياسمين والورد $userTitle 🌸");
+    if (_hasAny(cmd, ['صباح الفل والياسمين', 'صباح الورد', 'صباح العسل', 'صباح الحب'])) {
+      await _speak("صباح الفل والياسمين والورد $userTitle 🌸 يومك يبدأ بخير إن شاء الله.");
       return true;
     }
     if (_hasAny(cmd, ['مساء الخير', 'مساء النور', 'مساء الفل', 'مسائو', 'مسا الخير', 'مساء الخيرات'])) {
-      await _speak("مساء النور والفل والياسمين $userTitle 🌙");
+      await _speak("مساء النور والفل والياسمين $userTitle 🌙 أتمنى تكون بخير.");
       return true;
     }
-    if (_hasAny(cmd, ['عامله ايه', 'عاملة ايه', 'اخبارك ايه', 'اخبارك', 'أخبارك', 'ازيك', 'عامل ايه', 'كيف حالك', 'كيف الحال', 'ايه الاخبار', 'إيه الأخبار', 'الدنيا عاملة ايه'])) {
-      await _speak("الحمد لله بخير، دايماً في خدمتك $userTitle 💛");
+    if (_hasAny(cmd, ['مساء الورد', 'مساء العسل', 'مساء الحب'])) {
+      await _speak("مساء الورد والياسمين $userTitle 🌹 تحت أمرك في أي وقت.");
       return true;
     }
-    if (_hasAny(cmd, ['عامل ايه في الدنيا', 'اخبار الدنيا', 'الدنيا ايه'])) {
-      await _speak("الحمد لله، الدنيا تمام. وبيك $userTitle أكثر 💛");
+    if (_hasAny(cmd, ['اهلا', 'أهلاً', 'مرحبا', 'هاي', 'hello', 'hi', 'ازيك', 'ازيك يا'])) {
+      await _speak("أهلاً بيك $userTitle 🌟 أنا $secTitle الشخصي بتاعك، تحت أمرك.");
       return true;
     }
-    if (_hasAny(cmd, ['شكرا', 'شكراً', 'متشكر', 'متشكرة', 'مشكور', 'مشكورة', 'ربنا يخليك', 'ربنا يخليكي', 'ميرسي', 'ميرسى', 'ثانكس'])) {
-      await _speak("العفو $userTitle، ده واجبي 🙏");
-      return true;
-    }
-    if (_hasAny(cmd, ['تسلم', 'تسلمي', 'تسلم ايدك', 'تسلم إيدك'])) {
-      await _speak("ربنا يسلمك $userTitle، تحت أمرك دايماً 🙏");
-      return true;
-    }
-    if (_hasAny(cmd, ['تصبح على خير', 'تصبحى على خير', 'تصبحي على خير', 'تصبحوا على خير', 'ليلتك سعيدة', 'ليلة سعيدة'])) {
-      await _speak("$_pronoun من أهله $userTitle، تصبح على خير 🌙");
+
+    if (_hasAny(cmd, ['بحبك', 'احبك', 'أحبك', 'بعشقك', 'من عشاقك'])) {
+      await _speak("وأنا كمان بحبك $userTitle 💛 ده أنا تحت أمرك دايماً.");
       return true;
     }
     if (_hasAny(cmd, ['وحشتني', 'وحشتينى', 'وحشني', 'اشتقتلك', 'اشتقت لك', 'مشتاقلك', 'مشتاقة لك'])) {
-      await _speak("$_pronoun كمان وحشتني $userTitle، أنا $_readyWord لأي خدمة 💛");
+      await _speak("$_pronoun كمان وحشتني $userTitle، أنا $_readyWord لأي خدمة 💛.");
       return true;
     }
-    if (_hasAny(cmd, ['اسمك ايه', 'اسمك إيه', 'اسمك ايش', 'انت مين', 'انتي مين', 'مين انت', 'مين انتي'])) {
-      await _speak("اسمي $_secretaryName، $secTitle الشخصي بتاعك، تحت أمرك $userTitle");
+    if (_hasAny(cmd, ['شاطر', 'شاطرة', 'ذكي', 'ذكية', 'عسل', 'برنس', 'جامد', 'جامدة', 'ممتاز', 'ممتازة', 'تسلم ايدك', 'تسلم إيدك'])) {
+      await _speak("ده من زوقك $userTitle، شكراً على المجاملة الحلوة دي 🙏.");
       return true;
     }
-    if (_hasAny(cmd, ['بتعمل ايه', 'بتعملي ايه', 'بتعمل إيه', 'بتشتغل ايه', 'بتشغلي ايه', 'مشغول بايه', 'مشغولة بايه'])) {
-      await _speak("بستنى أوامرك $userTitle 👌");
+    if (_hasAny(cmd, ['ربنا يخليك', 'ربنا يخليكي', 'ربنا يسعدك', 'ربنا يوفقك', 'ربنا يخليك ليا', 'ربنا يكرمك'])) {
+      await _speak("وربنا يخليك ليا $userTitle، أنا في خدمتك دايماً 💛.");
       return true;
     }
-    if (_hasAny(cmd, ['تعبان', 'تعبانة', 'مش كويس', 'مش كويسة', 'مضايق', 'مضايقة', 'زعلان', 'زعلانة', 'حزين', 'حزينة', 'مش قادر', 'مش قادرة'])) {
-      await _speak("ألف سلامة عليك $userTitle، $_takeCareWord بالك من نفسك 💚");
+
+    if (_hasAny(cmd, ['تعبان', 'تعبانة', 'مش كويس', 'مش كويسة', 'مضايق', 'مضايقة', 'زعلان', 'زعلانة', 'حزين', 'حزينة', 'مش قادر', 'مش قادرة', 'مخنوق', 'مخنوقة'])) {
+      await _speak("ألف سلامة عليك $userTitle، $_takeCareWord بالك من نفسك. لو حابب أفتحلك يومياتك تكتب فيها أو أحجزلك موعد، أنا تحت أمرك 💚.");
       return true;
     }
     if (_hasAny(cmd, ['مبسوط', 'مبسوطة', 'فرحان', 'فرحانة', 'سعيد', 'سعيدة', 'الحمد لله مبسوط'])) {
-      await _speak("وأنا كمان $_happyWord ليك $userTitle 😊");
+      await _speak("وأنا كمان $_happyWord ليك $userTitle 😊 ربنا يديم الفرحة عليك.");
+      return true;
+    }
+    if (_hasAny(cmd, ['زهقان', 'زهقانة', 'مليت', 'حاسس بالوحدة', 'حاسة بالوحدة', 'طفشان', 'طفشانة', 'مخنوق ومش عارف أعمل ايه'])) {
+      await _speak("ما تزعلش $userTitle، أنا معاك. تحب أحكيلك نكتة تضحكك؟ ولا أحكيلك لغز تشغل دماغك شوية؟");
+      return true;
+    }
+    if (_hasAny(cmd, ['خايف', 'خايفة', 'قلقان', 'قلقانة', 'متوتر', 'متوترة'])) {
+      await _speak("هدي نفسك $userTitle، كل حاجة هتبقى تمام. أنا هنا لو حبيت تتكلم.");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['جعان', 'جعانة', 'عايز اكل', 'عايزة اكل', 'مش لاقي اكل'])) {
+      await _speak("خد بالك من نفسك $userTitle، لازم تاكل حاجة. تحب أذكرك بموعد الأكل؟ 💚.");
+      return true;
+    }
+    if (_hasAny(cmd, ['عطشان', 'عطشانة', 'عايز اشرب', 'عايزة اشرب'])) {
+      await _speak("اشرب مية وهترتاح $userTitle، صحتك تهمني 💧.");
+      return true;
+    }
+    if (_hasAny(cmd, ['قرفان', 'قرفانة'])) {
+      await _speak("ربنا يعينك $userTitle، خد نفس عميق وغير جو.");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['الساعه كام', 'الساعة كام', 'الوقت ايه', 'الساعة كم', 'الوقت كام'])) {
+      final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
+      final period = now.hour >= 12 ? 'مساءً' : 'صباحاً';
+      final min = now.minute.toString().padLeft(2, '0');
+      await _speak("الساعة $hour:$min $period $userTitle.");
+      return true;
+    }
+    if (_hasAny(cmd, ['التاريخ ايه', 'تاريخ اليوم', 'انهاردة كام', 'تاريخ النهاردة'])) {
+      final date = DateFormat('dd MMMM yyyy', 'ar').format(now);
+      await _speak("تاريخ النهاردة هو $date $userTitle.");
+      return true;
+    }
+    if (_hasAny(cmd, ['اليوم ايه', 'يوم ايه النهاردة', 'انهاردة يوم ايه', 'اسم اليوم ايه'])) {
+      final dayName = DateFormat('EEEE', 'ar').format(now);
+      await _speak("النهاردة يوم $dayName $userTitle.");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['نكته', 'نكتة', 'ضحكني', 'قولي نكته', 'اضحكني', 'حاجة تضحك'])) {
+      final jokes = [
+        "المدرس قال للطالب: لو معاك 10 جنيه وخدت منهم 5 جنيه، فاضلك كام؟ الطالب رد وقاله: خناقة كبيرة يا أستاذ! 😂",
+        "واحد صاحبه سأله: إيه الجديد في الموبايل اللي جبته ده؟ قاله: ده بيقرأ البصمة! صاحبه قاله: يا راجل؟! طيب جربت تفتحه ببصمة رجلك؟ 😂",
+        "واحد راح للصيدلي وقاله: عندك دوا للصلع؟ الصيدلي قاله: أيوه، عايزه في كيس ولا في أزازة؟ 😂",
+        "واحد ركب تاكسي وقال للسواق: يا أسطى وديني الجامعة. الأسطى بصله وقاله: طيب، هتقعد فين؟ 😂",
+        "مدرس الكيمياء سأل طالب: إيه هو رمز الحديد؟ الطالب قاله: Fe. المدرس قاله: إيه ده؟ قول عربي! الطالب قاله: حديد! 😂",
+        "واحد دخل مطعم، الجرسون قاله: تحب تاكل إيه؟ قاله: عايز أكل زي اللي على الطرابيزة اللي هناك. الجرسون بصله وقاله: يا فندم دي طفاية حريق! 😂",
+        "واحد بخيل عزم صاحبه على فنجان شاي، صاحبه شرب وقاله الشاي ده طعمه غريب، البخيل قاله عشان كوباية الشاي دي بقالها أسبوعين في المطبخ ومش عارف أغسلها إزاي! 😂",
+        "واحد غبي راح يشتري تليفون، البائع قاله تحب أركبلك خط ولا اتنين؟ قاله لأ أنا مش هسوق، أنا هحطه في البيت! 😂",
+        "واحد صعيدي قال لصاحبه: أنا النار ما بتاكلنيش! صاحبه قاله: إزاي؟ الصعيدي قاله: أصلي مش لحم! 😂",
+        "واحد صعيدي سألوه: إيه أطول حاجة في العالم؟ قالهم: الكبدة بتاعتنا، كل ما نبدأ ناكل فيها تنتهي! 😂",
+        "واحد صعيدي راكب عربية نقل، السواق قاله: ينفع أهدى شوية؟ الصعيدي قاله: لأ كمل، أنا مستعجل على حاجة مش مهمة! 😂",
+        "واحد صعيدي راح يقدم لوظيفة، المدير سأله: بتعرف تقرا وتكتب؟ الصعيدي قاله: لأ، بس أنا بجيب من الآخر! 😂",
+        "واحد صعيدي بيقول لمراته: أنا لو مت، عايزك تفتحي لي مزاد وتجيبيلي فلوس! 😂",
+        "الست قالت لجوزها: أنا حاسة إنك مش بتحبني زي الأول. الزوج قالها: يا حبيبتي أنا بحبك زي ما أنت كنتي بتحبيني في الأول! 😂",
+        "الأم بتقول لابنها: يا وله أنا قايلة لك 1000 مرة متلعبش في الشارع! الابن قالها: طيب أنا كنت فاكر إنك بتتكلمي مع نفسك! 😂",
+        "ست بيت قالت لجوزها: النهاردة عملتلك أكلة جديدة اسمها 'كوارع'! الزوج قالها: طيب ما تجربيها على الكلب الأول! 😂",
+        "الأم بتقول لابنها: أنا لما كنت في سنك كنت شاطرة في المدرسة! الابن قالها: عادي يا ماما، أنتِ كنتي في زمن تاني! 😂",
+        "الموظف قال للمدير: يا فندم أنا بقالي 5 سنين باخد نفس الراتب! المدير قاله: عشان أنت موظف شاطر ومحترم، وأحنا مش عايزين نخسرك! 😂",
+        "الزميل قال لزميله: إيه أخبار الشغل؟ قاله: زي الفل، البس وأنا مش باخد غير 3 ساعات في اليوم! 😂",
+        "المدير بيقول للموظف: أنا مشفتكش بتشتغل في المكتب! الموظف قاله: عشان أنا بشتغل بذمة، وأنا مش بحب أضايق حضرتك! 😂",
+        "واحد راح يقدم لوظيفة محاسب، المدير سأله: لو معاك 100 ألف جنيه، هتعمل بيهم إيه؟ الراجل قاله: أنا أصلاً عندي 200 ألف! المدير قاله: توظفت من غير مناقشة! 😂",
+        "واحد سأل صاحبه: إيه الفرق بين الشاي والقهوة؟ صاحبه قاله: الشاي بيخليك تفكر في الناس، والقهوة بتخليك تفتكر اللي بيحصل معاك! 😂",
+        "واحد بلدياتنا راح يشتري تليفون، البياع قاله عايزه بكاميرا؟ قاله لأ أنا مش هصور، عايزه بيفتح ميه عشان أغسل وراه! 😂",
+        "واحد بخيل جداً، وقف على شاطئ البحر ونده على السمك وقالهم: يا سمك، اللحمة دي حلوة.. تعالوا كلوا! 😂",
+        "مرة واحد بيسأل مراته: لو أنا مت، هتتجوزي بعدي؟ قالتله لأ طبعاً. قالها ليه يا حبيبتي؟ قالتله عشان أنا كمان عايزة أرتاح! 😂",
+        "المركب غرقت والكابتن بيقول: مفيش خوف، إحنا قريبين من الشط. الراكب قاله: طيب أنت بتعرف تعوم؟ قاله: لأ.. بس أنا بعرف أعمل صوت صفير! 😂",
+        "واحد راح يسحب فلوس من المكنة، المكنة طلعتله ورقة مكتوب عليها: الرصيد لا يكفي. الراجل رجع كتب تحتها: طيب قولوا للبطاقة تشد حيلها شوية! 😂"
+      ];
+      final randomJoke = jokes[random.nextInt(jokes.length)];
+      await _speak("$userTitle، خد دي: $randomJoke");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['لغز', 'الغاز', 'ألغاز', 'حزورة', 'حزازير', 'شغل دماغك', 'اسألني لغز'])) {
+      final riddles = [
+        "شيء موجود في السماء، إذا أضفت إليه حرفاً واحداً أصبح في الأرض. فما هو؟",
+        "ما هو الشيء الذي يكتب ولا يقرأ؟",
+        "ما هو الشيء الذي كلما زاد نقص؟",
+        "شيء له أسنان ولا يعض، ما هو؟",
+        "ما هو الشيء الذي يسمع بلا أذن ويتكلم بلا لسان؟",
+        "شيء إذا أكلته كله تستفيد، وإذا أكلت نصفه تموت؟",
+        "ما هو الشيء الذي يمشي بلا رجلين ويبكي بلا عينين؟",
+        "له أوراق وما هو بنبات، وله جلد وما هو بحيوان، وعلم وما هو بإنسان. من هو؟",
+        "ما هو البيت الذي ليس فيه أبواب ولا نوافذ؟",
+        "يوجد في وسط باريس، ما هو؟"
+      ];
+      
+      final answers = [
+        "نجم، لو ضفتله حرف الميم بيبقى منجم.",
+        "القلم.",
+        "العمر.",
+        "المشط.",
+        "التليفون.",
+        "السمسم، لو أكلت نصه بيبقى سم.",
+        "السحاب أو المطر.",
+        "الكتاب.",
+        "بيت الشعر.",
+        "حرف الراء."
+      ];
+
+      int randomIndex = random.nextInt(riddles.length);
+      String selectedRiddle = riddles[randomIndex];
+      String selectedAnswer = answers[randomIndex];
+
+      await _speak("$userTitle، خد اللغز ده: $selectedRiddle");
+      
+      // ✅ سيبناك 10 ثواني تفكر
+      await Future.delayed(const Duration(seconds: 10));
+      
+      await _speak("فكرت؟ الإجابة هي: $selectedAnswer");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['شكرا', 'شكراً', 'متشكر', 'متشكرة', 'مشكور', 'مشكورة', 'ميرسي', 'ميرسى', 'ثانكس'])) {
+      await _speak("العفو $userTitle، ده واجبي 🙏.");
+      return true;
+    }
+    if (_hasAny(cmd, ['تسلم', 'تسلمي', 'تسلم ايدك', 'تسلم إيدك'])) {
+      await _speak("ربنا يسلمك $userTitle، تحت أمرك دايماً 🙏.");
+      return true;
+    }
+    if (_hasAny(cmd, ['تصبح على خير', 'تصبحى على خير', 'تصبحي على خير', 'تصبحوا على خير', 'ليلتك سعيدة', 'ليلة سعيدة'])) {
+      await _speak("$_pronoun من أهله $userTitle، تصبح على خير وأحلام سعيدة 🌙.");
+      return true;
+    }
+    if (_hasAny(cmd, ['اسمك ايه', 'اسمك إيه', 'اسمك ايش', 'انت مين', 'انتي مين', 'مين انت', 'مين انتي'])) {
+      await _speak("اسمي $_secretaryName، $secTitle الشخصي بتاعك، تحت أمرك $userTitle.");
+      return true;
+    }
+    if (_hasAny(cmd, ['بتعمل ايه', 'بتعملي ايه', 'بتعمل إيه', 'بتشتغل ايه', 'بتشغلي ايه', 'مشغول بايه', 'مشغولة بايه'])) {
+      await _speak("بستنى أوامرك $userTitle، جاهز أرد على أي حاجة 👌.");
       return true;
     }
     if (_hasAny(cmd, ['تمام', 'ماشي', 'اوكي', 'أوكي', 'ok', 'طيب', 'حاضر', 'خلاص كده'])) {
-      await _speak("تمام $userTitle 👌");
-      return true;
-    }
-    if (_hasAny(cmd, ['بحبك', 'احبك', 'أحبك', 'بعشقك'])) {
-      await _speak("وأنا كمان بحبك $userTitle 💛");
+      await _speak("تمام $userTitle 👌.");
       return true;
     }
     if (_hasAny(cmd, ['سلام عليكم', 'السلام عليكم', 'باي', 'يلا سلام', 'مع السلامة', 'سلام'])) {
-      await _speak("وعليكم السلام ورحمة الله وبركاته $userTitle 🌟");
+      await _speak("وعليكم السلام ورحمة الله وبركاته $userTitle، في رعاية الله 🌟.");
       return true;
     }
     if (_hasAny(cmd, ['أشوفك بعدين', 'اشوفك بعدين', 'يلا باي', 'في رعاية الله'])) {
-      await _speak("في رعاية الله $userTitle، أنا هنا لو احتجتني 🌟");
+      await _speak("في رعاية الله $userTitle، أنا هنا لو احتجتني 🌟.");
       return true;
     }
     if (_hasAny(cmd, ['يلا', 'يالا', 'بسرعة', 'بسرعه', 'حالا', 'حالاً', 'دلوقتي'])) {
-      await _speak("حاضر $userTitle، أنا في الخدمة 🏃");
+      await _speak("حاضر $userTitle، أنا في الخدمة 🏃.");
       return true;
     }
     if (_hasAny(cmd, ['انت موجود', 'انتي موجودة', 'معايا', 'سامعني', 'سامعاني', 'سامعنى'])) {
-      await _speak("أيوة $userTitle، أنا $_listenWord وأنا في الخدمة 👂");
+      await _speak("أيوة $userTitle، أنا $_listenWord وأنا في الخدمة 👂.");
       return true;
     }
     if (_hasAny(cmd, ['يلا نبدأ', 'نبدأ', 'هيا نبدأ', 'هيا بنا', 'يلا نشوف'])) {
-      await _speak("تمام $userTitle، أنا $secTitle الشخصي بتاعك، قولي عايز إيه وأنا أنفذ");
+      await _speak("تمام $userTitle، أنا $secTitle الشخصي بتاعك، قولي عايز إيه وأنا أنفذ.");
       return true;
     }
     if (_hasAny(cmd, ['صحة', 'أيوة', 'ايوه', 'ايوة', 'نعم', 'اه', 'آه'])) {
-      await _speak("في الخدمة $userTitle 👌");
+      await _speak("في الخدمة $userTitle 👌.");
       return true;
     }
     if (_hasAny(cmd, ['ممكن اسألك', 'ممكن أسألك', 'عندي سؤال', 'عندي استفسار'])) {
-      await _speak("اتفضل $userTitle، أنا في الخدمة");
+      await _speak("اتفضل $userTitle، أنا في الخدمة.");
       return true;
     }
     if (_hasAny(cmd, ['عايز حاجه', 'عايز حاجة', 'عايزة حاجه', 'عايزة حاجة', 'عندي طلب'])) {
-      await _speak("اتفضل $userTitle، قوللي وأنا أنفذ");
-      return true;
-    }
-    if (_hasAny(cmd, ['ربنا يكرمك', 'ربنا يسعدك', 'ربنا يحفظك', 'ربنا يوفقك', 'ربنا يخليك ليا'])) {
-      await _speak("وربنا يكرمك $userTitle، ده من فضل ربنا 💛");
-      return true;
-    }
-    if (_hasAny(cmd, ['زهقان', 'زهقانة', 'مليت', 'حاسس بالوحدة'])) {
-      await _speak("ما تزعلش $userTitle، أنا معاك. قولي نحجز موعد أو نلعب لعبة؟");
-      return true;
-    }
-    if (_hasAny(cmd, ['جعان', 'جعانة', 'عطشان', 'عطشانة', 'عايز اكل', 'عايزة اكل'])) {
-      await _speak("خد بالك من نفسك $userTitle، متسيبش نفسك من غير أكل 💚");
+      await _speak("اتفضل $userTitle، قوللي وأنا أنفذ.");
       return true;
     }
     if (_hasAny(cmd, ['نايم', 'نايمة', 'صاحي', 'صاحية', 'قايم من النوم'])) {
       if (cmd.contains('صاحي') || cmd.contains('صاحية') || cmd.contains('قايم')) {
-        await _speak("صباح الخير $userTitle، دايماً نشيط 🌟");
+        await _speak("صباح الخير $userTitle، دايماً نشيط 🌟.");
       } else {
-        await _speak("خد راحتك $userTitle، أنا هسيبك تنام 😴");
+        await _speak("خد راحتك $userTitle، أنا هسيبك تنام 😴.");
       }
       return true;
     }
     if (_hasAny(cmd, ['الجو حلو', 'الجو جميل', 'الجو حر', 'الجو برد'])) {
-      await _speak("الجو دايماً حلو معاك $userTitle 🌤️");
-      return true;
-    }
-    if (_hasAny(cmd, ['اهلا', 'أهلاً', 'مرحبا', 'هاي', 'hello', 'hi'])) {
-      await _speak("أهلاً بيك $userTitle، نورت 🌟");
+      await _speak("الجو دايماً حلو معاك $userTitle 🌤️.");
       return true;
     }
     if (_hasAny(cmd, ['مبروك', 'ألف مبروك', 'الف مبروك'])) {
-      await _speak("الله يبارك فيك $userTitle، عقبال كل حاجة حلوة 🎉");
+      await _speak("الله يبارك فيك $userTitle، عقبال كل حاجة حلوة 🎉.");
       return true;
     }
     if (_hasAny(cmd, ['سلامتك', 'الف سلامة', 'ألف سلامة'])) {
-      await _speak("الله يسلمك $userTitle 💚");
+      await _speak("الله يسلمك $userTitle 💚.");
       return true;
     }
     if (_hasAny(cmd, ['عندك شغل', 'عندك حاجة', 'مشغول', 'مشغولة'])) {
-      await _speak("لأ $userTitle، فاضي ليك دايماً 👌");
+      await _speak("لأ $userTitle، فاضي ليك دايماً 👌.");
       return true;
     }
     if (_hasAny(cmd, ['يلا ننام', 'خلاص هننام', 'هنام'])) {
-      await _speak("تصبح على خير $userTitle، أحلام سعيدة 🌙");
+      await _speak("تصبح على خير $userTitle، أحلام سعيدة 🌙.");
       return true;
     }
     if (_hasAny(cmd, ['يلا نصحي', 'خلص نوم', 'قوم اصحي'])) {
-      await _speak("صباح الخير $userTitle، يومك سعيد ☀️");
+      await _speak("صباح الخير $userTitle، يومك سعيد ☀️.");
       return true;
     }
     if (_hasAny(cmd, ['كلمني', 'اتكلم', 'قولي حاجة', 'اشغلني'])) {
       await _speak("أنا معاك $userTitle، سامعك. قولي عايز تعمل إيه؟");
       return true;
     }
-    if (_hasAny(cmd, ['نكته', 'نكتة', 'ضحكني', 'قولي نكته'])) {
-      await _speak("مرة واحد راح للدكتور قاله يا دكتور أنا حاسس إني ستارة، قاله انتشر يا ابني 😂");
-      return true;
-    }
-    if (_hasAny(cmd, ['الساعه كام', 'الساعة كام', 'الوقت ايه', 'الساعة كم'])) {
-      final now = DateTime.now();
-      final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
-      final period = now.hour >= 12 ? 'مساءً' : 'صباحاً';
-      await _speak("الساعة $hour $period $userTitle");
-      return true;
-    }
-    if (_hasAny(cmd, ['التاريخ ايه', 'تاريخ اليوم', 'اليوم كام', 'انهاردة كام'])) {
-      final now = DateTime.now();
-      final date = DateFormat('dd MMMM yyyy', 'ar').format(now);
-      await _speak("التاريخ اليوم $date $userTitle");
-      return true;
-    }
     if (_hasAny(cmd, ['مش محتاج تشكرني', 'بلاش شكر', 'مش عايز شكر'])) {
-      await _speak("تمام $userTitle، تحت أمرك دايماً 💛");
+      await _speak("تمام $userTitle، تحت أمرك دايماً 💛.");
       return true;
     }
     if (_hasAny(cmd, ['خلاص', 'كفاية', 'كفايه', 'بس كده'])) {
-      await _speak("تمام $userTitle، تحت أمرك في أي وقت 👌");
+      await _speak("تمام $userTitle، تحت أمرك في أي وقت 👌.");
       return true;
     }
+
     return false;
   }
 
@@ -2746,7 +2791,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return 'كل 10 ثواني';
   }
 
-  // ✅ التعديل 8: بترجع كل الأيام اللي اتقالت
   List<String> _extractWeeklyDaysFromCmd(String cmd) {
     final result = <String>[];
     for (final day in _weekDays) {
@@ -2772,6 +2816,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       'موعد', 'ميعاد', 'الميعاد', 'الموعد', 'و',
       'الساعة', 'ساعة', 'الساعه', 'صباحا', 'صباحاً', 'مساء', 'مساءً',
       'الصبح', 'بالليل', 'الليل',
+      'لي', 'لى', 'بكام', 'لحد', // ✅ ضفنا لي و لى
     };
     for (final day in _weekDays) {
       stripRaw.add(day);
@@ -2785,12 +2830,27 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final strip = stripRaw.map((e) => _norm(e)).toSet();
     final nameNorm = _norm(_secretaryName);
     final kept = <String>[];
+    
     for (final t in rawCommand.split(RegExp(r'\s+'))) {
       final n = _norm(t);
       if (n.isEmpty) continue;
       if (strip.contains(n) || n == nameNorm) continue;
+      
+      // ✅ نشيل حرف الواو من أول الكلمة لو هي يوم (زي والاثنين)
+      String nWithoutWaw = n.startsWith('و') ? n.substring(1) : n;
+      if (strip.contains(nWithoutWaw)) continue;
+      
+      bool isDay = false;
+      for (final day in _weekDays) {
+         if (_hasAny(nWithoutWaw, _dayKeywords[day] ?? [day])) {
+           isDay = true;
+           break;
+         }
+      }
+      if (isDay) continue;
+
       if (RegExp(r'^\d{1,2}(:\d{2})?$').hasMatch(n)) continue;
-      if (_hourWords.containsKey(n)) continue;
+      if (_hourWords.containsKey(n) || _hourWords.containsKey(nWithoutWaw)) continue;
       if (n == 'ونص' || n == 'وربع' || n == 'وثلث') continue;
       kept.add(t);
     }
@@ -2803,7 +2863,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final nameNorm = _norm(_secretaryName);
     bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('يا سكرتيرة');
 
-    // ✅ التعديل 7: معالج "خلاص" بيستخدم المتغيرات ويلغي المؤقت
     if (_hasAny(cmd, ['خلاص', 'صحيت', 'صحيتي', 'قومت', 'قومتي', 'فوقت', 'فوقتي', 'اقفل', 'اقفلي', 'كفاية', 'كفايه', 'إيقاف', 'ايقاف', 'إلغاء', 'الغي', 'بس'])) {
       if (_isAlarmDialogOpen) {
         _activeAlarmLoopTimer?.cancel();
@@ -2892,90 +2951,81 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
 
     final weeklyIndicators = [
-      'الجدول', 'جدول',
-      'الجدول الاسبوعي', 'الجدول الأسبوعي',
-      'جدول اسبوعي', 'جدول أسبوعي',
-      'الجدول بتاع الاسبوع', 'الجدول بتاع الأسبوع',
-      'الجدول بتاعى', 'الجدول بتاعي',
-      'الجدول بتاعنا', 'جدول الأسبوع',
-      'جدولي', 'جدولى', 'جدولي الاسبوعي', 'جدولي الأسبوعي',
-      'جدولى الاسبوعي', 'جدولى الأسبوعي',
-      'في جدولي', 'في جدولى', 'من جدولي', 'من جدولى',
-      'البرنامج الاسبوعي', 'البرنامج الأسبوعي',
-      'برنامجي الاسبوعي', 'برنامجي الأسبوعي',
-      'برنامج الاسبوع', 'برنامج الأسبوع',
-      'خطة الاسبوع', 'خطة الأسبوع',
-      'الخطة الاسبوعية', 'الخطة الأسبوعية',
-      'خطتي الاسبوعية', 'خطتي الأسبوعية',
-      'اجندة الاسبوع', 'أجندة الأسبوع',
-      'الاجندة الاسبوعية', 'الأجندة الأسبوعية',
-      'اجندتي الاسبوعية', 'أجندتي الأسبوعية',
-      'مواعيد الاسبوع', 'مواعيد الأسبوع',
-      'المواعيد الاسبوعية', 'المواعيد الأسبوعية',
-      'مواعيدي الاسبوعية', 'مواعيدي الأسبوعية',
-      'مهام الاسبوع', 'مهام الأسبوع',
-      'المهام الاسبوعية', 'المهام الأسبوعية',
-      'في الجدول', 'من الجدول', 'على الجدول', 'علي الجدول',
-      'في جدول', 'من جدول',
-      'التخطيط الاسبوعي', 'التخطيط الأسبوعي',
-      'التقويم الاسبوعي', 'التقويم الأسبوعي',
+      'الجدول', 'جدول', 'الجدول الاسبوعي', 'الجدول الأسبوعي', 'جدول اسبوعي', 'جدول أسبوعي',
+      'الجدول بتاع الاسبوع', 'الجدول بتاع الأسبوع', 'الجدول بتاعى', 'الجدول بتاعي',
+      'الجدول بتاعنا', 'جدول الأسبوع', 'جدولي', 'جدولى', 'جدولي الاسبوعي', 'جدولي الأسبوعي',
+      'جدولى الاسبوعي', 'جدولى الأسبوعي', 'في جدولي', 'في جدولى', 'من جدولي', 'من جدولى',
+      'البرنامج الاسبوعي', 'البرنامج الأسبوعي', 'برنامجي الاسبوعي', 'برنامجي الأسبوعي',
+      'برنامج الاسبوع', 'برنامج الأسبوع', 'خطة الاسبوع', 'خطة الأسبوع',
+      'الخطة الاسبوعية', 'الخطة الأسبوعية', 'خطتي الاسبوعية', 'خطتي الأسبوعية',
+      'اجندة الاسبوع', 'أجندة الأسبوع', 'الاجندة الاسبوعية', 'الأجندة الأسبوعية',
+      'اجندتي الاسبوعية', 'أجندتي الأسبوعية', 'مواعيد الاسبوع', 'مواعيد الأسبوع',
+      'المواعيد الاسبوعية', 'المواعيد الأسبوعية', 'مواعيدي الاسبوعية', 'مواعيدي الأسبوعية',
+      'مهام الاسبوع', 'مهام الأسبوع', 'المهام الاسبوعية', 'المهام الأسبوعية',
+      'في الجدول', 'من الجدول', 'على الجدول', 'علي الجدول', 'في جدول', 'من جدول',
+      'التخطيط الاسبوعي', 'التخطيط الأسبوعي', 'التقويم الاسبوعي', 'التقويم الأسبوعي',
     ];
     final isWeeklyCmd = _hasAny(cmd, weeklyIndicators);
 
     final isAdding = _hasAny(cmd, [
-      'ضيف', 'ضيفي', 'ضيفلي', 'ضيفيلي', 'ضيفيه',
-      'اضف', 'أضف', 'اضفي', 'أضفي', 'اضفلي', 'أضفلي',
-      'اضيف', 'أضيف', 'اضيفي', 'أضيفي', 'اضيفلي', 'أضيفلي',
-      'حط', 'حطي', 'حطلي', 'حطيلي', 'حطه', 'حطيها',
-      'سجل', 'سجلي', 'سجللي', 'سجليلي', 'سجله',
-      'اعمل', 'اعملي', 'اعمللي', 'اعمليلي', 'اعمله',
-      'ظبط', 'ظبطي', 'ظبطلي', 'ظبطيلي',
-      'ضبط', 'ضبطي', 'ضبطلي', 'ضبطيلي',
-      'اضبط', 'أضبط', 'اضبطي', 'أضبطي',
-      'اظبط', 'أظبط', 'اظبطي', 'أظبطي',
-      'عايز اضيف', 'عايز أضيف', 'عايزة اضيف', 'عايزة أضيف',
-      'عاوز اضيف', 'عاوز أضيف', 'عاوزة اضيف', 'عاوزة أضيف',
-      'عايز احط', 'عايز أحط', 'عايزة احط', 'عايزة أحط',
-      'عاوز احط', 'عاوز أحط', 'عاوزة احط', 'عاوزة أحط',
-      'عايز اسجل', 'عايز أسجل', 'عايزة اسجل', 'عايزة أسجل',
-      'عاوز اسجل', 'عاوز أسجل', 'عاوزة اسجل', 'عاوزة أسجل',
-      'حدد لي', 'حددلي', 'حدديلي', 'حددلي موعد',
+      'ضيف', 'ضيفي', 'ضيفلي', 'ضيفيلي', 'ضيفيه', 'اضف', 'أضف', 'اضفي', 'أضفي', 'اضفلي', 'أضفلي',
+      'اضيف', 'أضيف', 'اضيفي', 'أضيفي', 'اضيفلي', 'أضيفلي', 'حط', 'حطي', 'حطلي', 'حطيلي', 'حطه', 'حطيها',
+      'سجل', 'سجلي', 'سجللي', 'سجليلي', 'سجله', 'اعمل', 'اعملي', 'اعمللي', 'اعمليلي', 'اعمله',
+      'ظبط', 'ظبطي', 'ظبطلي', 'ظبطيلي', 'ضبط', 'ضبطي', 'ضبطلي', 'ضبطيلي', 'اضبط', 'أضبط', 'اضبطي', 'أضبطي',
+      'اظبط', 'أظبط', 'اظبطي', 'أظبطي', 'عايز اضيف', 'عايز أضيف', 'عايزة اضيف', 'عايزة أضيف',
+      'عاوز اضيف', 'عاوز أضيف', 'عاوزة اضيف', 'عاوزة أضيف', 'عايز احط', 'عايز أحط', 'عايزة احط', 'عايزة أحط',
+      'عاوز احط', 'عاوز أحط', 'عاوزة احط', 'عاوزة أحط', 'عايز اسجل', 'عايز أسجل', 'عايزة اسجل', 'عايزة أسجل',
+      'عاوز اسجل', 'عاوز أسجل', 'عاوزة اسجل', 'عاوزة أسجل', 'حدد لي', 'حددلي', 'حدديلي', 'حددلي موعد',
     ]);
 
     final isDeleting = _hasAny(cmd, [
-      'امسح', 'امسحي', 'امسحلي', 'امسحيلي', 'امسحه', 'امسحيها',
-      'أمسح', 'امسحى', 'مسح', 'مسحي', 'مسحلي', 'مسحيلي', 'مسحه',
-      'احذف', 'احذفي', 'احذفلي', 'احذفيلي', 'احذفه', 'احذفيها',
-      'أحذف', 'حذف', 'حذفي', 'حذفلي', 'حذفيلي', 'حذفه',
-      'شيل', 'شيلي', 'شيللي', 'شيليلي', 'شيله', 'شيليها',
-      'أشيل', 'اشيل', 'أشيله', 'اشيله',
-      'الغي', 'الغى', 'الغيلي', 'الغيه', 'ألغي', 'ألغى', 'ألغيه',
-      'إلغاء', 'إلغى', 'الغاء',
-      'كانسل', 'كنسل', 'كنسلي', 'كانسلي', 'كنسله',
-      'وقف', 'وقفي', 'اوقف', 'أوقف', 'اوقفه', 'أوقفه',
-      'ازيل', 'أزيل', 'ازيلي', 'أزيلي', 'ازيله', 'أزيله',
-      'الغي', 'الغى', 'الغيه',
-      'مش عايز', 'مش عاوز', 'مش عايزة', 'مش عاوزة',
-      'بلاش', 'بلاشه', 'بلاشيها',
+      'امسح', 'امسحي', 'امسحلي', 'امسحيلي', 'امسحه', 'امسحيها', 'أمسح', 'امسحى', 'مسح', 'مسحي', 'مسحلي', 'مسحيلي', 'مسحه',
+      'احذف', 'احذفي', 'احذفلي', 'احذفيلي', 'احذفه', 'احذفيها', 'أحذف', 'حذف', 'حذفي', 'حذفلي', 'حذفيلي', 'حذفه',
+      'شيل', 'شيلي', 'شيللي', 'شيليلي', 'شيله', 'شيليها', 'أشيل', 'اشيل', 'أشيله', 'اشيله',
+      'الغي', 'الغى', 'الغيلي', 'الغيه', 'ألغي', 'ألغى', 'ألغيه', 'إلغاء', 'إلغى', 'الغاء',
+      'كانسل', 'كنسل', 'كنسلي', 'كانسلي', 'كنسله', 'وقف', 'وقفي', 'اوقف', 'أوقف', 'اوقفه', 'أوقفه',
+      'ازيل', 'أزيل', 'ازيلي', 'أزيلي', 'ازيله', 'أزيله', 'مش عايز', 'مش عاوز', 'مش عايزة', 'مش عاوزة', 'بلاش', 'بلاشه', 'بلاشيها',
     ]);
 
     final isEditing = _hasAny(cmd, [
-      'عدل', 'عدلي', 'عدللي', 'عدليلي', 'عدله', 'عدليها',
-      'تعدل', 'تعدلي', 'أعدل', 'اعدل',
-      'غير', 'غيري', 'غيرلي', 'غيريلي', 'غيره', 'غيريها',
-      'تغير', 'تغيري', 'أغير', 'اغير',
-      'غيّر', 'غيّري', 'غيّره', 'غيّريها',
-      'بدل', 'بدلي', 'بدللي', 'بدليلي', 'بدله', 'بدليها',
-      'تبدل', 'تبدلي',
-      'حرك', 'حركي', 'حركه', 'حركيها',
-      'أخر', 'أخري', 'أخره', 'أخريها',
-      'أجل', 'أجّل', 'أجلي', 'أجّلي', 'أجله',
-      'تعديل', 'تعديلي', 'تعديله',
-      'غير الوقت', 'غيري الوقت',
-      'عدل الوقت', 'عدلي الوقت',
-      'عدل الميعاد', 'غير الميعاد',
-      'خلي الميعاد', 'خلي الوقت',
+      'عدل', 'عدلي', 'عدللي', 'عدليلي', 'عدله', 'عدليها', 'تعدل', 'تعدلي', 'أعدل', 'اعدل',
+      'غير', 'غيري', 'غيرلي', 'غيريلي', 'غيره', 'غيريها', 'تغير', 'تغيري', 'أغير', 'اغير',
+      'غيّر', 'غيّري', 'غيّره', 'غيّريها', 'بدل', 'بدلي', 'بدللي', 'بدليلي', 'بدله', 'بدليها',
+      'تبدل', 'تبدلي', 'حرك', 'حركي', 'حركه', 'حركيها', 'أخر', 'أخري', 'أخره', 'أخريها',
+      'أجل', 'أجّل', 'أجلي', 'أجّلي', 'أجله', 'تعديل', 'تعديلي', 'تعديله', 'غير الوقت', 'غيري الوقت',
+      'عدل الوقت', 'عدلي الوقت', 'عدل الميعاد', 'غير الميعاد', 'خلي الميعاد', 'خلي الوقت',
     ]);
+
+    // ✅✅✅ بلوك الحذف (متحرك فوق عشان يتنفذ قبل العرض) ✅✅✅
+    if (_hasAny(cmd, [
+      "امسح", "امسحي", "امسحلي", "امسحيلي", "أمسح", "أمسحي",
+      "مسح", "مسحي", "مسحلي", "مسحيلي",
+      "احذف", "احذفي", "احذفلي", "احذفيلي", "أحذف", "أحذفي",
+      "حذف", "حذفي", "حذفلي", "حذفيلي",
+      "شيل", "شيلي", "شيللي", "شيليلي", "أشيل",
+      "الغي", "الغى", "ألغي", "ألغى", "الغيلي", "ألغيلي",
+      "إلغاء", "إلغى", "كانسل", "كنسل", "كنسلي", "كانسلي",
+      "وقف المنبه", "وقفي المنبه", "اوقف المنبه", "أوقف المنبه",
+      "اقفل المنبه", "اقفلي المنبه", "الغي المنبه", "ألغي المنبه",
+    ])) {
+      
+      // 1. لو حدد الجدول (قال "الجدول" أو "جدول")
+      if (isWeeklyCmd) {
+        if (_hasAny(cmd, ['كل', 'كله', 'الكل', 'كلها', 'جميع', 'كل مواعيد', 'كل المواعيد']) ||
+            (!_hasAny(cmd, ['موعد', 'ميعاد', 'مهام', 'درس']) && _hasAny(cmd, ['الجدول', 'جدول']))) {
+          await _deleteAllWeeklyTasks();
+          return;
+        }
+        await _deleteWeeklyTaskByVoice(rawCommand, cmd);
+        return;
+      } 
+      // 2. لو مقالش الجدول (يبقى المهام العادية والتقويم)
+      else {
+        await _deleteTaskByVoice(cmd);
+        return;
+      }
+    }
+    // ✅✅✅ نهاية بلوك الحذف ✅✅✅
 
     if (!isAdding && !isDeleting && !isEditing &&
         _hasAny(cmd, [
@@ -3025,11 +3075,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       return;
     }
 
-    if (isWeeklyCmd && isDeleting) {
-      await _deleteWeeklyTaskByVoice(rawCommand, cmd);
-      return;
-    }
-
     if (isWeeklyCmd && isEditing) {
       await _editWeeklyTaskByVoice(rawCommand, cmd);
       return;
@@ -3044,8 +3089,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       'ايه لدي يوم', 'إيه لدي يوم', 'ايه لدي في يوم', 'إيه لدي في يوم',
       'ورايا ايه يوم', 'ورايا إيه يوم', 'ورايا ايه في يوم', 'ورايا إيه في يوم',
       'ايه ورايا يوم', 'إيه ورايا يوم', 'ايه ورايا في يوم', 'إيه ورايا في يوم',
-      'عندي ايه نهار', 'عندي إيه نهار',
-      'ايه يوم', 'إيه يوم',
+      'عندي ايه نهار', 'عندي إيه نهار', 'ايه يوم', 'إيه يوم',
       'مهام يوم', 'مواعيد يوم', 'جدول يوم', 'الجدول يوم',
       'قولي عندي ايه يوم', 'قوليلي عندي ايه يوم',
       'قولي عندي ايه في يوم', 'قوليلي عندي ايه في يوم',
@@ -3064,87 +3108,52 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       return;
     }
 
-    // ✅ التعديل 18: مهام بكرة / غدا
     if (_hasAny(cmd, [
       'ماذا لدي بكرة', 'ماذا لدي بكره', 'ماذا لدي بكرا', 'ماذا لدي غدا', 'ماذا لدي غداً',
       'ماذا لديك بكرة', 'ماذا لديك بكره', 'ماذا لديك غدا', 'ماذا لديك غداً',
-      'ماذا عندي بكرة', 'ماذا عندي بكره', 'ماذا عندي غدا',
-      'ماذا عندك بكرة', 'ماذا عندك بكره', 'ماذا عندك غدا',
-      'مهام بكرة', 'مهام بكره', 'مهام بكرا', 'مهام غدا', 'مهام غداً',
-      'مهامي بكرة', 'مهامي بكره', 'مهامي غدا',
+      'ماذا عندي بكرة', 'ماذا عندي بكره', 'ماذا عندي غدا', 'ماذا عندك بكرة', 'ماذا عندك بكره', 'ماذا عندك غدا',
+      'مهام بكرة', 'مهام بكره', 'مهام بكرا', 'مهام غدا', 'مهام غداً', 'مهامي بكرة', 'مهامي بكره', 'مهامي غدا',
       'مواعيد بكرة', 'مواعيد بكره', 'مواعيد غدا', 'مواعيد غداً',
-      'عندي ايه بكرة', 'عندي ايه بكره', 'عندي ايه بكرا', 'عندي ايه غدا',
-      'عندي إيه بكرة', 'عندي إيه بكره', 'عندي إيه غدا',
-      'ايه عندي بكرة', 'ايه عندي بكره', 'ايه عندي غدا',
-      'إيه عندي بكرة', 'إيه عندي بكره', 'إيه عندي غدا',
-      'ايه ورايا بكرة', 'ايه ورايا بكره', 'ايه ورايا غدا',
-      'إيه ورايا بكرة', 'إيه ورايا بكره', 'إيه ورايا غدا',
-      'ايه مهامي بكرة', 'ايه مهامي بكره', 'ايه مهامي غدا',
-      'اللي عندي بكرة', 'اللي عندي بكره', 'اللي عندي غدا',
+      'عندي ايه بكرة', 'عندي ايه بكره', 'عندي ايه بكرا', 'عندي ايه غدا', 'عندي إيه بكرة', 'عندي إيه بكره', 'عندي إيه غدا',
+      'ايه عندي بكرة', 'ايه عندي بكره', 'ايه عندي غدا', 'إيه عندي بكرة', 'إيه عندي بكره', 'إيه عندي غدا',
+      'ايه ورايا بكرة', 'ايه ورايا بكره', 'ايه ورايا غدا', 'إيه ورايا بكرة', 'إيه ورايا بكره', 'إيه ورايا غدا',
+      'ايه مهامي بكرة', 'ايه مهامي بكره', 'ايه مهامي غدا', 'اللي عندي بكرة', 'اللي عندي بكره', 'اللي عندي غدا',
       'عندي ايه بكرا', 'ايه لدي بكرة', 'ايه لدي غدا',
     ])) {
       await _listTodayTasks(targetDate: DateTime.now().add(const Duration(days: 1)));
       return;
     }
 
-    // ✅ التعديل 18: مهام امبارح / البارحة
     if (_hasAny(cmd, [
       'ماذا لدي امبارح', 'ماذا لدي امبارحه', 'ماذا لدي البارحة', 'ماذا لدي البارحه', 'ماذا لدي امس',
-      'ماذا لديك امبارح', 'ماذا لديك البارحة', 'ماذا لديك امس',
-      'ماذا عندي امبارح', 'ماذا عندي البارحة', 'ماذا عندي امس',
-      'ماذا عندك امبارح', 'ماذا عندك البارحة', 'ماذا عندك امس',
-      'مهام امبارح', 'مهام امبارحه', 'مهام البارحة', 'مهام البارحه', 'مهام امس',
-      'مهامي امبارح', 'مهامي البارحة', 'مهامي امس',
-      'مواعيد امبارح', 'مواعيد البارحة', 'مواعيد امس',
-      'عندي ايه امبارح', 'عندي ايه البارحة', 'عندي ايه امس',
-      'عندي إيه امبارح', 'عندي إيه البارحة', 'عندي إيه امس',
-      'ايه عندي امبارح', 'ايه عندي البارحة', 'ايه عندي امس',
-      'إيه عندي امبارح', 'إيه عندي البارحة', 'إيه عندي امس',
-      'ايه ورايا امبارح', 'ايه ورايا البارحة', 'ايه ورايا امس',
-      'إيه ورايا امبارح', 'إيه ورايا البارحة', 'إيه ورايا امس',
-      'ايه مهامي امبارح', 'ايه مهامي البارحة', 'ايه مهامي امس',
-      'اللي عندي امبارح', 'اللي عندي البارحة', 'اللي عندي امس',
+      'ماذا لديك امبارح', 'ماذا لديك البارحة', 'ماذا لديك امس', 'ماذا عندي امبارح', 'ماذا عندي البارحة', 'ماذا عندي امس',
+      'ماذا عندك امبارح', 'ماذا عندك البارحة', 'ماذا عندك امس', 'مهام امبارح', 'مهام امبارحه', 'مهام البارحة', 'مهام البارحه', 'مهام امس',
+      'مهامي امبارح', 'مهامي البارحة', 'مهامي امس', 'مواعيد امبارح', 'مواعيد البارحة', 'مواعيد امس',
+      'عندي ايه امبارح', 'عندي ايه البارحة', 'عندي ايه امس', 'عندي إيه امبارح', 'عندي إيه البارحة', 'عندي إيه امس',
+      'ايه عندي امبارح', 'ايه عندي البارحة', 'ايه عندي امس', 'إيه عندي امبارح', 'إيه عندي البارحة', 'إيه عندي امس',
+      'ايه ورايا امبارح', 'ايه ورايا البارحة', 'ايه ورايا امس', 'إيه ورايا امبارح', 'إيه ورايا البارحة', 'إيه ورايا امس',
+      'ايه مهامي امبارح', 'ايه مهامي البارحة', 'ايه مهامي امس', 'اللي عندي امبارح', 'اللي عندي البارحة', 'اللي عندي امس',
       'ايه لدي امبارح', 'ايه لدي امس',
     ])) {
       await _listTodayTasks(targetDate: DateTime.now().subtract(const Duration(days: 1)));
       return;
     }
 
-    // ✅ التعديل 18: مهام النهاردة (بمترادفات أكتر)
     if (_hasAny(cmd, [
-      'مهام النهاردة', 'مهام اليوم', 'مهام النهارده', 'مهام انهاردة',
-      'مهامي النهاردة', 'مهامي اليوم', 'مهامي النهارده', 'مهامي انهاردة',
-      'المهام النهاردة', 'المهام اليوم', 'المهام النهارده', 'المهام انهاردة',
-      'ماذا لدي اليوم', 'ماذا لدي النهاردة', 'ماذا لدي النهارده', 'ماذا لدي انهاردة',
-      'ماذا لديك اليوم', 'ماذا لديك النهاردة', 'ماذا لديك النهارده', 'ماذا لديك انهاردة',
-      'ماذا عندي اليوم', 'ماذا عندي النهاردة', 'ماذا عندي النهارده',
-      'ماذا عندك اليوم', 'ماذا عندك النهاردة', 'ماذا عندك النهارده',
-      'عندي ايه مهام', 'عندي إيه مهام', 'عندي ايه مهام النهاردة', 'عندي إيه مهام النهاردة',
-      'ايه مهامي', 'إيه مهامي', 'ايه مهامي النهاردة', 'إيه مهامي النهاردة',
-      'ايه مهامي النهارده', 'إيه مهامي النهارده', 'ايه مهامي انهاردة',
-      'ايه اللي عندي النهاردة', 'إيه اللي عندي النهاردة',
-      'ايه اللي عندي النهارده', 'إيه اللي عندي النهارده',
-      'اللي عندي النهاردة', 'اللي عندي اليوم', 'اللي عندي النهارده',
-      'عندي ايه النهاردة', 'عندي إيه النهاردة', 'عندي ايه النهارده',
-      'عندي إيه النهارده', 'عندي ايه انهاردة', 'عندي إيه انهاردة',
-      'ايه عندي النهاردة', 'إيه عندي النهاردة',
-      'ايه عندي النهارده', 'إيه عندي النهارده',
-      'ايه عندي انهاردة', 'إيه عندي انهاردة',
-      'ايه عندي اليوم', 'إيه عندي اليوم', 'ايه عندي النهارده',
-      'ايه لدي اليوم', 'إيه لدي اليوم', 'ايه لدي النهاردة', 'إيه لدي النهاردة',
-      'ايه لدي النهارده', 'إيه لدي النهارده',
-      'عندي ايه مهام النهارده', 'عندي إيه مهام النهارده',
-      'قولي مهامي', 'قوليلي مهامي', 'قوليلي ايه عندي',
-      'قولي عندي ايه', 'قوليلي عندي ايه', 'قوليلي ايه اللي عندي',
-      'اعرض مهامي', 'اعرضي مهامي', 'اعرضي ايه عندي',
-      'هات مهامي', 'هاتي مهامي', 'هاتي ايه عندي',
-      'ايه ورايا النهاردة', 'إيه ورايا النهاردة', 'ايه ورايا النهارده',
-      'ورايا ايه النهاردة', 'ورايا إيه النهاردة', 'ورايا ايه النهارده',
-      'ايه ورايا', 'إيه ورايا',
-      'ايه ورايا اليوم', 'إيه ورايا اليوم',
-      'مهامي', 'المهام بتاعتي', 'المهام بتاعتى',
-      'مواعيدي النهاردة', 'مواعيدي اليوم', 'مواعيدي النهارده',
-      'ايه مواعيدي', 'إيه مواعيدي', 'ايه مواعيدي النهاردة',
+      'مهام النهاردة', 'مهام اليوم', 'مهام النهارده', 'مهام انهاردة', 'مهامي النهاردة', 'مهامي اليوم', 'مهامي النهارده', 'مهامي انهاردة',
+      'المهام النهاردة', 'المهام اليوم', 'المهام النهارده', 'المهام انهاردة', 'ماذا لدي اليوم', 'ماذا لدي النهاردة', 'ماذا لدي النهارده', 'ماذا لدي انهاردة',
+      'ماذا لديك اليوم', 'ماذا لديك النهاردة', 'ماذا لديك النهارده', 'ماذا لديك انهاردة', 'ماذا عندي اليوم', 'ماذا عندي النهاردة', 'ماذا عندي النهارده',
+      'ماذا عندك اليوم', 'ماذا عندك النهاردة', 'ماذا عندك النهارده', 'عندي ايه مهام', 'عندي إيه مهام', 'عندي ايه مهام النهاردة', 'عندي إيه مهام النهاردة',
+      'ايه مهامي', 'إيه مهامي', 'ايه مهامي النهاردة', 'إيه مهامي النهاردة', 'ايه مهامي النهارده', 'إيه مهامي النهارده', 'ايه مهامي انهاردة',
+      'ايه اللي عندي النهاردة', 'إيه اللي عندي النهاردة', 'ايه اللي عندي النهارده', 'إيه اللي عندي النهارده', 'اللي عندي النهاردة', 'اللي عندي اليوم', 'اللي عندي النهارده',
+      'عندي ايه النهاردة', 'عندي إيه النهاردة', 'عندي ايه النهارده', 'عندي إيه النهارده', 'عندي ايه انهاردة', 'عندي إيه انهاردة',
+      'ايه عندي النهاردة', 'إيه عندي النهاردة', 'ايه عندي النهارده', 'إيه عندي النهارده', 'ايه عندي انهاردة', 'إيه عندي انهاردة',
+      'ايه عندي اليوم', 'إيه عندي اليوم', 'ايه عندي النهارده', 'ايه لدي اليوم', 'إيه لدي اليوم', 'ايه لدي النهاردة', 'إيه لدي النهاردة',
+      'ايه لدي النهارده', 'إيه لدي النهارده', 'عندي ايه مهام النهارده', 'عندي إيه مهام النهارده', 'قولي مهامي', 'قوليلي مهامي', 'قوليلي ايه عندي',
+      'قولي عندي ايه', 'قوليلي عندي ايه', 'قوليلي ايه اللي عندي', 'اعرض مهامي', 'اعرضي مهامي', 'اعرضي ايه عندي', 'هات مهامي', 'هاتي مهامي', 'هاتي ايه عندي',
+      'ايه ورايا النهاردة', 'إيه ورايا النهاردة', 'ايه ورايا النهارده', 'ورايا ايه النهاردة', 'ورايا إيه النهاردة', 'ورايا ايه النهارده',
+      'ايه ورايا', 'إيه ورايا', 'ايه ورايا اليوم', 'إيه ورايا اليوم', 'مهامي', 'المهام بتاعتي', 'المهام بتاعتى',
+      'مواعيدي النهاردة', 'مواعيدي اليوم', 'مواعيدي النهارده', 'ايه مواعيدي', 'إيه مواعيدي', 'ايه مواعيدي النهاردة',
     ])) {
       await _listTodayTasks();
       return;
@@ -3195,125 +3204,38 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
 
     final editKeywords = [
-      "عدل", "عدلي", "عدللي", "عدليلي", "تعدل", "تعدلي",
-      "تعديل", "تعديلي", "أعدل", "اعدل",
-      "غير", "غيري", "غيرلي", "غيريلي", "تغير", "تغيري",
-      "غيّر", "غيّري", "تغيير", "تغييري",
-      "بدل", "بدلي", "بدللي", "بدليلي", "تبدل", "تبدلي",
-      "حرك", "حركي", "أخر", "أخري",
+      "عدل", "عدلي", "عدللي", "عدليلي", "تعدل", "تعدلي", "تعديل", "تعديلي", "أعدل", "اعدل",
+      "غير", "غيري", "غيرلي", "غيريلي", "تغير", "تغيري", "غيّر", "غيّري", "تغيير", "تغييري",
+      "بدل", "بدلي", "بدللي", "بدليلي", "تبدل", "تبدلي", "حرك", "حركي", "أخر", "أخري",
     ];
-
-    final deleteKeywords = [
-      "امسح", "امسحي", "امسحلي", "امسحيلي", "أمسح", "أمسحي",
-      "مسح", "مسحي", "مسحلي", "مسحيلي",
-      "احذف", "احذفي", "احذفلي", "احذفيلي", "أحذف", "أحذفي",
-      "حذف", "حذفي", "حذفلي", "حذفيلي",
-      "شيل", "شيلي", "شيللي", "شيليلي", "أشيل",
-      "الغي", "الغى", "ألغي", "ألغى", "الغيلي", "ألغيلي",
-      "إلغاء", "إلغى", "كانسل", "كنسل", "كنسلي", "كانسلي",
-      "وقف المنبه", "وقفي المنبه", "اوقف المنبه", "أوقف المنبه",
-      "اقفل المنبه", "اقفلي المنبه", "الغي المنبه", "ألغي المنبه",
-    ];
-
-    // ✅ التعديل 13: مسح الجدول أو المسح بالتاريخ
-    if (_hasAny(cmd, deleteKeywords)) {
-      if (isWeeklyCmd && _hasAny(cmd, ['كل', 'كله', 'الكل', 'كلها', 'جميع', 'كل مواعيد', 'كل المواعيد'])) {
-        await _deleteAllWeeklyTasks();
-        return;
-      }
-
-      final delDays = _extractWeeklyDaysFromCmd(cmd);
-      if (delDays.isNotEmpty) {
-        await _deleteWeeklyTaskByVoice(rawCommand, cmd);
-        return;
-      }
-
-      if (isWeeklyCmd) {
-        await _deleteWeeklyTaskByVoice(rawCommand, cmd);
-      } else {
-        await _deleteTaskByVoice(cmd);
-      }
-      return;
-    }
 
     if (_hasAny(cmd, editKeywords)) {
       await _editTaskByVoice(cmd);
       return;
     }
 
-    final prayerKeywords = ["صلوات", "صلاة", "صلاه", "الصلاة", "مواقيت", "اذان", "أذان",
-      "الفجر", "الظهر", "العصر", "المغرب", "العشاء"];
-
-    final diaryKeywords = ["يوميات", "يومياتي", "اليوميات", "مفكرة", "مفكرتي", "المفكرة",
-      "مذكرة", "مذكرتي", "تدوين", "خواطر", "اكتبلي", "اكتبيلي"];
-
-    final eventKeywords = ["مناسبات", "مناسباتي", "المناسبات", "مناسبة", "مناسبه",
-      "عيد", "العيد", "أعياد", "اعياد", "ذكرى", "الذكرى", "احتفال", "حفلة"];
-
+    final prayerKeywords = ["صلوات", "صلاة", "صلاه", "الصلاة", "مواقيت", "اذان", "أذان", "الفجر", "الظهر", "العصر", "المغرب", "العشاء"];
+    final diaryKeywords = ["يوميات", "يومياتي", "اليوميات", "مفكرة", "مفكرتي", "المفكرة", "مذكرة", "مذكرتي", "تدوين", "خواطر", "اكتبلي", "اكتبيلي"];
+    final eventKeywords = ["مناسبات", "مناسباتي", "المناسبات", "مناسبة", "مناسبه", "عيد", "العيد", "أعياد", "اعياد", "ذكرى", "الذكرى", "احتفال", "حفلة"];
     final openRecorderKeywords = [
-      "افتح المسجل", "افتح مسجل", "افتحلي المسجل", "افتحي المسجل", "افتحيلى المسجل",
-      "المسجل", "مسجل", "المسجل الصوتي",
-      "سجل صوت", "سجل صوتي", "سجلي صوت", "سجلي صوتي",
-      "التسجيلات", "تسجيلات", "تسجيلاتي",
-      "صوتيات", "الصوتيات",
-      "المذكرات الصوتيه", "مذكرات صوتيه", "المذكرات الصوتية",
+      "افتح المسجل", "افتح مسجل", "افتحلي المسجل", "افتحي المسجل", "افتحيلى المسجل", "المسجل", "مسجل", "المسجل الصوتي",
+      "سجل صوت", "سجل صوتي", "سجلي صوت", "سجلي صوتي", "التسجيلات", "تسجيلات", "تسجيلاتي", "صوتيات", "الصوتيات", "المذكرات الصوتيه", "مذكرات صوتيه", "المذكرات الصوتية",
     ];
-
     final startRecordKeywords = [
-      "ابدأ تسجيل", "ابدأ التسجيل",
-      "ابدئي تسجيل", "ابدئي التسجيل",
-      "ابدا تسجيل", "ابدا التسجيل",
-      "سجل دلوقتي", "سجل حالا", "سجل حالاً",
-      "سجلي دلوقتي", "سجلي حالا", "سجلي حالاً",
-      "سجللي دلوقتي", "سجليلي دلوقتي", "سجللي حالا", "سجليلي حالا",
-      "ابدأ دلوقتي", "ابدئي دلوقتي",
-      "ابدأ سجل", "ابدئي سجل",
-      "عايز أسجل", "عايز اسجل", "عاوز أسجل", "عاوز اسجل",
-      "عايزة أسجل", "عايزة اسجل", "عاوزة أسجل", "عاوزة اسجل",
-      "شغل التسجيل", "شغلي التسجيل", "شغل المسجل", "شغلي المسجل",
-      "ابدأ التسجيل دلوقتي", "ابدئي التسجيل دلوقتي",
-      "سجل يلا", "سجلي يلا", "سجل بسرعة", "سجلي بسرعة",
+      "ابدأ تسجيل", "ابدأ التسجيل", "ابدئي تسجيل", "ابدئي التسجيل", "ابدا تسجيل", "ابدا التسجيل", "سجل دلوقتي", "سجل حالا", "سجل حالاً",
+      "سجلي دلوقتي", "سجلي حالا", "سجلي حالاً", "سجللي دلوقتي", "سجليلي دلوقتي", "سجللي حالا", "سجليلي حالا", "ابدأ دلوقتي", "ابدئي دلوقتي",
+      "ابدأ سجل", "ابدئي سجل", "عايز أسجل", "عايز اسجل", "عاوز أسجل", "عاوز اسجل", "عايزة أسجل", "عايزة اسجل", "عاوزة أسجل", "عاوزة اسجل",
+      "شغل التسجيل", "شغلي التسجيل", "شغل المسجل", "شغلي المسجل", "ابدأ التسجيل دلوقتي", "ابدئي التسجيل دلوقتي", "سجل يلا", "سجلي يلا", "سجل بسرعة", "سجلي بسرعة",
     ];
-
     final stopRecordKeywords = [
-      "وقف تسجيل", "وقف التسجيل",
-      "وقفي تسجيل", "وقفي التسجيل",
-      "اوقف تسجيل", "اوقف التسجيل",
-      "أوقف تسجيل", "أوقف التسجيل",
-      "وقفت تسجيل", "وقفت التسجيل",
-      "خلاص وقف تسجيل", "خلاص وقف التسجيل",
-      "خلاص وقفي تسجيل", "خلاص وقفي التسجيل",
-      "خلاص وقف", "خلاص وقفي",
-      "خلاص اوقف", "خلاص أوقف",
-      "خلاص ايقاف", "خلاص إيقاف",
-      "خلاص كفاية", "خلاص كفايه",
-      "خلاص بلاها", "خلاص بلاش",
-      "خلاص انتهي", "خلاص انتهى",
-      "خلاص اقفل التسجيل", "خلاص اقفلي التسجيل",
-      "خلص تسجيل", "خلص التسجيل",
-      "خلصي تسجيل", "خلصي التسجيل",
-      "خلصت تسجيل", "خلصت التسجيل",
-      "خلص خلاص", "خلصي خلاص",
-      "بطل تسجيل", "بطل التسجيل",
-      "بطلي تسجيل", "بطلي التسجيل",
-      "بطل بقي", "بطلي بقي",
-      "انهي التسجيل", "انهي تسجيل",
-      "أنهي التسجيل", "أنهي تسجيل",
-      "اقفل التسجيل", "اقفلي التسجيل",
-      "اقفل تسجيل", "اقفلي تسجيل",
-      "قفل التسجيل", "قفلي التسجيل",
-      "كفاية تسجيل", "كفاية التسجيل",
-      "كفايه تسجيل", "كفايه التسجيل",
-      "كفاية كده", "كفايه كده",
-      "كفاية خلاص", "كفايه خلاص",
-      "بس كده", "بس خلاص", "بس كفاية", "بس كفايه",
-      "كده كفاية", "كده كفايه",
-      "اوقف", "أوقف", "ايقاف", "إيقاف",
-      "ستوب", "stop",
-      "سيب التسجيل", "سيبي التسجيل",
-      "متسجلش", "ماتسجلش", "متسجليش", "ماتسجليش",
-      "مش عايز اسجل", "مش عاوز اسجل",
-      "مش عايزة اسجل", "مش عاوزة اسجل",
+      "وقف تسجيل", "وقف التسجيل", "وقفي تسجيل", "وقفي التسجيل", "اوقف تسجيل", "اوقف التسجيل", "أوقف تسجيل", "أوقف التسجيل", "وقفت تسجيل", "وقفت التسجيل",
+      "خلاص وقف تسجيل", "خلاص وقف التسجيل", "خلاص وقفي تسجيل", "خلاص وقفي التسجيل", "خلاص وقف", "خلاص وقفي", "خلاص اوقف", "خلاص أوقف", "خلاص ايقاف", "خلاص إيقاف",
+      "خلاص كفاية", "خلاص كفايه", "خلاص بلاها", "خلاص بلاش", "خلاص انتهي", "خلاص انتهى", "خلاص اقفل التسجيل", "خلاص اقفلي التسجيل", "خلص تسجيل", "خلص التسجيل",
+      "خلصي تسجيل", "خلصي التسجيل", "خلصت تسجيل", "خلصت التسجيل", "خلص خلاص", "خلصي خلاص", "بطل تسجيل", "بطل التسجيل", "بطلي تسجيل", "بطلي التسجيل",
+      "بطل بقي", "بطلي بقي", "انهي التسجيل", "انهي تسجيل", "أنهي التسجيل", "أنهي تسجيل", "اقفل التسجيل", "اقفلي التسجيل", "اقفل تسجيل", "اقفلي تسجيل",
+      "قفل التسجيل", "قفلي التسجيل", "كفاية تسجيل", "كفاية التسجيل", "كفايه تسجيل", "كفايه التسجيل", "كفاية كده", "كفايه كده", "كفاية خلاص", "كفايه خلاص",
+      "بس كده", "بس خلاص", "بس كفاية", "بس كفايه", "كده كفاية", "كده كفايه", "اوقف", "أوقف", "ايقاف", "إيقاف", "ستوب", "stop", "سيب التسجيل", "سيبي التسجيل",
+      "متسجلش", "ماتسجلش", "متسجليش", "ماتسجليش", "مش عايز اسجل", "مش عاوز اسجل", "مش عايزة اسجل", "مش عاوزة اسجل",
     ];
 
     if (_hasAny(cmd, prayerKeywords)) {
@@ -3368,7 +3290,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ التعديل 17: بتقبل تاريخ أي يوم
   Future<void> _listTodayTasks({DateTime? targetDate}) async {
     final userTitle = _userTitle;
     final target = targetDate ?? DateTime.now();
@@ -3481,7 +3402,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await _speak(reply);
   }
 
-  // ✅ التعديل 11: بتسمح بمسح أكتر من يوم
   Future<void> _deleteWeeklyTaskByVoice(String rawCommand, String cmd) async {
     final userTitle = _userTitle;
     final days = _extractWeeklyDaysFromCmd(cmd);
@@ -3593,7 +3513,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ التعديل 10: بتضيف في كل الأيام اللي اتقالت + الأسبوع الجاي
   Future<void> _createWeeklyAlarmFromVoice(String rawCommand, String cmd) async {
     final userTitle = _userTitle;
 
@@ -3628,7 +3547,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final targetDate = now.add(Duration(days: daysAhead));
       var scheduledDateTime = DateTime(targetDate.year, targetDate.month, targetDate.day, hour, minute);
 
-      // لو الوقت فات، نروح للأسبوع الجاي
       if (scheduledDateTime.isBefore(now)) {
         scheduledDateTime = scheduledDateTime.add(const Duration(days: 7));
       }
@@ -3660,18 +3578,27 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await _speak("تمت الإضافة $userTitle! $taskName في أيام: $daysText الساعة $h12 $periodText.");
   }
 
-  // ✅ التعديل 12: بتفهم النهاردة/بكرة/امبارح
   Future<void> _deleteTaskByVoice(String cmd) async {
     final userTitle = _userTitle;
     final now = DateTime.now();
 
     String? targetDate;
-    if (_hasAny(cmd, ['النهاردة', 'النهارده', 'اليوم'])) {
+    if (_hasAny(cmd, ['النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم'])) {
       targetDate = DateFormat('yyyy-MM-dd').format(now);
     } else if (_hasAny(cmd, ['بكره', 'بكرة', 'غدا', 'غداً'])) {
       targetDate = DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 1)));
     } else if (_hasAny(cmd, ['امبارح', 'امس', 'البارح'])) {
       targetDate = DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 1)));
+    } else {
+      final delDays = _extractWeeklyDaysFromCmd(cmd);
+      if (delDays.isNotEmpty) {
+        final day = delDays.first;
+        final dayIndex = _weekDays.indexOf(day);
+        final todayIndex = (now.weekday) % 7;
+        final daysAhead = (dayIndex - todayIndex + 7) % 7;
+        final target = now.add(Duration(days: daysAhead));
+        targetDate = DateFormat('yyyy-MM-dd').format(target);
+      }
     }
 
     if (targetDate != null) {
@@ -3765,7 +3692,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ التعديل 9: ضفنا "لي" في الكلمات اللي بتتشال
   Future<void> _createAlarmFromVoice(String rawCommand, String cmd) async {
     final userTitle = _userTitle;
     final now = DateTime.now();
@@ -3911,7 +3837,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ التعديل 2: بنسجل المنبه في الأندرويد دايماً
   void _scheduleContinuousAlarm(
     String taskTitle,
     DateTime scheduledDateTime,
@@ -4046,7 +3971,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }));
   }
 
-  // ✅ التعديل 3: بنستخدم المتغيرات وبنمنع التكرار
   void _startAlarmLoop(
     String taskTitle,
     String repeat,
@@ -4169,7 +4093,14 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       
       final format = DateFormat('HH:mm'); 
       
-      return {'fajr': format.format(prayerTimes.fajr), 'sunrise': format.format(prayerTimes.sunrise), 'dhuhr': format.format(prayerTimes.dhuhr), 'asr': format.format(prayerTimes.asr), 'maghrib': format.format(prayerTimes.maghrib), 'isha': format.format(prayerTimes.isha)};
+      return {
+        'fajr': format.format(prayerTimes.fajr.toLocal()),
+        'sunrise': format.format(prayerTimes.sunrise.toLocal()),
+        'dhuhr': format.format(prayerTimes.dhuhr.toLocal()),
+        'asr': format.format(prayerTimes.asr.toLocal()),
+        'maghrib': format.format(prayerTimes.maghrib.toLocal()),
+        'isha': format.format(prayerTimes.isha.toLocal()),
+      };
     } catch (e) {
       final format = DateFormat('HH:mm');
       final now = DateTime.now();
@@ -4190,7 +4121,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // ✅ التعديل 15: بنضيف الاسم والتفاصيل مع بعض
   Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
     try {
       final eventDate = DateTime.parse(event['eventDate'].toString());
@@ -4238,7 +4168,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     } catch (_) {}
   }
 
-  // ✅ التعديل 16: نص الإشعار بقى كامل
   Future<void> _scheduleEventNotification(Map<String, dynamic> event, DateTime fireTime, String interval) async {
     try {
       final eventId = event['title'].toString().hashCode + event['eventDate'].toString().hashCode;
@@ -4372,7 +4301,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف الموعد من $day')));
   }
 
-  // ✅ التعديل 14: دالة جديدة لمسح كل الجدول
   Future<void> _deleteAllWeeklyTasks() async {
     final userTitle = _userTitle;
     if (_weeklySchedule.isEmpty) {
@@ -4418,7 +4346,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             await _saveSettings();
             
             Future.delayed(const Duration(milliseconds: 100), () async {
-              try { await _scheduleAdhan30Days(); } catch (_) {}
+              try { _scheduleAdhan30Days(); } catch (_) {}
             });
 
             try { await _configureVoice(skipGreeting: true); } catch (_) {}
