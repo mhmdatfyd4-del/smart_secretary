@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- 👈 الإذن الجديد اللي بيخلي التطبيق يفتح نفسه -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -55,7 +57,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- ✅ AlarmService: ضفنا microphone + mediaPlayback عشان المايك يشتغل -->
         <service
             android:name=".AlarmService"
             android:exported="false"
