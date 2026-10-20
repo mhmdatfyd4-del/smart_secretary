@@ -91,7 +91,6 @@ class WakeWordService : Service() {
         return START_STICKY
     }
 
-    // ✅ إعادة تشغيل الخدمة لو التطبيق اتقفل (Swipe) وكان الوضع "دائماً"
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         if (listenMode == "always") {
@@ -120,10 +119,7 @@ class WakeWordService : Service() {
             }
 
             speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    Log.d("WakeWord", "onReadyForSpeech - unmuting")
-                    forceUnmute()
-                }
+                override fun onReadyForSpeech(params: Bundle?) { forceUnmute() }
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
@@ -156,7 +152,7 @@ class WakeWordService : Service() {
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         if (prefs.getBoolean("flutter.mute_beep", true)) {
             setSystemSoundMute(true)
-            scheduleUnmute(900)
+            scheduleUnmute(3500) // 👈 طولنا المدة لـ 3.5 ثانية
         }
         speechRecognizer?.cancel()
         speechRecognizer?.startListening(intent)
@@ -187,15 +183,15 @@ class WakeWordService : Service() {
                 val streams = intArrayOf(
                     AudioManager.STREAM_SYSTEM,
                     AudioManager.STREAM_NOTIFICATION,
-                    AudioManager.STREAM_DTMF
+                    AudioManager.STREAM_DTMF,
+                    AudioManager.STREAM_MUSIC, // 👈 ضفنا الميوزك
+                    AudioManager.STREAM_ALARM  // 👈 وضفنا المنبه
                 )
                 for (stream in streams) {
                     try {
                         val original = audioManager.getStreamVolume(stream)
                         mutedStreams[stream] = original
                         audioManager.setStreamVolume(stream, 0, 0)
-                    } catch (e: SecurityException) {
-                        Log.e("WakeWord", "PERMISSION DENIED - add MODIFY_AUDIO_SETTINGS!")
                     } catch (_: Exception) {}
                 }
             } else {
@@ -242,12 +238,15 @@ class WakeWordService : Service() {
                 stopListening()
                 forceUnmute()
                 
-                val openIntent = Intent(this, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    putExtra("WAKE_WORD_DETECTED", true)
-                }
-                startActivity(openIntent)
-                sendBroadcast(Intent("com.example.secretary_app.WAKE_WORD_DETECTED"))
+                // 👈 تأخير 300 مللي عشان المايك يتفك
+                handler.postDelayed({
+                    val openIntent = Intent(this, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        putExtra("WAKE_WORD_DETECTED", true)
+                    }
+                    startActivity(openIntent)
+                    sendBroadcast(Intent("com.example.secretary_app.WAKE_WORD_DETECTED"))
+                }, 300)
             }
         }
     }
