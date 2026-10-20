@@ -1516,6 +1516,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   bool _speechReady = false;
   bool _starting = false;
   bool _isListening = false;
+  final Random random = Random();
   bool _isWakeWordListening = false;
   bool _isAlarmDialogOpen = false;
   String? _activeAlarmTitle;
