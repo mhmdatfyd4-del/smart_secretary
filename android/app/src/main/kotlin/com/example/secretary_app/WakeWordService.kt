@@ -51,7 +51,8 @@ class WakeWordService : Service() {
             .setContentTitle("سكرتيري") 
             .setContentText("بيستنى تنادي عليه...")
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setSilent(true)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -185,8 +186,8 @@ class WakeWordService : Service() {
                 val streams = intArrayOf(
                     AudioManager.STREAM_SYSTEM,
                     AudioManager.STREAM_NOTIFICATION,
-                    AudioManager.STREAM_DTMF,
-                    AudioManager.STREAM_MUSIC
+                    AudioManager.STREAM_DTMF
+                    // ❌ شيلنا STREAM_MUSIC عشان صوت السكرتيرة ميتقطعش
                 )
                 for (stream in streams) {
                     try {
@@ -251,6 +252,7 @@ class WakeWordService : Service() {
                     .setCategory(NotificationCompat.CATEGORY_CALL)
                     .setFullScreenIntent(pendingIntent, true)
                     .setAutoCancel(true)
+                    .setTimeoutAfter(2000)
                     .build()
 
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -260,6 +262,7 @@ class WakeWordService : Service() {
 
                 try {
                     startActivity(fullScreenIntent)
+                    handler.postDelayed({ notificationManager.cancel(888) }, 500)
                 } catch (e: Exception) {
                     Log.e("WakeWord", "فشل فتح التطبيق: ${e.message}")
                     isPaused = false
@@ -271,7 +274,11 @@ class WakeWordService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val serviceChannel = NotificationChannel("WakeWordChannel", "Wake Word Service", NotificationManager.IMPORTANCE_HIGH)
+            val serviceChannel = NotificationChannel("WakeWordChannel", "Wake Word Service", NotificationManager.IMPORTANCE_MIN).apply {
+                setSound(null, null)
+                enableVibration(false)
+                setShowBadge(false)
+            }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
         }
