@@ -414,7 +414,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await widget.onSaveSecretary(newName, _voiceGender);
 
     if (mounted) {
-      // 👈 إصلاح الشاشة السودا: نظهر الرسالة الأول وبعدين نقفل
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم حفظ الإعدادات')),
       );
@@ -715,7 +714,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: SwitchListTile(
               secondary: const Icon(Icons.volume_off, color: Color(0xFF1B2A4A), size: 26),
-              title: const Text('كتم صوت تنبيه المايك (البيب)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              title: const Text('كتم صوت تنبيه المايك', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
               subtitle: const Padding(
                 padding: EdgeInsets.only(top: 4),
                 child: Text('بيمنع الصوت المزعج لما المايك يفتح', style: TextStyle(fontSize: 12, color: Colors.grey)),
@@ -869,7 +868,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
-
 class SecretaryApp extends StatelessWidget {
   final bool isFirstTime;
   final String? savedName;
@@ -1038,7 +1036,7 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
       await Future.delayed(const Duration(seconds: 1));
     }
 
-    // 👈 ضفنا طلب إذن "العرض فوق التطبيقات" عشان المايك يشتغل والتابلت مقفول
+    // 👈 ضفنا طلب إذن "العرض فوق التطبيقات"
     if (await Permission.systemAlertWindow.isDenied) {
       await Permission.systemAlertWindow.request();
       await Future.delayed(const Duration(milliseconds: 500));
@@ -1208,6 +1206,7 @@ class _TermsAndPermissionsScreenState extends State<TermsAndPermissionsScreen> {
     );
   }
 }
+
 class SetupSecretaryScreen extends StatefulWidget {
   const SetupSecretaryScreen({super.key});
   @override
@@ -1271,7 +1270,7 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
                   image: DecorationImage(
                     image: AssetImage(_getSecretaryImage(_nameController.text, _voiceGender)),
-                    fit: BoxFit.cover, alignment: Alignment.topCenter, // 👈 تعديل القص
+                    fit: BoxFit.cover, alignment: Alignment.topCenter,
                   ),
                 ),
               ),
@@ -1532,7 +1531,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
   final stt.SpeechToText _speech = stt.SpeechToText();
   
-  final Random random = Random(); // 👈 إصلاح مشكلة الـ Build
+  final Random random = Random();
 
   bool _speechReady = false;
   bool _starting = false;
@@ -1624,7 +1623,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           setState(() => _isListening = false);
           _listenVoiceCommand();
         }
-      } else if (call.method == 'onAlarmStoppedByVoice') { // 👈 جسر إيقاف المنبه بالصوت
+      } else if (call.method == 'onAlarmStoppedByVoice') {
         if (_isAlarmDialogOpen) {
           _activeAlarmLoopTimer?.cancel();
           _tts.stop();
@@ -1638,7 +1637,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     });
 
-    // 👈 السطر ده هو اللي بيخلي المايك يشتغل لو التطبيق فتح بسبب نداء
     Future.delayed(const Duration(milliseconds: 500), () async {
       try {
         final isPending = await _wakeWordChannel.invokeMethod('isWakeWordPending');
@@ -1859,7 +1857,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             category: AndroidNotificationCategory.alarm,
             autoCancel: false,
             ongoing: true,
-            fullScreenIntent: true,
+            fullScreenIntent: _settings.wakeWordMode != 'off',
             visibility: NotificationVisibility.public,
             audioAttributesUsage: AudioAttributesUsage.alarm,
           );
@@ -1884,7 +1882,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         if ((status == 'done' || status == 'notListening') && mounted) {
           if (_isListening) {
             setState(() => _isListening = false);
-            try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+            if (_settings.wakeWordMode != 'off') {
+              try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+            }
           }
           if (_isWakeWordListening) _isWakeWordListening = false;
         }
@@ -1893,7 +1893,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         if (mounted) {
           if (_isListening) {
             setState(() => _isListening = false);
-            try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+            if (_settings.wakeWordMode != 'off') {
+              try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+            }
           }
           if (_isWakeWordListening) _isWakeWordListening = false;
         }
@@ -1972,11 +1974,9 @@ Future<void> _checkAdhanTime({bool forceCheck = false}) async {
             await _notifications.cancel(5000 + (dayOffset * 10) + prayerIds[key]!);
           }
 
-          // 👈 لو التطبيق مفتوح أو في الخلفية القريبة = سكرتيرة
           if (!_isInBackground) {
             await _speak("حان الآن موعد أذان ${entry.key}");
           } else {
-            // 👈 لو مقفول = صوت الـ Native
             try {
               await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
                 'id': entry.key.hashCode + 7000,
@@ -2045,11 +2045,8 @@ Future<void> _loadData() async {
         final dt = DateTime.tryParse(t['scheduled'].toString());
         if (dt != null && dt.isAfter(DateTime.now())) {
           _scheduleWeeklyAlarm(
-            t['task'].toString(),
-            t['day'].toString(),
-            dt,
-            t['repeatInterval'] ?? 'مرة واحدة',
-            soundUri: t['sound'],
+            t['task'].toString(), t['day'].toString(), dt, t['repeatInterval'] ?? 'مرة واحدة',
+            t['advanceReminder'] ?? 'في الموعد', soundUri: t['sound'],
           );
         }
       }
@@ -2108,21 +2105,24 @@ Future<void> _saveWeeklySchedule() async {
   await prefs.setString('saved_weekly_schedule', json.encode(_weeklySchedule));
 }
 
-void _scheduleWeeklyAlarm(
-  String taskTitle,
-  String day,
-  DateTime scheduledDateTime,
-  String interval, {
-  String? soundUri,
-}) {
-  _scheduleContinuousAlarm(
-    'جدول_${day}_$taskTitle',
-    scheduledDateTime,
-    'أسبوعي',
-    interval,
-    [day],
-    soundUri: soundUri,
-  );
+int _getAdvanceMinutes(String reminder) {
+  switch (reminder) {
+    case 'قبلها بـ 5 دقائق': return 5;
+    case 'قبلها بـ 10 دقائق': return 10;
+    case 'قبلها بـ 15 دقيقة': return 15;
+    case 'قبلها بـ 20 دقيقة': return 20;
+    case 'قبلها بـ 30 دقيقة': return 30;
+    case 'قبلها بـ 45 دقيقة': return 45;
+    case 'قبلها بساعة': return 60;
+    case 'قبلها بساعتين': return 120;
+    default: return 0;
+  }
+}
+
+void _scheduleWeeklyAlarm(String taskTitle, String day, DateTime scheduledDateTime, String interval, String advanceReminder, {String? soundUri}) {
+  int advanceMins = _getAdvanceMinutes(advanceReminder);
+  DateTime alarmTime = scheduledDateTime.subtract(Duration(minutes: advanceMins));
+  _scheduleContinuousAlarm('جدول_${day}_$taskTitle', alarmTime, 'أسبوعي', interval, [day], soundUri: soundUri);
 }
 
 Future<void> _loadRecordings() async {
@@ -2322,6 +2322,7 @@ void dispose() {
 Future<void> _configureVoice({bool skipGreeting = false}) async {
   try {
     await _tts.setLanguage("ar-EG");
+    await _tts.awaitSpeakCompletion(true);
     await Future.delayed(const Duration(milliseconds: 150));
   } catch (_) {}
 
@@ -2376,10 +2377,12 @@ Future<List<Map<String, String>>> _getArabicVoices() async {
 }
 
 Future<void> _speak(String text) async {
-  try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
-  if (_isWakeWordListening) {
-    try { await _speech.stop(); } catch (_) {}
-    _isWakeWordListening = false;
+  if (_settings.wakeWordMode != 'off') {
+    try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
+    if (_isWakeWordListening) {
+      try { await _speech.stop(); } catch (_) {}
+      _isWakeWordListening = false;
+    }
   }
 
   try {
@@ -2398,14 +2401,12 @@ Future<void> _speak(String text) async {
     debugPrint("TTS Error: $e");
   }
 
-  Future.delayed(const Duration(seconds: 1), () {
-    try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-    if (_settings.wakeWordMode == 'app_open' || 
-        _settings.wakeWordMode == 'background' || 
-        _settings.wakeWordMode == 'always') {
-       if (!_isListening && !_isInBackground) _startWakeWordLoop();
-    }
-  });
+  if (_settings.wakeWordMode != 'off') {
+    Future.delayed(const Duration(seconds: 1), () {
+      try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+      if (!_isListening && !_isInBackground) _startWakeWordLoop();
+    });
+  }
 }
 
 Future<void> _listenVoiceCommand() async {
@@ -2426,7 +2427,6 @@ Future<void> _listenVoiceCommand() async {
     await _tts.stop();
     try { await _speech.cancel(); } catch (_) {}
     
-    // 👈 زودنا وقت الانتظار لـ 800 عشان المايك ميفصلش
     await Future.delayed(const Duration(milliseconds: 800));
 
     if (mounted) {
@@ -2446,7 +2446,9 @@ Future<void> _listenVoiceCommand() async {
       onResult: (val) {
         if (val.finalResult) {
           if (mounted) setState(() => _isListening = false);
-          try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+          if (_settings.wakeWordMode != 'off') {
+            try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+          }
           _processSmartVoiceCommand(val.recognizedWords);
         }
       },
@@ -2454,7 +2456,9 @@ Future<void> _listenVoiceCommand() async {
   } catch (e) {
     debugPrint("Listen Error: $e");
     if (mounted) setState(() => _isListening = false);
-    try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+    if (_settings.wakeWordMode != 'off') {
+      try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+    }
   } finally {
     _starting = false;
   }
@@ -2522,8 +2526,7 @@ Future<void> _startWakeWordLoop() async {
     }
   }
 }
-
-Future<bool> _handleSocialReply(String cmd) async {
+  Future<bool> _handleSocialReply(String cmd) async {
   final userTitle = _userTitle;
   final secTitle = _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
   final now = DateTime.now();
@@ -2791,7 +2794,8 @@ Future<bool> _handleSocialReply(String cmd) async {
 
   return false;
 }
-  DateTime? _parseDiaryDate(String cmd) {
+
+DateTime? _parseDiaryDate(String cmd) {
   final now = DateTime.now();
 
   if (cmd.contains('النهاردة') || cmd.contains('النهارده') || cmd.contains('اليوم')) return now;
@@ -3650,12 +3654,13 @@ Future<void> _createWeeklyAlarmFromVoice(String rawCommand, String cmd) async {
         'time': DateFormat('hh:mm a', 'ar').format(scheduledDateTime),
         'scheduled': scheduledDateTime.toIso8601String(),
         'repeatInterval': intervalType,
+        'advanceReminder': 'في الموعد',
         'sound': null,
       });
     });
 
     if (intervalType != 'بدون تنبيه') {
-      _scheduleWeeklyAlarm(taskName, day, scheduledDateTime, intervalType);
+      _scheduleWeeklyAlarm(taskName, day, scheduledDateTime, intervalType, 'في الموعد');
     }
     successDays.add(day);
   }
@@ -4029,7 +4034,7 @@ Future<void> _scheduleBackgroundNotification(
     category: AndroidNotificationCategory.alarm,
     autoCancel: false,
     ongoing: true,
-    fullScreenIntent: true,
+    fullScreenIntent: _settings.wakeWordMode != 'off',
     visibility: NotificationVisibility.public,
     audioAttributesUsage: AudioAttributesUsage.alarm,
     actions: <AndroidNotificationAction>[
@@ -4128,8 +4133,8 @@ void _startAlarmLoop(
         child: LayoutBuilder( // 👈 إصلاح مقاسات الشاشات
           builder: (context, constraints) {
             final isTablet = constraints.maxWidth > 600;
-            final imageHeight = isTablet ? 550.0 : 350.0;
-            final boxWidth = isTablet ? 400.0 : 300.0;
+            final imageHeight = isTablet ? 550.0 : 220.0; 
+            final boxWidth = isTablet ? 400.0 : 260.0;
 
             return Stack(
               children: [
@@ -4149,7 +4154,7 @@ void _startAlarmLoop(
                     padding: EdgeInsets.only(
                       left: isTablet ? 50 : 20, 
                       right: 20, 
-                      top: isTablet ? 0 : 50
+                      top: isTablet ? 0 : 30
                     ),
                     child: Container(
                       width: boxWidth,
@@ -4364,7 +4369,8 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
         sound: _getNotificationSound(finalSound),
         enableVibration: true,
         category: AndroidNotificationCategory.alarm,
-        autoCancel: false, ongoing: true, fullScreenIntent: true,
+        autoCancel: false, ongoing: true, 
+        fullScreenIntent: _settings.wakeWordMode != 'off',
         visibility: NotificationVisibility.public,
       );
 
@@ -4555,7 +4561,6 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
                 _settings.voiceGender = voiceGender;
               });
             }
-            // 👈 شيلنا await عشان الشاشة متعلقش
             Future.delayed(const Duration(milliseconds: 300), () {
               try { _configureVoice(skipGreeting: true); } catch (_) {}
             });
@@ -4773,9 +4778,11 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
       } catch (_) {}
     }
     String selectedInterval = existingTask?['repeatInterval'] ?? _settings.defaultInterval;
+    String selectedAdvanceReminder = existingTask?['advanceReminder'] ?? 'في الموعد';
     String? selectedSound = existingTask?['sound'];
 
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+    final List<String> advanceOptions = ['في الموعد', 'قبلها بـ 5 دقائق', 'قبلها بـ 10 دقائق', 'قبلها بـ 15 دقيقة', 'قبلها بـ 20 دقيقة', 'قبلها بـ 30 دقيقة', 'قبلها بـ 45 دقيقة', 'قبلها بساعة', 'قبلها بساعتين'];
 
     await showDialog(
       context: context,
@@ -4799,6 +4806,16 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
                     if (t != null) setStateSB(() => selectedTime = t);
                   }),
                 ]),
+                const Divider(),
+                const Align(alignment: Alignment.centerRight, child: Text('التذكير المسبق:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedAdvanceReminder,
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  items: advanceOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                  onChanged: (val) => setStateSB(() => selectedAdvanceReminder = val ?? 'في الموعد'),
+                ),
+                const SizedBox(height: 12),
                 const Divider(),
                 const Align(alignment: Alignment.centerRight, child: Text('التنبيه المستمر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                 const SizedBox(height: 8),
@@ -4863,6 +4880,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
                         'time': selectedTime.format(context),
                         'scheduled': scheduledDateTime.toIso8601String(),
                         'repeatInterval': selectedInterval,
+                        'advanceReminder': selectedAdvanceReminder,
                         'sound': selectedSound,
                       });
                     });
@@ -4874,6 +4892,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
                         'time': selectedTime.format(context),
                         'scheduled': scheduledDateTime.toIso8601String(),
                         'repeatInterval': selectedInterval,
+                        'advanceReminder': selectedAdvanceReminder,
                         'sound': selectedSound,
                       };
                     });
@@ -4885,6 +4904,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
                       day,
                       scheduledDateTime,
                       selectedInterval,
+                      selectedAdvanceReminder,
                       soundUri: selectedSound,
                     );
                   }
@@ -5118,7 +5138,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
                 _getSecretaryImage(_secretaryName, _settings.voiceGender),
                 width: 44, height: 44,
                 fit: BoxFit.cover,
-                alignment: Alignment.topCenter, // 👈 تعديل قص الصورة
+                alignment: Alignment.topCenter,
                 errorBuilder: (c, e, s) => const Icon(Icons.face_3, color: Colors.white),
               ),
             ),
@@ -5417,7 +5437,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: const Color(0xFFC5A059), width: 2),
-                image: DecorationImage(image: AssetImage(_getSecretaryImage(_secretaryName, _settings.voiceGender)), fit: BoxFit.cover, alignment: Alignment.topCenter), // 👈 تعديل القص
+                image: DecorationImage(image: AssetImage(_getSecretaryImage(_secretaryName, _settings.voiceGender)), fit: BoxFit.cover, alignment: Alignment.topCenter),
               ),
             ),
             const SizedBox(width: 15),
