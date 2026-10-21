@@ -59,19 +59,33 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "منبه السكرتير (خلفية)", NotificationManager.IMPORTANCE_MIN).apply {
+            // 👈 غيرنا الأهمية لـ HIGH عشان يقدر يفتح الشاشة
+            val channel = NotificationChannel(CHANNEL_ID, "منبه السكرتير (خلفية)", NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(null, null)
+                setShowBadge(false)
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(title: String): Notification {
+        // 👈 ده اللي بيفتح التطبيق لما الإشعار يضرب
+        val launchIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("تشغيل التنبيه").setContentText(title)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setOngoing(true).setSilent(true).build()
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setFullScreenIntent(pendingIntent, true) // 👈 السر هنا: بيفتح التطبيق غصب عن النظام
+            .setOngoing(true)
+            .build()
     }
 
     private fun speak(prefix: String, text: String) {
