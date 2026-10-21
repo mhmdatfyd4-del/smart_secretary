@@ -1857,7 +1857,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             category: AndroidNotificationCategory.alarm,
             autoCancel: false,
             ongoing: true,
-            fullScreenIntent: _settings.wakeWordMode != 'off',
+            fullScreenIntent: true,
             visibility: NotificationVisibility.public,
             audioAttributesUsage: AudioAttributesUsage.alarm,
           );
@@ -4034,7 +4034,7 @@ Future<void> _scheduleBackgroundNotification(
     category: AndroidNotificationCategory.alarm,
     autoCancel: false,
     ongoing: true,
-    fullScreenIntent: _settings.wakeWordMode != 'off',
+    fullScreenIntent: true,
     visibility: NotificationVisibility.public,
     audioAttributesUsage: AudioAttributesUsage.alarm,
     actions: <AndroidNotificationAction>[
@@ -4370,7 +4370,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
         enableVibration: true,
         category: AndroidNotificationCategory.alarm,
         autoCancel: false, ongoing: true, 
-        fullScreenIntent: _settings.wakeWordMode != 'off',
+        fullScreenIntent: true,
         visibility: NotificationVisibility.public,
       );
 
