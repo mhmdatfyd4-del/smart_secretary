@@ -18,7 +18,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     private var wakeLock: PowerManager.WakeLock? = null
 
     companion object {
-        const val CHANNEL_ID = "secretary_native_alarm_v2"
+        const val CHANNEL_ID = "secretary_native_alarm_v4"
         const val NOTIF_ID = 99001
         const val EXTRA_TITLE = "title"
         const val EXTRA_PREFIX = "prefix"
