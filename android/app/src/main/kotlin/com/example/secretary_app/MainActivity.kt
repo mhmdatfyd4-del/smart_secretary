@@ -1,5 +1,6 @@
 package com.example.secretary_app
 
+import android.app.ActivityOptions
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
@@ -11,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.WindowManager
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -59,15 +61,50 @@ class MainActivity : FlutterActivity() {
         if (intent?.getBooleanExtra("WAKE_WORD_DETECTED", false) == true) {
             pendingWakeWord = true
         }
+
+        // 👈 معالجة intent المنبه لو التطبيق بدأ بسببه
+        handleAlarmIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // 👈 مهم جداً: نحدّث الـ intent عشان Flutter يقرأ الجديد
+        setIntent(intent)
+
         if (intent.getBooleanExtra("WAKE_WORD_DETECTED", false)) {
             flutterEngine?.dartExecutor?.binaryMessenger?.let {
                 MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onWakeWordDetected", null)
             }
         }
+
+        // 👈 معالجة intent المنبه لو التطبيق مفتوح بالفعل
+        handleAlarmIntent(intent)
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 🔑 معالجة intent المنبه: تشغيل AlarmService بوضع TTS فقط
+    // ═══════════════════════════════════════════════════════════════
+    private fun handleAlarmIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("from_alarm", false) != true) return
+
+        val title = intent.getStringExtra("alarm_title") ?: ""
+        val prefix = intent.getStringExtra("alarm_prefix") ?: AlarmService.DEFAULT_PREFIX
+        val soundUri = intent.getStringExtra("alarm_sound")
+
+        val serviceIntent = Intent(this, AlarmService::class.java).apply {
+            action = AlarmService.ACTION_START
+            putExtra(AlarmService.EXTRA_TITLE, title)
+            putExtra(AlarmService.EXTRA_PREFIX, prefix)
+            putExtra(AlarmService.EXTRA_SOUND_URI, soundUri)
+            putExtra(AlarmService.EXTRA_SHOW_ON_SCREEN, false) // 👈 التطبيق مفتوح خلاص
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(this, serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {
@@ -248,34 +285,90 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // 🔑 scheduleAlarm: يستخدم getActivity (BAL-exempt) بدل getBroadcast
+    // ═══════════════════════════════════════════════════════════════
     private fun scheduleAlarm(id: Int, title: String, timestamp: Long, prefix: String, soundUri: String?, showOnScreen: Boolean) {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, AlarmReceiver::class.java).apply {
-            putExtra("title", title)
-            putExtra("prefix", prefix)
-            putExtra("soundUri", soundUri)
-            putExtra("showOnScreen", showOnScreen)
+
+        val pendingIntent: PendingIntent = if (showOnScreen) {
+            val activityIntent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("from_alarm", true)
+                putExtra("alarm_title", title)
+                putExtra("alarm_prefix", prefix)
+                putExtra("alarm_sound", soundUri)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val opts = ActivityOptions.makeBasic().apply {
+                    setPendingIntentBackgroundActivityStartMode(
+                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    )
+                }
+                PendingIntent.getActivity(
+                    this, id, activityIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                    opts.toBundle()
+                )
+            } else {
+                PendingIntent.getActivity(
+                    this, id, activityIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            }
+        } else {
+            // showOnScreen == false: يروح لـ AlarmReceiver (بدون فتح التطبيق)
+            val receiverIntent = Intent(this, AlarmReceiver::class.java).apply {
+                putExtra("title", title)
+                putExtra("prefix", prefix)
+                putExtra("soundUri", soundUri)
+                putExtra("showOnScreen", false)
+            }
+            PendingIntent.getBroadcast(
+                this, id, receiverIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
         }
-        val pendingIntent = PendingIntent.getBroadcast(this, id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        
+
         val alarmClockInfo = AlarmManager.AlarmClockInfo(timestamp, pendingIntent)
         alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
     }
 
     private fun cancelAlarm(id: Int) {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, AlarmReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(this, id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        alarmManager.cancel(pendingIntent)
+        // إلغاء النوعين (Activity و Broadcast) لضمان الإلغاء
+        val activityIntent = Intent(this, MainActivity::class.java)
+        val activityPI = PendingIntent.getActivity(
+            this, id, activityIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(activityPI)
+
+        val receiverIntent = Intent(this, AlarmReceiver::class.java)
+        val receiverPI = PendingIntent.getBroadcast(
+            this, id, receiverIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(receiverPI)
     }
 
     private fun enableShowWhenLocked() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) { setShowWhenLocked(true); setTurnScreenOn(true) }
-        else { @Suppress("DEPRECATION") window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true); setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        }
     }
 
     private fun disableShowWhenLocked() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) { setShowWhenLocked(false); setTurnScreenOn(false) }
-        else { @Suppress("DEPRECATION") window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(false); setTurnScreenOn(false)
+        } else {
+            @Suppress("DEPRECATION")
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        }
     }
 }
