@@ -14,7 +14,7 @@ class AlarmReceiver : BroadcastReceiver() {
         val showOnScreen = intent.getBooleanExtra("showOnScreen", true)
 
         val serviceIntent = Intent(context, AlarmService::class.java).apply {
-            action = AlarmService.ACTION_START
+            action = "com.example.secretary_app.START_ALARM"
             putExtra(AlarmService.EXTRA_TITLE, title)
             putExtra(AlarmService.EXTRA_PREFIX, prefix)
             putExtra(AlarmService.EXTRA_SOUND_URI, soundUri)
