@@ -62,28 +62,18 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
 
         // 👈 محاولة فتح التطبيق بعناد (5 محاولات) عشان نتغلب على حماية أندرويد لما الشاشة مفتوحة
         if (showOnScreen) {
-            val handler = android.os.Handler(android.os.Looper.getMainLooper())
-            var attempts = 0
-            val openRunnable = object : Runnable {
-                override fun run() {
-                    if (attempts >= 5) return
-                    attempts++
-                    try {
-                        val launchIntent = Intent(this@AlarmService, MainActivity::class.java).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        }
-                        startActivity(launchIntent)
-                    } catch (e: Exception) {
-                        // تجاهل
-                    }
-                    if (attempts < 5) {
-                        handler.postDelayed(this, 1000)
-                    }
+    val mainHandler = Handler(Looper.getMainLooper())
+    for (i in 0 until 5) {
+        mainHandler.postDelayed({
+            try {
+                val launchIntent = Intent(this@AlarmService, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
-            }
-            handler.post(openRunnable)
+                startActivity(launchIntent)
+            } catch (_: Exception) {}
+        }, (i * 1000).toLong())
+    }
         }
-
         // 👈 تشغيل الصوت مرة واحدة بس (من غير أي لوب)
         val hasCustomSound = !customSoundUri.isNullOrEmpty() && customSoundUri != "default" && customSoundUri != "null"
         if (hasCustomSound) {
