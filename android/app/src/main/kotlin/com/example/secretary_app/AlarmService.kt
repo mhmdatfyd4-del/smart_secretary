@@ -8,7 +8,9 @@ import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
@@ -24,13 +26,13 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     private var showOnScreen = true
 
     companion object {
-        // 👈 غيرنا لـ v6 عشان نمسح ذاكرة الإشعارات القديمة اللي في التابلت (كانت v4)
         const val CHANNEL_ID = "secretary_native_alarm_v6" 
         const val NOTIF_ID = 99001
         const val EXTRA_TITLE = "title"
         const val EXTRA_PREFIX = "prefix"
         const val EXTRA_SOUND_URI = "soundUri"
         const val EXTRA_SHOW_ON_SCREEN = "showOnScreen"
+        const val ACTION_START = "com.example.secretary_app.START_ALARM" // 👈 عشان البناء ينجح
         const val DEFAULT_PREFIX = "حان الآن موعد: "
     }
 
@@ -60,20 +62,21 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
 
         if (wakeLock?.isHeld == false) wakeLock?.acquire(60 * 1000L)
 
-        // 👈 محاولة فتح التطبيق بعناد (5 محاولات) عشان نتغلب على حماية أندرويد لما الشاشة مفتوحة
+        // 👈 محاولة فتح التطبيق 5 مرات عشان نتغلب على حماية أندرويد
         if (showOnScreen) {
-    val mainHandler = Handler(Looper.getMainLooper())
-    for (i in 0 until 5) {
-        mainHandler.postDelayed({
-            try {
-                val launchIntent = Intent(this@AlarmService, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                }
-                startActivity(launchIntent)
-            } catch (_: Exception) {}
-        }, (i * 1000).toLong())
-    }
+            val mainHandler = Handler(Looper.getMainLooper())
+            for (i in 0 until 5) {
+                mainHandler.postDelayed({
+                    try {
+                        val launchIntent = Intent(this@AlarmService, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        }
+                        startActivity(launchIntent)
+                    } catch (_: Exception) {}
+                }, (i * 1000).toLong())
+            }
         }
+
         // 👈 تشغيل الصوت مرة واحدة بس (من غير أي لوب)
         val hasCustomSound = !customSoundUri.isNullOrEmpty() && customSoundUri != "default" && customSoundUri != "null"
         if (hasCustomSound) {
@@ -162,7 +165,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             .setOngoing(true)
             .setContentIntent(pendingIntent)
 
-        // 👈 عشان يفتح الشاشة
         if (showOnScreen) {
             builder.setFullScreenIntent(pendingIntent, true)
         }
