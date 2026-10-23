@@ -4,6 +4,9 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -16,13 +19,18 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     private var isTtsReady = false
     private var pendingText: String? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var mediaPlayer: MediaPlayer? = null
+    private var customSoundUri: String? = null
+    private var showOnScreen = true
 
     companion object {
-        const val CHANNEL_ID = "secretary_native_alarm_v4"
+        // 👈 غيرنا لـ v6 عشان نمسح ذاكرة الإشعارات القديمة اللي في التابلت (كانت v4)
+        const val CHANNEL_ID = "secretary_native_alarm_v6" 
         const val NOTIF_ID = 99001
         const val EXTRA_TITLE = "title"
         const val EXTRA_PREFIX = "prefix"
-        const val ACTION_START = "com.example.secretary_app.START_ALARM"
+        const val EXTRA_SOUND_URI = "soundUri"
+        const val EXTRA_SHOW_ON_SCREEN = "showOnScreen"
         const val DEFAULT_PREFIX = "حان الآن موعد: "
     }
 
@@ -37,6 +45,9 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: return START_NOT_STICKY
         val prefix = intent?.getStringExtra(EXTRA_PREFIX) ?: DEFAULT_PREFIX
+        customSoundUri = intent?.getStringExtra(EXTRA_SOUND_URI)
+        showOnScreen = intent?.getBooleanExtra(EXTRA_SHOW_ON_SCREEN, true) ?: true
+        
         val notification = buildNotification(title)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -49,17 +60,92 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
 
         if (wakeLock?.isHeld == false) wakeLock?.acquire(60 * 1000L)
 
-        if (isTtsReady) {
-            speak(prefix, title)
-        } else {
-            pendingText = "$prefix|$title"
+        // 👈 محاولة فتح التطبيق بعناد (5 محاولات) عشان نتغلب على حماية أندرويد لما الشاشة مفتوحة
+        if (showOnScreen) {
+            val handler = android.os.Handler(android.os.Looper.getMainLooper())
+            var attempts = 0
+            val openRunnable = object : Runnable {
+                override fun run() {
+                    if (attempts >= 5) return
+                    attempts++
+                    try {
+                        val launchIntent = Intent(this@AlarmService, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        }
+                        startActivity(launchIntent)
+                    } catch (e: Exception) {
+                        // تجاهل
+                    }
+                    if (attempts < 5) {
+                        handler.postDelayed(this, 1000)
+                    }
+                }
+            }
+            handler.post(openRunnable)
         }
+
+        // 👈 تشغيل الصوت مرة واحدة بس (من غير أي لوب)
+        val hasCustomSound = !customSoundUri.isNullOrEmpty() && customSoundUri != "default" && customSoundUri != "null"
+        if (hasCustomSound) {
+            playCustomSound(customSoundUri!!)
+        } else {
+            speakTts(prefix, title)
+        }
+
         return START_NOT_STICKY
+    }
+
+    private fun playCustomSound(uriStr: String) {
+        try {
+            mediaPlayer?.release()
+            val uri: Uri = if (uriStr.startsWith("raw://")) {
+                val resName = uriStr.replace("raw://", "")
+                val resId = resources.getIdentifier(resName, "raw", packageName)
+                if (resId != 0) {
+                    Uri.parse("android.resource://$packageName/$resId")
+                } else {
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                }
+            } else {
+                Uri.parse(uriStr)
+            }
+
+            mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                setDataSource(this@AlarmService, uri)
+                prepare()
+                start()
+            }
+        } catch (e: Exception) {
+            speakTts(DEFAULT_PREFIX, "تنبيه هام")
+        }
+    }
+
+    private fun speakTts(prefix: String, text: String) {
+        if (isTtsReady) {
+            val toSay = "$prefix$text"
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+
+            tts?.setAudioAttributes(audioAttributes)
+            tts?.setLanguage(Locale("ar"))
+            tts?.setSpeechRate(1.0f)
+            tts?.setPitch(1.0f)
+            tts?.speak(toSay, TextToSpeech.QUEUE_FLUSH, null, "alarm")
+        } else {
+            pendingText = "$prefix|$text"
+        }
     }
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // 👈 غيرنا الأهمية لـ HIGH عشان يقدر يفتح الشاشة
             val channel = NotificationChannel(CHANNEL_ID, "منبه السكرتير (خلفية)", NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(null, null)
                 setShowBadge(false)
@@ -69,7 +155,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun buildNotification(title: String): Notification {
-        // 👈 ده اللي بيفتح التطبيق لما الإشعار يضرب
         val launchIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -78,40 +163,21 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("تشغيل التنبيه").setContentText(title)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("تنبيه هام!")
+            .setContentText(title)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setFullScreenIntent(pendingIntent, true) // 👈 السر هنا: بيفتح التطبيق غصب عن النظام
             .setOngoing(true)
-            .build()
-    }
+            .setContentIntent(pendingIntent)
 
-    private fun speak(prefix: String, text: String) {
-        val toSay = "$prefix$text"
-        
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-            .build()
+        // 👈 عشان يفتح الشاشة
+        if (showOnScreen) {
+            builder.setFullScreenIntent(pendingIntent, true)
+        }
 
-        tts?.setAudioAttributes(audioAttributes)
-        tts?.setLanguage(Locale("ar"))
-        tts?.setSpeechRate(1.0f)
-        tts?.setPitch(1.0f)
-
-        tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {}
-            override fun onDone(utteranceId: String?) {
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ stopSelf() }, 1000)
-            }
-            override fun onError(utteranceId: String?) {
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ stopSelf() }, 1000)
-            }
-        })
-        
-        tts?.speak(toSay, TextToSpeech.QUEUE_FLUSH, null, "alarm")
+        return builder.build()
     }
 
     override fun onInit(status: Int) {
@@ -119,7 +185,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             isTtsReady = true
             pendingText?.let {
                 val parts = it.split("|", limit = 2)
-                if (parts.size == 2) speak(parts[0], parts[1])
+                if (parts.size == 2) speakTts(parts[0], parts[1])
                 pendingText = null
             }
         }
@@ -128,6 +194,8 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         tts?.stop()
         tts?.shutdown()
+        mediaPlayer?.stop()
+        mediaPlayer?.release()
         if (wakeLock?.isHeld == true) wakeLock?.release()
         super.onDestroy()
     }
