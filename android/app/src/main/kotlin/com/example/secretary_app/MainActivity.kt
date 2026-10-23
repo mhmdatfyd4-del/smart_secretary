@@ -129,7 +129,9 @@ class MainActivity : FlutterActivity() {
                     val title = call.argument<String>("title") ?: ""
                     val timestamp = call.argument<Long>("timestamp") ?: 0L
                     val prefix = call.argument<String>("prefix") ?: AlarmService.DEFAULT_PREFIX
-                    scheduleAlarm(id, title, timestamp, prefix)
+                    val soundUri = call.argument<String>("soundUri")
+                    val showOnScreen = call.argument<Boolean>("showOnScreen") ?: true
+                    scheduleAlarm(id, title, timestamp, prefix, soundUri, showOnScreen)
                     result.success(true)
                 }
                 "cancelAlarm" -> {
@@ -246,14 +248,16 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun scheduleAlarm(id: Int, title: String, timestamp: Long, prefix: String) {
+    private fun scheduleAlarm(id: Int, title: String, timestamp: Long, prefix: String, soundUri: String?, showOnScreen: Boolean) {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, AlarmReceiver::class.java).apply {
-            putExtra("title", title); putExtra("prefix", prefix)
+            putExtra("title", title)
+            putExtra("prefix", prefix)
+            putExtra("soundUri", soundUri)
+            putExtra("showOnScreen", showOnScreen)
         }
         val pendingIntent = PendingIntent.getBroadcast(this, id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         
-        // 👈 السر هنا: بنستخدم setAlarmClock عشان نكسر وضع Doze
         val alarmClockInfo = AlarmManager.AlarmClockInfo(timestamp, pendingIntent)
         alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
     }
