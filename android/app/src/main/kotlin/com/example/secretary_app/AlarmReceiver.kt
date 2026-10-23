@@ -10,11 +10,15 @@ class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val title = intent.getStringExtra("title") ?: return
         val prefix = intent.getStringExtra("prefix") ?: AlarmService.DEFAULT_PREFIX
+        val soundUri = intent.getStringExtra("soundUri")
+        val showOnScreen = intent.getBooleanExtra("showOnScreen", true)
 
         val serviceIntent = Intent(context, AlarmService::class.java).apply {
             action = AlarmService.ACTION_START
             putExtra(AlarmService.EXTRA_TITLE, title)
             putExtra(AlarmService.EXTRA_PREFIX, prefix)
+            putExtra(AlarmService.EXTRA_SOUND_URI, soundUri)
+            putExtra(AlarmService.EXTRA_SHOW_ON_SCREEN, showOnScreen)
         }
 
         try {
