@@ -206,6 +206,7 @@ class AppSettings {
   String customWakeWord;
   String wakeWordMode;
   String wakeWordTrigger;
+  bool useOverlayAlarm; // 👈 التعديل الجديد
 
   AppSettings({
     this.defaultReminderHour = 18,
@@ -221,6 +222,7 @@ class AppSettings {
     this.customWakeWord = 'يا سكرتير',
     this.wakeWordMode = 'off',
     this.wakeWordTrigger = 'both',
+    this.useOverlayAlarm = true, // 👈 التعديل الجديد
   });
 
   double get speechRate {
@@ -251,7 +253,7 @@ class SettingsScreen extends StatefulWidget {
     bool showLock, bool shakeBg, String voiceGender,
     String defaultInterval, String customWakeWord,
     String wakeWordMode, String wakeWordTrigger,
-    bool muteBeep,
+    bool muteBeep, bool useOverlayAlarm, // 👈 التعديل الجديد
   ) onSave;
   final Future<void> Function(String name, String voiceGender) onSaveSecretary;
 
@@ -284,6 +286,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late String _secretaryName;
   late String _wakeWordMode;
   late String _wakeWordTrigger;
+  late bool _useOverlayAlarm; // 👈 التعديل الجديد
+  
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _wakeWordController = TextEditingController();
 
@@ -301,6 +305,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late String _origSecretaryName;
   late String _origWakeWordMode;
   late String _origWakeWordTrigger;
+  late bool _origUseOverlayAlarm; // 👈 التعديل الجديد
 
   String? _defaultAlarmSound;
   String? _defaultEventSound;
@@ -324,6 +329,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _wakeWordMode = widget.settings.wakeWordMode;
     _wakeWordTrigger = widget.settings.wakeWordTrigger;
     _wakeWordController.text = widget.settings.customWakeWord;
+    _useOverlayAlarm = widget.settings.useOverlayAlarm;
 
     _origDefaultReminderHour = _defaultReminderHour;
     _origDefaultReminderMinute = _defaultReminderMinute;
@@ -339,6 +345,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _origSecretaryName = _secretaryName;
     _origWakeWordMode = _wakeWordMode;
     _origWakeWordTrigger = _wakeWordTrigger;
+    _origUseOverlayAlarm = _useOverlayAlarm;
 
     _loadSavedSounds();
   }
@@ -396,6 +403,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _nameController.text != _origSecretaryName ||
         _wakeWordMode != _origWakeWordMode ||
         _wakeWordTrigger != _origWakeWordTrigger ||
+        _useOverlayAlarm != _origUseOverlayAlarm ||
         _wakeWordController.text != widget.settings.customWakeWord;
   }
 
@@ -409,7 +417,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _greetingEnabled, _adhanAlertEnabled, _ttsVolume,
       _showAboveLockScreen, _shakeInBackground, _voiceGender,
       _defaultInterval, _wakeWordController.text.trim(), _wakeWordMode, _wakeWordTrigger,
-      _muteBeep,
+      _muteBeep, _useOverlayAlarm,
     );
     await widget.onSaveSecretary(newName, _voiceGender);
 
@@ -790,6 +798,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: _shakeInBackground,
               activeColor: const Color(0xFFC5A059),
               onChanged: (v) => setState(() => _shakeInBackground = v),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: _useOverlayAlarm ? const Color(0xFFC5A059) : Colors.transparent, width: 2),
+            ),
+            child: SwitchListTile(
+              secondary: Icon(Icons.picture_in_picture_alt, color: _useOverlayAlarm ? const Color(0xFFC5A059) : const Color(0xFF1B2A4A), size: 26),
+              title: const Text('شاشة المنبه العائمة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  _useOverlayAlarm ? 'شاشة المنبه هتظهر فوق أي تطبيق تاني' : 'شاشة المنبه مش هتظهر (إشعار وصوت بس)',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+              value: _useOverlayAlarm,
+              activeColor: const Color(0xFFC5A059),
+              onChanged: (v) => setState(() => _useOverlayAlarm = v),
             ),
           ),
           const SizedBox(height: 12),
@@ -1558,6 +1588,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   late bool _isUserMale;
 
   bool _isInBackground = false;
+  int _tasbeehCount = 0; // 👈 متغير عداد التسبيح
 
   List<Map<String, dynamic>> _tasks = [];
   List<Map<String, dynamic>> _specialEvents = [];
@@ -1672,8 +1703,25 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           _startWakeWordLoop(); 
         }
       });
+
+      // 👈 استدعاء التقرير الذكي
+      _checkSmartSuggestions();
+
     } catch (e) {
       debugPrint("Init Error: $e");
+    }
+  }
+
+  Future<void> _checkSmartSuggestions() async {
+    final lastDiary = _diaries.keys.isNotEmpty ? _diaries.keys.reduce((a, b) => a.compareTo(b) > 0 ? a : b) : null;
+    if (lastDiary != null) {
+      final lastDate = DateTime.tryParse(lastDiary);
+      if (lastDate != null && DateTime.now().difference(lastDate).inDays >= 3) {
+        await Future.delayed(const Duration(seconds: 4));
+        if (mounted && !_isInBackground) {
+          _speak("فات 3 أيام مش كتبت يومياتك $_userTitle، تحب تفتحها؟");
+        }
+      }
     }
   }
 
@@ -2066,6 +2114,7 @@ Future<void> _loadData() async {
   _settings.customWakeWord = prefs.getString('custom_wake_word') ?? 'يا سكرتير';
   _settings.wakeWordMode = prefs.getString('wake_word_mode') ?? 'off';
   _settings.wakeWordTrigger = prefs.getString('wake_word_trigger') ?? 'both';
+  _settings.useOverlayAlarm = prefs.getBool('use_overlay_alarm') ?? true;
   _playbackVolume = prefs.getDouble('playback_volume') ?? 1.0;
   _playbackSpeed = prefs.getDouble('playback_speed') ?? 1.0;
   _ttsVolume = prefs.getDouble('tts_volume') ?? 1.0;
@@ -2095,6 +2144,7 @@ Future<void> _saveSettings() async {
   await prefs.setString('custom_wake_word', _settings.customWakeWord);
   await prefs.setString('wake_word_mode', _settings.wakeWordMode);
   await prefs.setString('wake_word_trigger', _settings.wakeWordTrigger);
+  await prefs.setBool('use_overlay_alarm', _settings.useOverlayAlarm);
   await prefs.setDouble('playback_volume', _playbackVolume);
   await prefs.setDouble('playback_speed', _playbackSpeed);
   await prefs.setDouble('tts_volume', _ttsVolume);
@@ -2114,7 +2164,9 @@ int _getAdvanceMinutes(String reminder) {
     case 'قبلها بـ 30 دقيقة': return 30;
     case 'قبلها بـ 45 دقيقة': return 45;
     case 'قبلها بساعة': return 60;
-    case 'قبلها بساعتين': return 120;
+    case 'قبلها ب 6 ساعات': return 360;
+    case 'قبلها ب 12 ساعة': return 720;
+    case 'قبلها بـ 24 ساعة': return 1440;
     default: return 0;
   }
 }
@@ -2531,8 +2583,37 @@ Future<void> _startWakeWordLoop() async {
   final secTitle = _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
   final now = DateTime.now();
 
+  // 👈 الردود الدينية
+  if (_hasAny(cmd, ['اطول ايه في القران', 'أطول آية'])) {
+    await _speak("أطول آية في القرآن هي آية الدَّين في سورة البقرة، وعدد كلماتها 128 كلمة $userTitle.");
+    return true;
+  }
+  if (_hasAny(cmd, ['اول سوره نزلت', 'أول سورة'])) {
+    await _speak("أول ما نزل من القرآن هو قوله تعالى: (اقْرَأْ بِاسْمِ رَبِّكَ الَّذِي خَلَقَ) في سورة العلق $userTitle.");
+    return true;
+  }
+  if (_hasAny(cmd, ['اركان الاسلام', 'أركان الإسلام'])) {
+    await _speak("أركان الإسلام خمسة: شهادة أن لا إله إلا الله وأن محمداً رسول الله، وإقام الصلاة، وإيتاء الزكاة، وصوم رمضان، وحج البيت لمن استطاع إليه سبيلاً.");
+    return true;
+  }
+  if (_hasAny(cmd, ['عندي امتحان', 'امتحان بكرة', 'امتحان بكره'])) {
+    await _speak("ربنا يوفقك $userTitle، متنساش تصلي الفجر وتنام بدري، وذاكر كويس وربنا معاك.");
+    return true;
+  }
+
+  // 👈 عداد التسبيح
+  if (_hasAny(cmd, ['سبحان الله', 'استغفر الله', 'الحمد لله', 'الله اكبر', 'لا اله الا الله'])) {
+    setState(() => _tasbeehCount++);
+    await _speak("جزاك الله خيراً $userTitle، تم تسجيل التسبيحة. عدد التسبيحات: $_tasbeehCount.");
+    return true;
+  }
+  if (_hasAny(cmd, ['شوف العداد', 'العداد كام', 'سبحت كام'])) {
+    await _speak("لقد سبحت $userTitle $_tasbeehCount مرة.");
+    return true;
+  }
+
   if (_hasAny(cmd, ['صباح الخير', 'صباح النور', 'صباح الفل', 'صباحو', 'صبح صباح الخير', 'صباح الخيرات'])) {
-    await _speak("صباح النور والسرور $userTitle ☀️ أتمنى لك يوم سعيد!");
+    await _speak("صباح النور والسرور $userTitle ☀️ أتمنى لك يوم سعيد! النهاردة يوم جديد وفرصة جديدة.");
     return true;
   }
   if (_hasAny(cmd, ['صباح الفل والياسمين', 'صباح الورد', 'صباح العسل', 'صباح الحب'])) {
@@ -2540,7 +2621,7 @@ Future<void> _startWakeWordLoop() async {
     return true;
   }
   if (_hasAny(cmd, ['مساء الخير', 'مساء النور', 'مساء الفل', 'مسائو', 'مسا الخير', 'مساء الخيرات'])) {
-    await _speak("مساء النور والفل والياسمين $userTitle 🌙 أتمنى تكون بخير.");
+    await _speak("مساء النور والفل والياسمين $userTitle 🌙 أتمنى تكون بخير. الوقت اتأخر يا فندم لازم جسمك يرتاح.");
     return true;
   }
   if (_hasAny(cmd, ['مساء الورد', 'مساء العسل', 'مساء الحب'])) {
@@ -3021,6 +3102,36 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
       await _speak("تم إيقاف المنبه $userTitle");
       return;
     }
+  }
+
+  // 👈 التأجيل والنوم
+  if (_hasAny(cmd, ['فكرني بعد', 'أجله', 'أجلي', 'صحيني بعد', 'نومة', 'قيلولة'])) {
+    final numMatch = RegExp(r'\d+').firstMatch(cmd);
+    int minutes = numMatch != null ? int.parse(numMatch.group(0)!) : 5;
+    if (cmd.contains('نص ساعة') || cmd.contains('نصف ساعة')) minutes = 30;
+    else if (cmd.contains('ساعة')) minutes = 60;
+    else if (cmd.contains('دقيقتين')) minutes = 2;
+    
+    final snoozeTime = DateTime.now().add(Duration(minutes: minutes));
+    _scheduleContinuousAlarm('تأجيل المنبه', snoozeTime, 'مرة واحدة', 'كل 10 ثواني', []);
+    
+    if (_isAlarmDialogOpen) {
+       _activeAlarmLoopTimer?.cancel();
+       _tts.stop();
+       if (_alarmDialogContext != null) Navigator.pop(_alarmDialogContext!);
+       _isAlarmDialogOpen = false;
+    }
+    await _speak("حاضر $userTitle، هفكرك بعد $minutes دقيقة.");
+    return;
+  }
+
+  // 👈 وضع التركيز
+  if (_hasAny(cmd, ['وضع التركيز', 'فوكس', 'ركز معايا'])) {
+    setState(() => _settings.wakeWordMode = 'off');
+    await _saveSettings();
+    try { await _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
+    await _speak("تم تفعيل وضع التركيز $userTitle، هلتزم الصمت ومرضيش على أي حد.");
+    return;
   }
 
   if (await _handleSocialReply(cmd)) return;
@@ -4511,7 +4622,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
           ttsVolume: _ttsVolume,
           currentSecretaryName: _secretaryName,
           currentIsUserMale: _isUserMale,
-          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeBg, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger, muteBeep) async {
+          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeBg, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger, muteBeep, useOverlayAlarm) async {
             setState(() {
               _settings.defaultReminderHour = hour;
               _settings.defaultReminderMinute = minute;
@@ -4527,6 +4638,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
               _settings.customWakeWord = customWakeWord;
               _settings.wakeWordMode = wakeWordMode;
               _settings.wakeWordTrigger = wakeWordTrigger;
+              _settings.useOverlayAlarm = useOverlayAlarm; // 👈 التعديل الجديد
             });
             
             await _saveSettings();
@@ -4596,11 +4708,13 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
     }
     String selectedRepeat = existingTask?['repeat'] ?? 'مرة واحدة';
     String selectedInterval = existingTask?['repeatInterval'] ?? _settings.defaultInterval;
+    String selectedAdvanceReminder = existingTask?['advanceReminder'] ?? 'في الموعد'; // 👈 التعديل الجديد
     List<String> selectedDays = List<String>.from(existingTask?['customDays'] ?? []);
     String? selectedSound = existingTask?['sound'];
 
     final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'أسبوعي', 'شهري', 'مخصص'];
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
+    final List<String> advanceOptions = ['في الموعد', 'قبلها بـ 5 دقائق', 'قبلها بـ 10 دقائق', 'قبلها بـ 15 دقيقة', 'قبلها بـ 30 دقيقة', 'قبلها بساعة', 'قبلها ب 6 ساعات', 'قبلها ب 12 ساعة', 'قبلها بـ 24 ساعة']; // 👈 التعديل الجديد
 
     showDialog(
       context: context,
@@ -4623,6 +4737,13 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
                       if (t != null) setStateSB(() => selectedTime = t);
                     }),
                   ]),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: selectedAdvanceReminder,
+                    decoration: const InputDecoration(labelText: 'التذكير المسبق', border: OutlineInputBorder()),
+                    items: advanceOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                    onChanged: (val) => setStateSB(() => selectedAdvanceReminder = val ?? 'في الموعد'),
+                  ),
                   const Divider(),
                   const Align(alignment: Alignment.centerRight, child: Text('التكرار:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                   const SizedBox(height: 8),
@@ -4693,10 +4814,11 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
               onPressed: () {
                 if (taskCtrl.text.isNotEmpty) {
+                  int advanceMins = _getAdvanceMinutes(selectedAdvanceReminder); // 👈 التعديل الجديد
                   final scheduledDateTime = DateTime(
                     _selectedDate.year, _selectedDate.month, _selectedDate.day,
                     selectedTime.hour, selectedTime.minute,
-                  );
+                  ).subtract(Duration(minutes: advanceMins)); // 👈 التعديل الجديد
                   if (selectedInterval == 'مرة واحدة' && scheduledDateTime.isBefore(DateTime.now())) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ الموعد فات! اختر وقت مستقبلي'), backgroundColor: Colors.red));
                     return;
@@ -4713,6 +4835,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
                         'repeatInterval': selectedInterval,
                         'customDays': selectedDays,
                         'sound': selectedSound,
+                        'advanceReminder': selectedAdvanceReminder, // 👈 التعديل الجديد
                       });
                     });
                   } else {
@@ -4727,6 +4850,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
                         'repeatInterval': selectedInterval,
                         'customDays': selectedDays,
                         'sound': selectedSound,
+                        'advanceReminder': selectedAdvanceReminder, // 👈 التعديل الجديد
                       };
                     });
                   }
@@ -4782,7 +4906,7 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
     String? selectedSound = existingTask?['sound'];
 
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
-    final List<String> advanceOptions = ['في الموعد', 'قبلها بـ 5 دقائق', 'قبلها بـ 10 دقائق', 'قبلها بـ 15 دقيقة', 'قبلها بـ 20 دقيقة', 'قبلها بـ 30 دقيقة', 'قبلها بـ 45 دقيقة', 'قبلها بساعة', 'قبلها بساعتين'];
+    final List<String> advanceOptions = ['في الموعد', 'قبلها بـ 5 دقائق', 'قبلها بـ 10 دقائق', 'قبلها بـ 15 دقيقة', 'قبلها بـ 20 دقيقة', 'قبلها بـ 30 دقيقة', 'قبلها بـ 45 دقيقة', 'قبلها بساعة', 'قبلها بساعتين', 'قبلها ب 6 ساعات', 'قبلها ب 12 ساعة', 'قبلها بـ 24 ساعة'];
 
     await showDialog(
       context: context,
@@ -5573,6 +5697,34 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
   }
 
   Widget _buildPrayerTimesTab() {
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          const TabBar(
+            labelColor: Color(0xFF1B2A4A),
+            indicatorColor: Color(0xFFC5A059),
+            tabs: [
+              Tab(text: 'المواقيت'),
+              Tab(text: 'الأذكار'),
+              Tab(text: 'التسبيح'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildPrayerTimesList(),
+                _buildAdhkarList(),
+                _buildTasbeehCounter(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrayerTimesList() {
     return FutureBuilder<Map<String, String>>(
       future: _calculatePrayerTimes(),
       builder: (context, snapshot) {
@@ -5581,25 +5733,6 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF0F172A)]),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
-              ),
-              child: const Column(children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.access_time_filled, color: Color(0xFFC5A059), size: 22),
-                    SizedBox(width: 8),
-                    Text('مواقيت الصلاة', style: TextStyle(color: Color(0xFFC5A059), fontSize: 16, fontWeight: FontWeight.bold))
-                  ],
-                )
-              ]),
-            ),
-            const SizedBox(height: 15),
             _prayerCard('الفجر', _formatTimeForDisplay(times['fajr']!), Icons.wb_twilight),
             _prayerCard('الشروق', _formatTimeForDisplay(times['sunrise']!), Icons.wb_sunny_outlined),
             _prayerCard('الظهر', _formatTimeForDisplay(times['dhuhr']!), Icons.wb_sunny),
@@ -5609,6 +5742,46 @@ Future<Map<String, String>> _calculatePrayerTimes() async {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildTasbeehCounter() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text('أفضل الذكر: سبحان الله وبحمده، سبحان الله العظيم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1B2A4A)), textAlign: TextAlign.center),
+          const SizedBox(height: 30),
+          Text('$_tasbeehCount', style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: Color(0xFFC5A059))),
+          const SizedBox(height: 30),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), minimumSize: const Size(200, 60)),
+            icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
+            label: const Text('تسبيح', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            onPressed: () => setState(() => _tasbeehCount++),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdhkarList() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: const [
+        Card(
+          child: ListTile(
+            title: Text('أذكار الصباح', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('أصبحنا وأصبح الملك لله، والحمد لله، لا إله إلا الله وحده لا شريك له...'),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            title: Text('أذكار المساء', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('أمسينا وأمسى الملك لله، والحمد لله، لا إله إلا الله وحده لا شريك له...'),
+          ),
+        ),
+      ],
     );
   }
 
