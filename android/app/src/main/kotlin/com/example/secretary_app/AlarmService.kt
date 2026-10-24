@@ -1,5 +1,6 @@
 package com.example.secretary_app
 
+import android.animation.ObjectAnimator
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,6 +10,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
@@ -21,8 +24,13 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.widget.Button
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import java.util.Locale
 
@@ -34,8 +42,13 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     private var mediaPlayer: MediaPlayer? = null
     private var customSoundUri: String? = null
     private var showOnScreen = true
+    
     private var currentTitle: String = ""
     private var currentPrefix: String = DEFAULT_PREFIX
+    
+    private var windowManager: WindowManager? = null
+    private var overlayView: View? = null
+    private var lipSyncAnimator: ObjectAnimator? = null
 
     companion object {
         private const val TAG = "AlarmService"
@@ -46,6 +59,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         const val EXTRA_SOUND_URI = "soundUri"
         const val EXTRA_SHOW_ON_SCREEN = "showOnScreen"
         const val ACTION_START = "com.example.secretary_app.START_ALARM"
+        const val ACTION_CANCEL = "com.example.secretary_app.CANCEL_ALARM"
         const val DEFAULT_PREFIX = "حان الآن موعد: "
     }
 
@@ -55,9 +69,15 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         tts = TextToSpeech(this, this)
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SecretaryApp::AlarmWakeLock")
+        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_CANCEL) {
+            stopAlarmAndOverlay()
+            return START_NOT_STICKY
+        }
+
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: return START_NOT_STICKY
         val prefix = intent?.getStringExtra(EXTRA_PREFIX) ?: DEFAULT_PREFIX
         customSoundUri = intent?.getStringExtra(EXTRA_SOUND_URI)
@@ -66,10 +86,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         currentTitle = title
         currentPrefix = prefix
 
-        Log.d(TAG, "onStartCommand: title=$title, showOnScreen=$showOnScreen")
-
         val notification = buildNotification(title)
-
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(
@@ -86,96 +103,107 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
 
         if (wakeLock?.isHeld == false) wakeLock?.acquire(60 * 1000L)
 
-        val hasCustomSound = !customSoundUri.isNullOrEmpty() &&
-                customSoundUri != "default" && customSoundUri != "null"
+        val hasCustomSound = !customSoundUri.isNullOrEmpty() && customSoundUri != "default" && customSoundUri != "null"
         if (hasCustomSound) {
             playCustomSound(customSoundUri!!)
         } else {
             speakTts(prefix, title)
         }
 
-        if (showOnScreen) {
-            launchAppWithOverlayHack()
+        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val useOverlay = prefs.getBoolean("flutter.use_overlay_alarm", true)
+
+        if (showOnScreen && useOverlay) {
+            showAlarmOverlay(title, prefix, hasCustomSound)
         }
 
         return START_NOT_STICKY
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // 🔑 التعديل هنا: زيادة وقت التأخير + إظهار توست للتشخيص
-    // ═══════════════════════════════════════════════════════════════
-    private fun launchAppWithOverlayHack() {
-        if (!Settings.canDrawOverlays(this)) {
-            Log.e(TAG, "SYSTEM_ALERT_WINDOW not granted. Cannot launch.")
-            Handler(Looper.getMainLooper()).post {
-                android.widget.Toast.makeText(this, "⚠️ إذن (العرض فوق التطبيقات) غير مفعل في إعدادات التابلت!", android.widget.Toast.LENGTH_LONG).show()
-            }
-            return
-        }
+    private fun showAlarmOverlay(title: String, prefix: String, hasCustomSound: Boolean) {
+        if (!Settings.canDrawOverlays(this)) return
+        if (overlayView != null) return
 
         Handler(Looper.getMainLooper()).post {
-            android.widget.Toast.makeText(this, "🔔 محاولة فتح التطبيق...", android.widget.Toast.LENGTH_SHORT).show()
+            try {
+                val layout = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    setBackgroundColor(Color.parseColor("#E61B2A4A"))
+                    setPadding(60, 60, 60, 60)
+                }
+
+                val imageView = ImageView(this).apply {
+                    setImageResource(R.mipmap.ic_launcher)
+                    layoutParams = LinearLayout.LayoutParams(250, 250).apply {
+                        gravity = Gravity.CENTER
+                        setMargins(0, 0, 0, 30)
+                    }
+                }
+                layout.addView(imageView)
+
+                // 👈 حركة الفم (لو المنبه بصوت السكرتير)
+                if (!hasCustomSound) {
+                    lipSyncAnimator = ObjectAnimator.ofFloat(imageView, "scaleY", 1f, 1.1f, 1f).apply {
+                        duration = 300
+                        repeatCount = ObjectAnimator.INFINITE
+                        start()
+                    }
+                }
+
+                val textView = TextView(this).apply {
+                    text = "تنبيه هام!\n\n$prefix$title"
+                    setTextColor(Color.WHITE)
+                    textSize = 24f
+                    gravity = Gravity.CENTER
+                    setTypeface(null, Typeface.BOLD)
+                    setPadding(0, 0, 0, 50)
+                }
+                layout.addView(textView)
+
+                val button = Button(this).apply {
+                    text = "خلاص (إيقاف)"
+                    textSize = 20f
+                    setTextColor(Color.BLACK)
+                    setTypeface(null, Typeface.BOLD)
+                    background = GradientDrawable().apply {
+                        setColor(Color.parseColor("#C5A059"))
+                        cornerRadius = 30f
+                    }
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 150)
+                    setOnClickListener { stopAlarmAndOverlay() }
+                }
+                layout.addView(button)
+
+                val params = WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    else WindowManager.LayoutParams.TYPE_PHONE,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                    PixelFormat.TRANSLUCENT
+                ).apply { gravity = Gravity.CENTER }
+
+                windowManager?.addView(layout, params)
+                overlayView = layout
+
+            } catch (e: Exception) { Log.e(TAG, "Overlay failed", e) }
         }
+    }
 
-        val windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        val view = View(this).apply { setBackgroundColor(Color.TRANSPARENT) }
-
-        // كبرنا الحجم لـ 10x10 بكسل بدل 1x1 عشان النظام يتعرف عليه فوراً
-        val params = WindowManager.LayoutParams(
-            10, 10,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT
-        )
-
+    private fun stopAlarmAndOverlay() {
         try {
-            // 1. عرض النافذة الشفافة
-            windowManager.addView(view, params)
-            
-            // 2. استنى 300 مللي ثانية (النظام محتاج الوقت ده عشان يتعرف إن فيه Overlay)
-            Handler(Looper.getMainLooper()).postDelayed({
-                val launchIntent = Intent(this, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                            Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
-                    putExtra("from_alarm", true)
-                    putExtra("alarm_title", currentTitle)
-                    putExtra("alarm_prefix", currentPrefix)
-                    putExtra("alarm_sound", customSoundUri)
-                }
-                try {
-                    startActivity(launchIntent)
-                    Log.d(TAG, "Activity launched via overlay hack")
-                } catch (e: Exception) {
-                    Log.e(TAG, "startActivity failed: ${e.message}", e)
-                    Handler(Looper.getMainLooper()).post {
-                        android.widget.Toast.makeText(this@AlarmService, "❌ فشل فتح الشاشة: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
-                    }
-                }
-
-                // 3. إزالة النافذة
-                Handler(Looper.getMainLooper()).postDelayed({
-                    try {
-                        windowManager.removeView(view)
-                        Log.d(TAG, "Overlay removed")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to remove overlay", e)
-                    }
-                }, 500)
-            }, 300)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Overlay hack failed: ${e.message}", e)
-            Handler(Looper.getMainLooper()).post {
-                android.widget.Toast.makeText(this@AlarmService, "❌ فشل إنشاء النافذة: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            lipSyncAnimator?.cancel()
+            if (overlayView != null && windowManager != null) {
+                windowManager?.removeView(overlayView)
+                overlayView = null
             }
-        }
+        } catch (e: Exception) {}
+        tts?.stop()
+        mediaPlayer?.stop()
+        stopForeground(true)
+        stopSelf()
     }
 
     private fun playCustomSound(uriStr: String) {
@@ -189,47 +217,27 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             } else Uri.parse(uriStr)
 
             mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
+                setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
                 setDataSource(this@AlarmService, uri)
                 prepare()
                 start()
             }
-        } catch (e: Exception) {
-            speakTts(DEFAULT_PREFIX, "تنبيه هام")
-        }
+        } catch (e: Exception) { speakTts(DEFAULT_PREFIX, "تنبيه هام") }
     }
 
     private fun speakTts(prefix: String, text: String) {
         if (isTtsReady) {
-            val audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()
-
+            val audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
             tts?.setAudioAttributes(audioAttributes)
             tts?.setLanguage(Locale("ar"))
-            tts?.setSpeechRate(1.0f)
-            tts?.setPitch(1.0f)
             tts?.speak("$prefix$text", TextToSpeech.QUEUE_FLUSH, null, "alarm")
-        } else {
-            pendingText = "$prefix|$text"
-        }
+        } else { pendingText = "$prefix|$text" }
     }
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID, "منبه السكرتير (خلفية)",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                setSound(null, null)
-                setShowBadge(false)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            val channel = NotificationChannel(CHANNEL_ID, "منبه السكرتير", NotificationManager.IMPORTANCE_HIGH).apply {
+                setSound(null, null); setShowBadge(false); lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
@@ -237,35 +245,22 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
 
     private fun buildNotification(title: String): Notification {
         val launchIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("from_alarm", true)
-            putExtra("alarm_title", title)
-            putExtra("alarm_prefix", currentPrefix)
-            putExtra("alarm_sound", customSoundUri)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("from_alarm", true); putExtra("alarm_title", title)
         }
+        val pendingIntent = PendingIntent.getActivity(this, 0, launchIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, launchIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val cancelIntent = Intent(this, AlarmService::class.java).apply { action = ACTION_CANCEL }
+        val cancelPendingIntent = PendingIntent.getService(this, 1, cancelIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("تنبيه هام!")
-            .setContentText(title)
+            .setContentTitle("تنبيه هام!").setContentText(title)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setOngoing(true)
-            .setContentIntent(pendingIntent)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setAutoCancel(false)
+            .setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setOngoing(true).setContentIntent(pendingIntent).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "إلغاء التنبيه", cancelPendingIntent)
 
-        if (showOnScreen) {
-            builder.setFullScreenIntent(pendingIntent, true)
-        }
-
+        if (showOnScreen) builder.setFullScreenIntent(pendingIntent, true)
         return builder.build()
     }
 
@@ -281,10 +276,8 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
-        tts?.stop()
-        tts?.shutdown()
-        mediaPlayer?.stop()
-        mediaPlayer?.release()
+        stopAlarmAndOverlay()
+        tts?.shutdown(); mediaPlayer?.release()
         if (wakeLock?.isHeld == true) wakeLock?.release()
         super.onDestroy()
     }
