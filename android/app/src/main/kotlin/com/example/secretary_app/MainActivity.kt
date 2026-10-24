@@ -62,13 +62,11 @@ class MainActivity : FlutterActivity() {
             pendingWakeWord = true
         }
 
-        // 👈 معالجة intent المنبه لو التطبيق بدأ بسببه
         handleAlarmIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // 👈 مهم جداً: نحدّث الـ intent عشان Flutter يقرأ الجديد
         setIntent(intent)
 
         if (intent.getBooleanExtra("WAKE_WORD_DETECTED", false)) {
@@ -77,13 +75,9 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // 👈 معالجة intent المنبه لو التطبيق مفتوح بالفعل
         handleAlarmIntent(intent)
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // 🔑 معالجة intent المنبه: تشغيل AlarmService بوضع TTS فقط
-    // ═══════════════════════════════════════════════════════════════
     private fun handleAlarmIntent(intent: Intent?) {
         if (intent?.getBooleanExtra("from_alarm", false) != true) return
 
@@ -96,7 +90,7 @@ class MainActivity : FlutterActivity() {
             putExtra(AlarmService.EXTRA_TITLE, title)
             putExtra(AlarmService.EXTRA_PREFIX, prefix)
             putExtra(AlarmService.EXTRA_SOUND_URI, soundUri)
-            putExtra(AlarmService.EXTRA_SHOW_ON_SCREEN, false) // 👈 التطبيق مفتوح خلاص
+            putExtra(AlarmService.EXTRA_SHOW_ON_SCREEN, false) // التطبيق مفتوح خلاص، متحاولش تفتحه تاني
         }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -285,9 +279,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // 🔑 scheduleAlarm: يستخدم getActivity (BAL-exempt) بدل getBroadcast
-    // ═══════════════════════════════════════════════════════════════
     private fun scheduleAlarm(id: Int, title: String, timestamp: Long, prefix: String, soundUri: String?, showOnScreen: Boolean) {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
 
@@ -319,7 +310,6 @@ class MainActivity : FlutterActivity() {
                 )
             }
         } else {
-            // showOnScreen == false: يروح لـ AlarmReceiver (بدون فتح التطبيق)
             val receiverIntent = Intent(this, AlarmReceiver::class.java).apply {
                 putExtra("title", title)
                 putExtra("prefix", prefix)
@@ -338,19 +328,12 @@ class MainActivity : FlutterActivity() {
 
     private fun cancelAlarm(id: Int) {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-        // إلغاء النوعين (Activity و Broadcast) لضمان الإلغاء
         val activityIntent = Intent(this, MainActivity::class.java)
-        val activityPI = PendingIntent.getActivity(
-            this, id, activityIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val activityPI = PendingIntent.getActivity(this, id, activityIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         alarmManager.cancel(activityPI)
 
         val receiverIntent = Intent(this, AlarmReceiver::class.java)
-        val receiverPI = PendingIntent.getBroadcast(
-            this, id, receiverIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val receiverPI = PendingIntent.getBroadcast(this, id, receiverIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         alarmManager.cancel(receiverPI)
     }
 
