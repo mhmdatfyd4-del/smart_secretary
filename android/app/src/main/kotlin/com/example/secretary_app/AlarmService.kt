@@ -134,7 +134,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             putExtra(EXTRA_INTERVAL, intervalSeconds)
         }
         val pendingIntent = PendingIntent.getBroadcast(
-            this, currentTitle.hashCode + 5000, intent,
+            this, currentTitle.hashCode() + 5000, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val alarmClockInfo = AlarmManager.AlarmClockInfo(snoozeTime, pendingIntent)
