@@ -12,13 +12,15 @@ class AlarmReceiver : BroadcastReceiver() {
         val prefix = intent.getStringExtra("prefix") ?: AlarmService.DEFAULT_PREFIX
         val soundUri = intent.getStringExtra("soundUri")
         val showOnScreen = intent.getBooleanExtra("showOnScreen", true)
+        val interval = intent.getIntExtra("interval", 0)
 
         val serviceIntent = Intent(context, AlarmService::class.java).apply {
-            action = "com.example.secretary_app.START_ALARM"
+            action = AlarmService.ACTION_START
             putExtra(AlarmService.EXTRA_TITLE, title)
             putExtra(AlarmService.EXTRA_PREFIX, prefix)
             putExtra(AlarmService.EXTRA_SOUND_URI, soundUri)
             putExtra(AlarmService.EXTRA_SHOW_ON_SCREEN, showOnScreen)
+            putExtra(AlarmService.EXTRA_INTERVAL, interval)
         }
 
         try {
@@ -28,9 +30,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 context.startService(serviceIntent)
             }
         } catch (e: Exception) {
-            try {
-                context.startService(serviceIntent)
-            } catch (_: Exception) {}
+            try { context.startService(serviceIntent) } catch (_: Exception) {}
         }
     }
 }
