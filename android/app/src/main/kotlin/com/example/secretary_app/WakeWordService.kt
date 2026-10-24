@@ -1,6 +1,10 @@
 package com.example.secretary_app
 
-import android.app.*
+import android.app.AlarmManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -46,9 +50,9 @@ class WakeWordService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        
+
         val notification = NotificationCompat.Builder(this, "WakeWordChannel")
-            .setContentTitle("سكرتيري") 
+            .setContentTitle("سكرتيري")
             .setContentText("بيستنى تنادي عليه...")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_MIN)
@@ -89,12 +93,22 @@ class WakeWordService : Service() {
             if (wakeLock?.isHeld == false) wakeLock?.acquire(10 * 60 * 1000L)
             startListening()
         }
-        return START_STICKY
+        
+        // لو الوضع مش "دائماً"، خلي النظام ميعملش إعادة تشغيل للخدمة لو اتقتلت
+        return if (listenMode == "always") START_STICKY else START_NOT_STICKY
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        if (listenMode == "always") {
+        
+        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val mode = prefs.getString("flutter.wake_word_mode", "off") ?: "off"
+        
+        if (mode != "always") {
+            // الوضع "مفتوح" أو "خلفية": أوقف الخدمة نهائياً لما التطبيق يتقفل
+            stopSelf()
+        } else {
+            // الوضع "دائماً": أعد تشغيل الخدمة
             val restartIntent = Intent(applicationContext, WakeWordService::class.java)
             restartIntent.setPackage(packageName)
             val pendingIntent = PendingIntent.getService(
@@ -127,22 +141,22 @@ class WakeWordService : Service() {
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {}
-                
-                override fun onError(error: Int) { 
+
+                override fun onError(error: Int) {
                     forceUnmute()
                     if (!isPaused && listenMode != "off") {
                         handler.postDelayed({ startListening() }, 1000)
                     }
                 }
-                
-                override fun onResults(results: Bundle?) { 
+
+                override fun onResults(results: Bundle?) {
                     forceUnmute()
                     processResults(results)
                     if (!isPaused && listenMode != "off") {
                         handler.postDelayed({ startListening() }, 500)
                     }
                 }
-                
+
                 override fun onPartialResults(partialResults: Bundle?) { processResults(partialResults) }
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
@@ -155,7 +169,7 @@ class WakeWordService : Service() {
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         if (prefs.getBoolean("flutter.mute_beep", true)) {
             setSystemSoundMute(true)
-            scheduleUnmute(3500) 
+            scheduleUnmute(3500)
         }
         speechRecognizer?.cancel()
         speechRecognizer?.startListening(intent)
@@ -187,7 +201,6 @@ class WakeWordService : Service() {
                     AudioManager.STREAM_SYSTEM,
                     AudioManager.STREAM_NOTIFICATION,
                     AudioManager.STREAM_DTMF
-                    // ❌ شيلنا STREAM_MUSIC عشان صوت السكرتيرة ميتقطعش
                 )
                 for (stream in streams) {
                     try {
@@ -219,22 +232,23 @@ class WakeWordService : Service() {
             val customNorm = normalizeArabic(wakeWord)
             val secTitleNorm = normalizeArabic("سكرتير")
             val secTitleAltNorm = normalizeArabic("سكرتيره")
-            
-            val isNameMatch = (nameNorm.isNotEmpty() && text.contains(nameNorm)) || text.contains(secTitleNorm) || text.contains(secTitleAltNorm)
+
+            val isNameMatch = (nameNorm.isNotEmpty() && text.contains(nameNorm)) ||
+                    text.contains(secTitleNorm) || text.contains(secTitleAltNorm)
             val isCustomMatch = customNorm.isNotEmpty() && text.contains(customNorm)
-            
+
             var isTriggered = false
             when (wakeWordTrigger) {
                 "name_only" -> isTriggered = isNameMatch
                 "custom_only" -> isTriggered = isCustomMatch
                 else -> isTriggered = isNameMatch || isCustomMatch
             }
-            
+
             if (isTriggered) {
                 isPaused = true
                 stopListening()
                 forceUnmute()
-                
+
                 val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     putExtra("WAKE_WORD_DETECTED", true)
@@ -274,7 +288,10 @@ class WakeWordService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val serviceChannel = NotificationChannel("WakeWordChannel", "Wake Word Service", NotificationManager.IMPORTANCE_MIN).apply {
+            val serviceChannel = NotificationChannel(
+                "WakeWordChannel", "Wake Word Service",
+                NotificationManager.IMPORTANCE_MIN
+            ).apply {
                 setSound(null, null)
                 enableVibration(false)
                 setShowBadge(false)
