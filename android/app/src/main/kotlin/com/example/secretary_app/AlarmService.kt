@@ -1,6 +1,5 @@
 package com.example.secretary_app
 
-import android.app.ActivityOptions
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,6 +7,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.PixelFormat
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
@@ -20,6 +21,8 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import android.view.View
+import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import java.util.Locale
 
@@ -67,7 +70,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
 
         val notification = buildNotification(title)
 
-        // 1. ابدأ foreground فوراً (لتجنب ANR)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(
@@ -84,7 +86,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
 
         if (wakeLock?.isHeld == false) wakeLock?.acquire(60 * 1000L)
 
-        // 2. تشغيل الصوت
         val hasCustomSound = !customSoundUri.isNullOrEmpty() &&
                 customSoundUri != "default" && customSoundUri != "null"
         if (hasCustomSound) {
@@ -93,36 +94,42 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             speakTts(prefix, title)
         }
 
-        // 3. محاولة فتح التطبيق (فقط لو مش متفتح بالفعل)
         if (showOnScreen) {
-            launchAppWithPermissionCheck()
+            launchAppWithOverlayHack()
         }
 
         return START_NOT_STICKY
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // 🔑 محاولة فتح التطبيق (احتياطي فقط، لأن MainActivity عادة بتفتح
-    //    مباشرة من PendingIntent.getActivity في scheduleAlarm)
+    // 🔑 الحيلة النهائية لفتح التطبيق (النافذة الشفافة)
     // ═══════════════════════════════════════════════════════════════
-    private fun launchAppWithPermissionCheck() {
-        val canDrawOverlay = Settings.canDrawOverlays(this)
-        val canFSI = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            (getSystemService(NotificationManager::class.java)).canUseFullScreenIntent()
-        } else true
+    private fun launchAppWithOverlayHack() {
+        if (!Settings.canDrawOverlays(this)) {
+            Log.e(TAG, "SYSTEM_ALERT_WINDOW not granted. Cannot launch.")
+            return
+        }
 
-        Log.d(TAG, "launchAppWithPermissionCheck: canDrawOverlays=$canDrawOverlay, canUseFullScreenIntent=$canFSI")
+        val windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        val view = View(this).apply { setBackgroundColor(Color.TRANSPARENT) }
 
-        val handler = Handler(Looper.getMainLooper())
+        val params = WindowManager.LayoutParams(
+            1, 1,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            else
+                WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        )
 
-        // محاولة أولى فورية + محاولتان احتياطيتان فقط (بدل 5)
-        tryLaunchActivity()
-        handler.postDelayed({ tryLaunchActivity() }, 1500)
-        handler.postDelayed({ tryLaunchActivity() }, 3000)
-    }
-
-    private fun tryLaunchActivity() {
         try {
+            // 1. عرض النافذة الشفافة (عشان النظام يفتكرنا في المقدمة)
+            windowManager.addView(view, params)
+
+            // 2. فتح التطبيق فوراً
             val launchIntent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_ACTIVITY_SINGLE_TOP or
@@ -133,20 +140,21 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
                 putExtra("alarm_prefix", currentPrefix)
                 putExtra("alarm_sound", customSoundUri)
             }
+            startActivity(launchIntent)
+            Log.d(TAG, "Activity launched via overlay hack")
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val options = ActivityOptions.makeBasic().apply {
-                    setPendingIntentBackgroundActivityStartMode(
-                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                    )
+            // 3. إزالة النافذة بعد ثانية (مهم جداً عشان متأثرش على الشاشة)
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    windowManager.removeView(view)
+                    Log.d(TAG, "Overlay removed")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to remove overlay", e)
                 }
-                startActivity(launchIntent, options.toBundle())
-            } else {
-                startActivity(launchIntent)
-            }
-            Log.d(TAG, "startActivity succeeded")
+            }, 1000)
+
         } catch (e: Exception) {
-            Log.e(TAG, "startActivity failed: ${e.javaClass.simpleName}: ${e.message}", e)
+            Log.e(TAG, "Overlay hack failed: ${e.message}", e)
         }
     }
 
@@ -156,14 +164,9 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             val uri: Uri = if (uriStr.startsWith("raw://")) {
                 val resName = uriStr.replace("raw://", "")
                 val resId = resources.getIdentifier(resName, "raw", packageName)
-                if (resId != 0) {
-                    Uri.parse("android.resource://$packageName/$resId")
-                } else {
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                }
-            } else {
-                Uri.parse(uriStr)
-            }
+                if (resId != 0) Uri.parse("android.resource://$packageName/$resId")
+                else RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            } else Uri.parse(uriStr)
 
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
@@ -177,14 +180,12 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
                 start()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "playCustomSound failed", e)
             speakTts(DEFAULT_PREFIX, "تنبيه هام")
         }
     }
 
     private fun speakTts(prefix: String, text: String) {
         if (isTtsReady) {
-            val toSay = "$prefix$text"
             val audioAttributes = AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ALARM)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -194,7 +195,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             tts?.setLanguage(Locale("ar"))
             tts?.setSpeechRate(1.0f)
             tts?.setPitch(1.0f)
-            tts?.speak(toSay, TextToSpeech.QUEUE_FLUSH, null, "alarm")
+            tts?.speak("$prefix$text", TextToSpeech.QUEUE_FLUSH, null, "alarm")
         } else {
             pendingText = "$prefix|$text"
         }
@@ -225,23 +226,10 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             putExtra("alarm_sound", customSoundUri)
         }
 
-        val pendingIntent: PendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            val opts = ActivityOptions.makeBasic().apply {
-                setPendingIntentBackgroundActivityStartMode(
-                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                )
-            }
-            PendingIntent.getActivity(
-                this, 0, launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                opts.toBundle()
-            )
-        } else {
-            PendingIntent.getActivity(
-                this, 0, launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("تنبيه هام!")
