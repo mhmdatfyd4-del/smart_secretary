@@ -102,19 +102,27 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // 🔑 الحيلة النهائية لفتح التطبيق (النافذة الشفافة)
+    // 🔑 التعديل هنا: زيادة وقت التأخير + إظهار توست للتشخيص
     // ═══════════════════════════════════════════════════════════════
     private fun launchAppWithOverlayHack() {
         if (!Settings.canDrawOverlays(this)) {
             Log.e(TAG, "SYSTEM_ALERT_WINDOW not granted. Cannot launch.")
+            Handler(Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(this, "⚠️ إذن (العرض فوق التطبيقات) غير مفعل في إعدادات التابلت!", android.widget.Toast.LENGTH_LONG).show()
+            }
             return
+        }
+
+        Handler(Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(this, "🔔 محاولة فتح التطبيق...", android.widget.Toast.LENGTH_SHORT).show()
         }
 
         val windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val view = View(this).apply { setBackgroundColor(Color.TRANSPARENT) }
 
+        // كبرنا الحجم لـ 10x10 بكسل بدل 1x1 عشان النظام يتعرف عليه فوراً
         val params = WindowManager.LayoutParams(
-            1, 1,
+            10, 10,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             else
@@ -126,35 +134,47 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         )
 
         try {
-            // 1. عرض النافذة الشفافة (عشان النظام يفتكرنا في المقدمة)
+            // 1. عرض النافذة الشفافة
             windowManager.addView(view, params)
-
-            // 2. فتح التطبيق فوراً
-            val launchIntent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
-                putExtra("from_alarm", true)
-                putExtra("alarm_title", currentTitle)
-                putExtra("alarm_prefix", currentPrefix)
-                putExtra("alarm_sound", customSoundUri)
-            }
-            startActivity(launchIntent)
-            Log.d(TAG, "Activity launched via overlay hack")
-
-            // 3. إزالة النافذة بعد ثانية (مهم جداً عشان متأثرش على الشاشة)
+            
+            // 2. استنى 300 مللي ثانية (النظام محتاج الوقت ده عشان يتعرف إن فيه Overlay)
             Handler(Looper.getMainLooper()).postDelayed({
-                try {
-                    windowManager.removeView(view)
-                    Log.d(TAG, "Overlay removed")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to remove overlay", e)
+                val launchIntent = Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
+                    putExtra("from_alarm", true)
+                    putExtra("alarm_title", currentTitle)
+                    putExtra("alarm_prefix", currentPrefix)
+                    putExtra("alarm_sound", customSoundUri)
                 }
-            }, 1000)
+                try {
+                    startActivity(launchIntent)
+                    Log.d(TAG, "Activity launched via overlay hack")
+                } catch (e: Exception) {
+                    Log.e(TAG, "startActivity failed: ${e.message}", e)
+                    Handler(Looper.getMainLooper()).post {
+                        android.widget.Toast.makeText(this@AlarmService, "❌ فشل فتح الشاشة: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+
+                // 3. إزالة النافذة
+                Handler(Looper.getMainLooper()).postDelayed({
+                    try {
+                        windowManager.removeView(view)
+                        Log.d(TAG, "Overlay removed")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to remove overlay", e)
+                    }
+                }, 500)
+            }, 300)
 
         } catch (e: Exception) {
             Log.e(TAG, "Overlay hack failed: ${e.message}", e)
+            Handler(Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(this@AlarmService, "❌ فشل إنشاء النافذة: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
         }
     }
 
