@@ -1,6 +1,5 @@
 package com.example.secretary_app
 
-import android.app.ActivityOptions
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
@@ -61,44 +60,16 @@ class MainActivity : FlutterActivity() {
         if (intent?.getBooleanExtra("WAKE_WORD_DETECTED", false) == true) {
             pendingWakeWord = true
         }
-
-        handleAlarmIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-
         if (intent.getBooleanExtra("WAKE_WORD_DETECTED", false)) {
             flutterEngine?.dartExecutor?.binaryMessenger?.let {
                 MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onWakeWordDetected", null)
             }
         }
-
-        handleAlarmIntent(intent)
-    }
-
-    private fun handleAlarmIntent(intent: Intent?) {
-        if (intent?.getBooleanExtra("from_alarm", false) != true) return
-
-        val title = intent.getStringExtra("alarm_title") ?: ""
-        val prefix = intent.getStringExtra("alarm_prefix") ?: AlarmService.DEFAULT_PREFIX
-        val soundUri = intent.getStringExtra("alarm_sound")
-
-        val serviceIntent = Intent(this, AlarmService::class.java).apply {
-            action = AlarmService.ACTION_START
-            putExtra(AlarmService.EXTRA_TITLE, title)
-            putExtra(AlarmService.EXTRA_PREFIX, prefix)
-            putExtra(AlarmService.EXTRA_SOUND_URI, soundUri)
-            putExtra(AlarmService.EXTRA_SHOW_ON_SCREEN, false) // التطبيق مفتوح خلاص، متحاولش تفتحه تاني
-        }
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ContextCompat.startForegroundService(this, serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
-        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {
@@ -132,14 +103,7 @@ class MainActivity : FlutterActivity() {
                             startActivity(intent)
                         }
                         result.success(true)
-                    } catch (e: Exception) {
-                        try {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                            intent.data = Uri.parse("package:$packageName")
-                            startActivity(intent)
-                            result.success(true)
-                        } catch (e2: Exception) { result.success(false) }
-                    }
+                    } catch (e: Exception) { result.success(false) }
                 }
                 "isFullScreenIntentAllowed" -> {
                     try {
@@ -162,7 +126,8 @@ class MainActivity : FlutterActivity() {
                     val prefix = call.argument<String>("prefix") ?: AlarmService.DEFAULT_PREFIX
                     val soundUri = call.argument<String>("soundUri")
                     val showOnScreen = call.argument<Boolean>("showOnScreen") ?: true
-                    scheduleAlarm(id, title, timestamp, prefix, soundUri, showOnScreen)
+                    val interval = call.argument<Int>("interval") ?: 0 
+                    scheduleAlarm(id, title, timestamp, prefix, soundUri, showOnScreen, interval)
                     result.success(true)
                 }
                 "cancelAlarm" -> {
@@ -199,20 +164,6 @@ class MainActivity : FlutterActivity() {
                                 val duration = mp?.duration ?: 5000
                                 mp?.release()
                                 sounds.add(mapOf("title" to displayName, "uri" to "raw://$fileName", "duration" to duration.toString()))
-                            }
-                        } catch (_: Exception) {}
-                    }
-                    val types = listOf(RingtoneManager.TYPE_ALARM to "منبه", RingtoneManager.TYPE_NOTIFICATION to "إشعار", RingtoneManager.TYPE_RINGTONE to "رنين")
-                    for ((type, prefix) in types) {
-                        try {
-                            val manager = RingtoneManager(this)
-                            manager.setType(type)
-                            val cursor = manager.cursor
-                            while (cursor.moveToNext()) {
-                                val title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX)
-                                val uri = cursor.getString(RingtoneManager.URI_COLUMN_INDEX)
-                                val id = cursor.getString(RingtoneManager.ID_COLUMN_INDEX)
-                                sounds.add(mapOf("title" to "$prefix: $title", "uri" to "$uri/$id", "duration" to "0"))
                             }
                         } catch (_: Exception) {}
                     }
@@ -279,59 +230,25 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun scheduleAlarm(id: Int, title: String, timestamp: Long, prefix: String, soundUri: String?, showOnScreen: Boolean) {
+    private fun scheduleAlarm(id: Int, title: String, timestamp: Long, prefix: String, soundUri: String?, showOnScreen: Boolean, interval: Int) {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-
-        val pendingIntent: PendingIntent = if (showOnScreen) {
-            val activityIntent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
-                putExtra("from_alarm", true)
-                putExtra("alarm_title", title)
-                putExtra("alarm_prefix", prefix)
-                putExtra("alarm_sound", soundUri)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val opts = ActivityOptions.makeBasic().apply {
-                    setPendingIntentBackgroundActivityStartMode(
-                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                    )
-                }
-                PendingIntent.getActivity(
-                    this, id, activityIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                    opts.toBundle()
-                )
-            } else {
-                PendingIntent.getActivity(
-                    this, id, activityIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-            }
-        } else {
-            val receiverIntent = Intent(this, AlarmReceiver::class.java).apply {
-                putExtra("title", title)
-                putExtra("prefix", prefix)
-                putExtra("soundUri", soundUri)
-                putExtra("showOnScreen", false)
-            }
-            PendingIntent.getBroadcast(
-                this, id, receiverIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+        val receiverIntent = Intent(this, AlarmReceiver::class.java).apply {
+            putExtra("title", title)
+            putExtra("prefix", prefix)
+            putExtra("soundUri", soundUri)
+            putExtra("showOnScreen", showOnScreen)
+            putExtra("interval", interval)
         }
-
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, id, receiverIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val alarmClockInfo = AlarmManager.AlarmClockInfo(timestamp, pendingIntent)
         alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
     }
 
     private fun cancelAlarm(id: Int) {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-        val activityIntent = Intent(this, MainActivity::class.java)
-        val activityPI = PendingIntent.getActivity(this, id, activityIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        alarmManager.cancel(activityPI)
-
         val receiverIntent = Intent(this, AlarmReceiver::class.java)
         val receiverPI = PendingIntent.getBroadcast(this, id, receiverIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         alarmManager.cancel(receiverPI)
