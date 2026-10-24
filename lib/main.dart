@@ -2583,7 +2583,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             .replaceAll('{user}', _userTitle)
             .replaceAll('{sec}', _secWord)
             .replaceAll('{name}', _secretaryName);
-        if (_settings.isKidsMode) greeting = "أهلاً يا بطل! أنا صديقك $secWord، هنساعدك نلعب ونتعلم مع بعض.";
+        if (_settings.isKidsMode) greeting = "أهلاً يا بطل! أنا صديقك $_secWord، هنساعدك نلعب ونتعلم مع بعض.";
         await _tts.speak(greeting);
       }
     } catch (_) {}
@@ -5340,3 +5340,1022 @@ void _openDiaryPage(DateTime date) {
   )));
 }
   
+  @override
+  Widget build(BuildContext context) {
+    final List<Widget> screens = [
+      _buildCalendarTab(),
+      _buildDiariesTab(),
+      _buildPrayerTimesTab(),
+      _buildSpecialEventsTab(),
+      _buildRecorderTab(),
+    ];
+
+    Widget? fab;
+    if (_isRecording) {
+      fab = FloatingActionButton.extended(
+        onPressed: _stopRecording,
+        backgroundColor: Colors.red,
+        icon: const Icon(Icons.stop, color: Colors.white),
+        label: Text('إيقاف التسجيل (${_formatDuration(_recordingDuration)})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      );
+    } else if (_currentIndex == 0 && _calendarSubView == 'calendar') {
+      fab = FloatingActionButton.extended(
+        onPressed: _addNewTaskDialog,
+        backgroundColor: const Color(0xFF1B2A4A),
+        icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
+        label: const Text('إضافة موعد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      );
+    } else if (_currentIndex == 3) {
+      fab = FloatingActionButton.extended(
+        onPressed: _addSpecialEventDialog,
+        backgroundColor: const Color(0xFF1B2A4A),
+        icon: const Icon(Icons.card_giftcard, color: Color(0xFFC5A059)),
+        label: const Text('إضافة مناسبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1B2A4A),
+        foregroundColor: Colors.white,
+        elevation: 3,
+        title: Row(children: [
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: const Color(0xFFC5A059),
+            child: ClipOval(
+              child: Image.asset(
+                _getSecretaryImage(_secretaryName, _settings.voiceGender),
+                width: 44, height: 44,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                errorBuilder: (c, e, s) => const Icon(Icons.face_3, color: Colors.white),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('$_secTitle: $_secretaryName', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('هز الهاتف للتحدث', style: TextStyle(fontSize: 11, color: Colors.white70)),
+          ]),
+        ]),
+        actions: [
+          IconButton(
+            icon: Icon(_isListening ? Icons.mic : Icons.mic_none, color: _isListening ? Colors.redAccent : const Color(0xFFC5A059)),
+            onPressed: _isRecording ? null : _listenVoiceCommand,
+          ),
+          IconButton(icon: const Icon(Icons.settings, color: Color(0xFFC5A059)), onPressed: _openSettingsScreen),
+        ],
+      ),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        transitionBuilder: (Widget child, Animation<double> animation) {
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(begin: const Offset(0.05, 0), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+              child: child,
+            ),
+          );
+        },
+        child: KeyedSubtree(key: ValueKey<int>(_currentIndex), child: screens[_currentIndex]),
+      ),
+      floatingActionButton: fab,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        selectedItemColor: const Color(0xFF1B2A4A),
+        unselectedItemColor: Colors.grey,
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'التقويم'),
+          BottomNavigationBarItem(icon: Icon(Icons.book), label: 'يومياتي'),
+          BottomNavigationBarItem(icon: Icon(Icons.access_time_filled), label: 'الصلاة'),
+          BottomNavigationBarItem(icon: Icon(Icons.stars), label: 'المناسبات'),
+          BottomNavigationBarItem(icon: Icon(Icons.mic), label: 'المسجل'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCalendarTab() {
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _calendarSubView = 'calendar'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _calendarSubView == 'calendar' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.calendar_month, color: _calendarSubView == 'calendar' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
+                        const SizedBox(width: 8),
+                        Text('التقويم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _calendarSubView == 'calendar' ? Colors.white : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _calendarSubView = 'weekly'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _calendarSubView == 'weekly' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.view_week, color: _calendarSubView == 'weekly' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
+                        const SizedBox(width: 8),
+                        Text('الجدول الأسبوعي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _calendarSubView == 'weekly' ? Colors.white : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _calendarSubView == 'calendar' ? _buildCalendarAndTasksTab() : _buildWeeklyScheduleView(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWeeklyScheduleView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)], begin: Alignment.topRight, end: Alignment.bottomLeft),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('📆 الجدول الأسبوعي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                SizedBox(height: 5),
+                Text('اضغط على أي يوم لعرض مواعيده وإضافتها', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              ],
+            ),
+          ),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.3),
+            itemCount: _weekDays.length,
+            itemBuilder: (ctx, i) {
+              final day = _weekDays[i];
+              final dayTasks = _weeklySchedule.where((t) => t['day'] == day).toList();
+              return InkWell(
+                onTap: () => _openDayView(day),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(day, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF1B2A4A))),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: dayTasks.isEmpty ? Colors.grey.shade200 : const Color(0xFFC5A059),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            dayTasks.isEmpty ? 'فاضي' : '${dayTasks.length} ${dayTasks.length == 1 ? "موعد" : "مواعيد"}',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: dayTasks.isEmpty ? Colors.grey.shade700 : Colors.black),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openDayView(String day) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StatefulBuilder(
+          builder: (context, setStateInner) {
+            final dayTasks = _weeklySchedule.where((t) => t['day'] == day).toList();
+            _sortByTime(dayTasks);
+            return Scaffold(
+              appBar: AppBar(
+                title: Text('مواعيد يوم $day', style: const TextStyle(fontWeight: FontWeight.bold)),
+                backgroundColor: const Color(0xFF1B2A4A),
+                foregroundColor: Colors.white,
+              ),
+              body: dayTasks.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.event_busy, size: 80, color: Colors.grey.shade400),
+                          const SizedBox(height: 15),
+                          Text('مفيش مواعيد في يوم $day', style: const TextStyle(color: Colors.grey, fontSize: 15)),
+                          const SizedBox(height: 25),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                            icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
+                            label: const Text('إضافة موعد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            onPressed: () async {
+                              await _addWeeklyTaskDialog(day);
+                              setStateInner(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: dayTasks.length,
+                      itemBuilder: (ctx, i) {
+                        final task = dayTasks[i];
+                        final globalIndex = _weeklySchedule.indexOf(task);
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 5)),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
+                          ),
+                          child: ListTile(
+                            leading: const Icon(Icons.alarm, color: Color(0xFF1B2A4A)),
+                            title: Text(task['task'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            subtitle: Text('${task['time']} • ${task['repeatInterval']}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.blue),
+                                  onPressed: () async {
+                                    await _editWeeklyTaskDialog(globalIndex);
+                                    setStateInner(() {});
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  onPressed: () async {
+                                    _deleteWeeklyTask(globalIndex);
+                                    setStateInner(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+              floatingActionButton: dayTasks.isNotEmpty
+                  ? FloatingActionButton.extended(
+                      onPressed: () async {
+                        await _addWeeklyTaskDialog(day);
+                        setStateInner(() {});
+                      },
+                      backgroundColor: const Color(0xFF1B2A4A),
+                      icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
+                      label: const Text('إضافة موعد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    )
+                  : null,
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCalendarAndTasksTab() {
+    String formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
+    String currentTime = DateFormat('hh:mm a', 'ar').format(DateTime.now());
+    var dayTasks = _tasks.where((t) => t['date'] == formattedDate).toList();
+    _sortByTime(dayTasks);
+    String userTitle = _userTitle;
+    return SingleChildScrollView(
+      child: Column(children: [
+        Container(
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)], begin: Alignment.topRight, end: Alignment.bottomLeft),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4))],
+          ),
+          child: Row(children: [
+            Container(
+              width: 70, height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFC5A059), width: 2),
+                image: DecorationImage(image: AssetImage(_getSecretaryImage(_secretaryName, _settings.voiceGender)), fit: BoxFit.cover, alignment: Alignment.topCenter),
+              ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('مرحباً بك $userTitle! 👋', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 4),
+                  Text('الوقت: $currentTime', style: const TextStyle(fontSize: 13, color: Color(0xFFC5A059), fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text('📳 هُز الهاتف أو نادِ باسم $_secTitle.', style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                ],
+              ),
+            ),
+          ]),
+        ),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8EE),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFC5A059), width: 2),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8)],
+          ),
+          child: CalendarDatePicker(
+            key: ValueKey(formattedDate),
+            initialDate: _selectedDate,
+            firstDate: DateTime(2024),
+            lastDate: DateTime(2030),
+            onDateChanged: (d) => setState(() => _selectedDate = d),
+          ),
+        ),
+        const SizedBox(height: 15),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('جدول أعمال اليوم:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+              Chip(label: Text('${dayTasks.length} مواعيد', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: const Color(0xFF1B2A4A)),
+            ],
+          ),
+        ),
+        dayTasks.isEmpty
+            ? Container(
+                padding: const EdgeInsets.all(30),
+                child: Column(children: [
+                  Icon(Icons.event_note, size: 50, color: Colors.grey.shade400),
+                  const SizedBox(height: 8),
+                  const Text('لا توجد مواعيد', style: TextStyle(color: Colors.grey, fontSize: 14))
+                ]))
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: dayTasks.length,
+                itemBuilder: (ctx, i) => Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 5)),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5)],
+                  ),
+                  child: ListTile(
+                    leading: const Icon(Icons.alarm, color: Color(0xFF1B2A4A)),
+                    title: Text(dayTasks[i]['task'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    subtitle: Text('${dayTasks[i]['time']} • ${dayTasks[i]['repeat'] ?? 'مرة واحدة'}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        dayTasks[i]['alarm'] == true ? const Icon(Icons.notifications_active, color: Colors.redAccent) : const Icon(Icons.notifications_off, color: Colors.grey),
+                        IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _editTaskDialog(_tasks.indexOf(dayTasks[i]))),
+                        IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => _deleteTask(_tasks.indexOf(dayTasks[i]))),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+        const SizedBox(height: 20),
+      ]),
+    );
+  }
+
+  Widget _buildDiariesTab() {
+    return SingleChildScrollView(
+      child: Column(children: [
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: const Color(0xFF1B2A4A), borderRadius: BorderRadius.circular(12)),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('📖 مفكرة اليوميات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+              SizedBox(height: 5),
+              Text('اختر أي يوم لفتح صفحة التدوين.', style: TextStyle(color: Colors.white70, fontSize: 13)),
+            ],
+          ),
+        ),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
+          ),
+          child: CalendarDatePicker(
+            initialDate: _diaryDate,
+            firstDate: DateTime(2024),
+            lastDate: DateTime(2030),
+            onDateChanged: (selectedDay) {
+              setState(() => _diaryDate = selectedDay);
+              _openDiaryPage(selectedDay);
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), minimumSize: const Size.fromHeight(48), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            icon: const Icon(Icons.edit_note, color: Color(0xFFC5A059)),
+            label: const Text('فتح يومية اليوم', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            onPressed: () => _openDiaryPage(_diaryDate),
+          ),
+        ),
+        const SizedBox(height: 20),
+      ]),
+    );
+  }
+
+  Widget _buildPrayerTimesTab() {
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _prayerSubView = 'times'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _prayerSubView == 'times' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.access_time_filled, color: _prayerSubView == 'times' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
+                        const SizedBox(width: 8),
+                        Text('المواقيت', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _prayerSubView == 'times' ? Colors.white : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _prayerSubView = 'adhkar'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _prayerSubView == 'adhkar' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.menu_book, color: _prayerSubView == 'adhkar' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
+                        const SizedBox(width: 8),
+                        Text('الأذكار', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _prayerSubView == 'adhkar' ? Colors.white : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _prayerSubView = 'tasbeeh'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _prayerSubView == 'tasbeeh' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.touch_app, color: _prayerSubView == 'tasbeeh' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
+                        const SizedBox(width: 8),
+                        Text('التسبيح', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _prayerSubView == 'tasbeeh' ? Colors.white : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _prayerSubView == 'times'
+              ? _buildPrayerTimesList()
+              : _prayerSubView == 'adhkar'
+                  ? _buildAdhkarList()
+                  : _buildTasbeehCounter(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPrayerTimesList() {
+    return FutureBuilder<Map<String, String>>(
+      future: _calculatePrayerTimes(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final times = snapshot.data!;
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _prayerCard('الفجر', _formatTimeForDisplay(times['fajr']!), Icons.wb_twilight),
+            _prayerCard('الشروق', _formatTimeForDisplay(times['sunrise']!), Icons.wb_sunny_outlined),
+            _prayerCard('الظهر', _formatTimeForDisplay(times['dhuhr']!), Icons.wb_sunny),
+            _prayerCard('العصر', _formatTimeForDisplay(times['asr']!), Icons.filter_drama),
+            _prayerCard('المغرب', _formatTimeForDisplay(times['maghrib']!), Icons.nights_stay_outlined),
+            _prayerCard('العشاء', _formatTimeForDisplay(times['isha']!), Icons.nights_stay),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTasbeehCounter() {
+    return Center(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'أفضل الذكر:\nسبحان الله وبحمده، سبحان الله العظيم\nسبحان الله وبحمده عدد خلقه ورضا نفسه وزنة عرشه ومداد كلماته',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1B2A4A)),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 30),
+            Text('$_tasbeehCount', style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: Color(0xFFC5A059))),
+            const SizedBox(height: 30),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), minimumSize: const Size(200, 60)),
+              icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
+              label: const Text('تسبيح', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              onPressed: () async {
+                setState(() => _tasbeehCount++);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setInt('tasbeeh_count', _tasbeehCount);
+              },
+            ),
+            const SizedBox(height: 15),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, minimumSize: const Size(200, 60)),
+              icon: const Icon(Icons.refresh, color: Colors.white),
+              label: const Text('تصفير العداد', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              onPressed: () async {
+                setState(() => _tasbeehCount = 0);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setInt('tasbeeh_count', 0);
+              },
+            ),
+            const SizedBox(height: 15),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isTasbeehMode ? Colors.green : const Color(0xFF1B2A4A),
+                minimumSize: const Size(200, 60),
+              ),
+              icon: Icon(_isTasbeehMode ? Icons.mic : Icons.mic_none, color: Colors.white),
+              label: Text(
+                _isTasbeehMode ? 'إيقاف وضع التسبيح' : 'تشغيل وضع التسبيح الصوتي',
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              onPressed: () {
+                setState(() => _isTasbeehMode = !_isTasbeehMode);
+                if (_isTasbeehMode) {
+                  _listenVoiceCommand();
+                } else {
+                  _speech.stop();
+                }
+              },
+            ),
+            if (_isTasbeehMode) ...[
+              const SizedBox(height: 20),
+              const Text('🎤 وضع التسبيح الصوتي نشط...', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+            ]
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdhkarList() {
+    final morningAdhkar = """
+1. أصْبَحْنَا وَأَصْبَحَ المُلْكُ لِلَّهِ، والحَمْدُ لِلَّهِ، لا إلهَ إِلاَّ اللَّهُ وَحْدَهُ لا شَرِيكَ لَهُ، لَهُ المُلْكُ وَلَهُ الحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ.
+2. اللَّهُمَّ بِكَ أَصْبَحْنَا، وَبِكَ أَمْسَيْنَا، وَبِكَ نَحْيَا، وَبِكَ نَمُوتُ، وَإِلَيْكَ النُّشُورُ.
+3. اللَّهُمَّ أَنْتَ رَبِّي لا إلهَ إِلاَّ أَنْتَ، خَلَقْتَنِي وَأَنَا عَبْدُكَ، وَأَنَا عَلَى عَهْدِكَ وَوَعْدِكَ مَا اسْتَطَعْتُ، أَعُوذُ بِكَ مِنْ شَرِّ مَا صَنَعْتُ، أَبُوءُ لَكَ بِنِعْمَتِكَ عَلَيَّ، وَأَبُوءُ بِذَنْبِي فَاغْفِرْ لِي فَإِنَّهُ لا يَغْفِرُ الذُّنُوبَ إِلاَّ أَنْتَ.
+4. رَضِيتُ باللَّهِ رَبًّا، وَبِالإِسْلامِ دِينًا، وَبِمُحَمَّدٍ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ نَبِيًّا.
+5. سُبْحَانَ اللَّهِ وَبِحَمْدِهِ (مائة مرة).
+""";
+    final eveningAdhkar = """
+1. أَمْسَيْنَا وَأَمْسَى المُلْكُ لِلَّهِ، والحَمْدُ لِلَّهِ، لا إلهَ إِلاَّ اللَّهُ وَحْدَهُ لا شَرِيكَ لَهُ، لَهُ المُلْكُ وَلَهُ الحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ.
+2. اللَّهُمَّ بِكَ أَمْسَيْنَا، وَبِكَ أَصْبَحْنَا، وَبِكَ نَحْيَا، وَبِكَ نَمُوتُ، وَإِلَيْكَ المَصِيرُ.
+3. اللَّهُمَّ أَنْتَ رَبِّي لا إلهَ إِلاَّ أَنْتَ، خَلَقْتَنِي وَأَنَا عَبْدُكَ، وَأَنَا عَلَى عَهْدِكَ وَوَعْدِكَ مَا اسْتَطَعْتُ، أَعُوذُ بِكَ مِنْ شَرِّ مَا صَنَعْتُ، أَبُوءُ لَكَ بِنِعْمَتِكَ عَلَيَّ، وَأَبُوءُ بِذَنْبِي فَاغْفِرْ لِي فَإِنَّهُ لا يَغْفِرُ الذُّنُوبَ إِلاَّ أَنْتَ.
+4. أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّاتِ مِنْ شَرِّ مَا خَلَقَ (ثلاث مرات).
+5. بِسْمِ اللَّهِ الَّذِي لا يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الأَرْضِ وَلا فِي السَّمَاءِ وَهُوَ السَّمِيعُ العَلِيمُ (ثلاث مرات).
+""";
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ListTile(
+            leading: const Icon(Icons.wb_sunny, color: Color(0xFFC5A059), size: 32),
+            title: const Text('أذكار الصباح', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            subtitle: const Text('اضغط لقراءة الأذكار كاملة'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () {
+              showDialog(context: context, builder: (ctx) => AlertDialog(
+                title: const Text('أذكار الصباح'),
+                content: SingleChildScrollView(child: Text(morningAdhkar, style: const TextStyle(height: 1.8, fontSize: 16))),
+                actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق'))],
+              ));
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        Card(
+          elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ListTile(
+            leading: const Icon(Icons.nights_stay, color: Color(0xFFC5A059), size: 32),
+            title: const Text('أذكار المساء', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            subtitle: const Text('اضغط لقراءة الأذكار كاملة'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () {
+              showDialog(context: context, builder: (ctx) => AlertDialog(
+                title: const Text('أذكار المساء'),
+                content: SingleChildScrollView(child: Text(eveningAdhkar, style: const TextStyle(height: 1.8, fontSize: 16))),
+                actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق'))],
+              ));
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _prayerCard(String title, String time, IconData icon) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
+      ),
+      child: ListTile(
+        leading: Icon(icon, color: const Color(0xFF1B2A4A)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
+        trailing: Text(time, style: const TextStyle(color: Color(0xFF1B2A4A), fontSize: 16, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _buildSpecialEventsTab() {
+    final sortedEvents = List<Map<String, dynamic>>.from(_specialEvents);
+    _sortByTime(sortedEvents);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('المناسبات والتنبيهات:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+        const SizedBox(height: 10),
+        InkWell(
+          onTap: _addSpecialEventDialog,
+          child: Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: const ListTile(
+              leading: Icon(Icons.cake, color: Colors.pink, size: 32),
+              title: Text('أعياد الميلاد (اضغط للإضافة)', style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('تنبيهات مسبقة'),
+              trailing: Icon(Icons.add_circle, color: Color(0xFF1B2A4A)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text('قائمة المناسبات:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+        const SizedBox(height: 10),
+        if (sortedEvents.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(30),
+            child: Column(children: [
+              Icon(Icons.stars, size: 50, color: Colors.grey.shade400),
+              const SizedBox(height: 8),
+              const Text('لا توجد مناسبات', style: TextStyle(color: Colors.grey, fontSize: 14))
+            ]),
+          )
+        else
+          ...sortedEvents.asMap().entries.map((entry) {
+            final i = _specialEvents.indexOf(entry.value);
+            final e = entry.value;
+            final eventDate = DateTime.tryParse(e['eventDate'] ?? '') ?? DateTime.now();
+            final now = DateTime.now();
+            final thisYear = DateTime(now.year, eventDate.month, eventDate.day);
+            final nextYear = DateTime(now.year + 1, eventDate.month, eventDate.day);
+            final nextOccurrence = thisYear.isAfter(now) ? thisYear : nextYear;
+            final remaining = _formatRemaining(nextOccurrence);
+            final reminderTime = '${(e['reminderHour'] ?? 18).toString().padLeft(2, '0')}:${(e['reminderMinute'] ?? 0).toString().padLeft(2, '0')}';
+            final repeatInterval = e['repeatInterval'] ?? 'مرة واحدة';
+            return Container(
+              margin: const EdgeInsets.symmetric(vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: ListTile(
+                leading: const Icon(Icons.stars, color: Color(0xFFC5A059), size: 28),
+                title: Text(e['title'].toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('${e['detail']} • ${DateFormat('yyyy/MM/dd').format(eventDate)}\nالتذكير: ${e['advanceReminder']} الساعة $reminderTime • $remaining\nالتنبيه المستمر: $repeatInterval'),
+                isThreeLine: true,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _editSpecialEventDialog(i)),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      onPressed: () {
+                        _cancelNativeAlarm('مناسبة: ${e['title']}');
+                        setState(() => _specialEvents.removeAt(i));
+                        _saveData();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _buildRecorderTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF0F172A)]),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
+            ),
+            child: Column(
+              children: [
+                Icon(_isRecording ? Icons.fiber_manual_record : Icons.mic, color: _isRecording ? Colors.redAccent : const Color(0xFFC5A059), size: 40),
+                const SizedBox(height: 10),
+                Text(_isRecording ? 'جاري التسجيل...' : 'اضغط للتسجيل', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text(_formatDuration(_recordingDuration), style: const TextStyle(color: Color(0xFFC5A059), fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 15),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isRecording ? Colors.red : const Color(0xFFC5A059),
+                    minimumSize: const Size.fromHeight(50),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _isRecording ? _stopRecording : _startRecording,
+                  icon: Icon(_isRecording ? Icons.stop : Icons.fiber_manual_record, color: _isRecording ? Colors.white : Colors.black),
+                  label: Text(_isRecording ? 'إيقاف التسجيل' : 'بدء التسجيل', style: TextStyle(color: _isRecording ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Align(
+            alignment: Alignment.centerRight,
+            child: Text('التسجيلات المحفوظة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: _recordings.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.mic_none, size: 60, color: Colors.grey.shade400),
+                        const SizedBox(height: 10),
+                        const Text('لا توجد تسجيلات', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _recordings.length,
+                    itemBuilder: (ctx, i) {
+                      final rec = _recordings[i];
+                      final path = rec['path'].toString();
+                      final isPlaying = _currentlyPlayingPath == path;
+                      String dateText = '';
+                      try {
+                        dateText = DateFormat('yyyy/MM/dd - HH:mm').format(DateTime.parse(rec['createdAt'].toString()));
+                      } catch (_) {}
+                      return Container(
+                        margin: const EdgeInsets.symmetric(vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isPlaying ? const Color(0xFFC5A059) : Colors.grey.shade300, width: isPlaying ? 2 : 1),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
+                        ),
+                        child: Column(
+                          children: [
+                            ListTile(
+                              leading: IconButton(
+                                icon: Icon(isPlaying ? Icons.stop_circle : Icons.play_circle_fill, color: const Color(0xFF1B2A4A), size: 32),
+                                onPressed: () => _playRecording(path),
+                              ),
+                              title: Text(rec['name'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              subtitle: Text('المدة: ${rec['duration']}\n$dateText', style: const TextStyle(fontSize: 12)),
+                              isThreeLine: true,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(icon: const Icon(Icons.share, color: Colors.green, size: 22), onPressed: () => _shareRecording(path)),
+                                  IconButton(icon: const Icon(Icons.edit, color: Colors.blue, size: 22), onPressed: () => _renameRecording(i)),
+                                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22), onPressed: () => _deleteRecording(i)),
+                                ],
+                              ),
+                            ),
+                            if (isPlaying)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                child: Column(children: [
+                                  Slider(
+                                    value: _currentPosition.inSeconds.toDouble().clamp(0, _currentDuration.inSeconds.toDouble()),
+                                    min: 0,
+                                    max: _currentDuration.inSeconds > 0 ? _currentDuration.inSeconds.toDouble() : 1,
+                                    activeColor: const Color(0xFFC5A059),
+                                    onChanged: (val) { _audioPlayer.seek(Duration(seconds: val.toInt())); },
+                                  ),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(_formatDuration(_currentPosition), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                      Text(_formatDuration(_currentDuration), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(children: [
+                                    const Icon(Icons.volume_up, size: 20, color: Color(0xFF1B2A4A)),
+                                    Expanded(
+                                      child: Slider(
+                                        value: _playbackVolume,
+                                        min: 0.0, max: 1.0,
+                                        activeColor: const Color(0xFFC5A059),
+                                        onChanged: (val) {
+                                          setState(() => _playbackVolume = val);
+                                          _audioPlayer.setVolume(val);
+                                          _saveSettings();
+                                        },
+                                      ),
+                                    ),
+                                    Text('${(_playbackVolume * 100).toInt()}%', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                  ]),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Text('السرعة:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                      const SizedBox(width: 8),
+                                      ...[0.5, 1.0, 1.5, 2.0].map((speed) {
+                                        final isSelected = _playbackSpeed == speed;
+                                        return Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                                          child: ChoiceChip(
+                                            label: Text('${speed}x', style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : Colors.black87)),
+                                            selected: isSelected,
+                                            selectedColor: const Color(0xFF1B2A4A),
+                                            onSelected: (v) {
+                                              setState(() => _playbackSpeed = speed);
+                                              _audioPlayer.setPlaybackRate(speed);
+                                              _saveSettings();
+                                            },
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ],
+                                  ),
+                                ]),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+} // 👈 القوس ده بيقفل كلاس _MainDashboardState (مهم جداً يكون موجود)
+
+// 👈 كلاس تحريك الصورة (لازم يكون برة الكلاس الأساسي)
+class _TalkingImage extends StatefulWidget {
+  final String imagePath;
+  final bool isTalking;
+  const _TalkingImage({required this.imagePath, required this.isTalking});
+  @override
+  State<_TalkingImage> createState() => _TalkingImageState();
+}
+
+class _TalkingImageState extends State<_TalkingImage> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+    _animation = Tween(begin: 1.0, end: 1.08).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    if (widget.isTalking) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _TalkingImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isTalking && !_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    } else if (!widget.isTalking && _controller.isAnimating) {
+      _controller.stop();
+      _controller.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScaleTransition(
+      scale: _animation,
+      alignment: Alignment.bottomCenter,
+      child: Image.asset(
+        widget.imagePath,
+        fit: BoxFit.contain,
+        alignment: Alignment.bottomCenter,
+        errorBuilder: (c, e, s) => const Icon(Icons.person, size: 100, color: Colors.white54),
+      ),
+    );
+  }
+}
