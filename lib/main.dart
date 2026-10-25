@@ -2187,7 +2187,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             }
 
             if (!_isInBackground) {
-              await _speak("حان الآن موعد أذان ${entry.key}");
             } else {
               try {
                 await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
