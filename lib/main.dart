@@ -5576,63 +5576,7 @@ void _showEventDialog({int? eventIndex}) async {
   );
 }
 
-void _openDiaryPage(DateTime date) {
-  String key = DateFormat('yyyy-MM-dd').format(date);
-  String dayName = DateFormat('EEEE', 'ar').format(date);
-  String fullDate = DateFormat('dd MMMM yyyy', 'ar').format(date);
-  
-  Map<String, dynamic> diaryData = _diaries[key] ?? {'text': '', 'todos': [], 'images': [], 'audio': null};
-  if (diaryData['text'] == null) diaryData['text'] = '';
-  if (diaryData['todos'] == null) diaryData['todos'] = [];
-  if (diaryData['images'] == null) diaryData['images'] = [];
 
-  TextEditingController diaryCtrl = TextEditingController(text: diaryData['text']);
-
-  Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(
-    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-    appBar: AppBar(
-      backgroundColor: const Color(0xFF1B2A4A),
-      foregroundColor: Colors.white,
-      title: const Text('تدوين اليوميات'),
-      actions: [
-        IconButton(icon: const Icon(Icons.check, color: Color(0xFFC5A059), size: 28), onPressed: () {
-          setState(() => _diaries[key] = diaryData);
-          _saveData();
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الحفظ!')));
-        })
-      ]
-    ),
-    body: Padding(padding: const EdgeInsets.all(20.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 4))
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('اليوم: $dayName', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFC5A059))),
-          const SizedBox(height: 4),
-          Text('التاريخ: $fullDate | ${_getHijriDate(date)}', style: TextStyle(fontSize: 14, color: Theme.of(context).textTheme.bodySmall?.color, fontWeight: FontWeight.w600)),
-        ]),
-      ),
-      const SizedBox(height: 20),
-      Expanded(
-        child: TextField(
-          controller: diaryCtrl,
-          maxLines: null,
-          expands: true,
-          textAlignVertical: TextAlignVertical.top,
-          style: const TextStyle(fontSize: 16, height: 1.6),
-          onChanged: (v) => diaryData['text'] = v,
-          decoration: const InputDecoration(hintText: 'اكتب يومياتك هنا...', border: InputBorder.none)
-        )
-      ),
-    ])),
-  )));
-}
     @override
   Widget build(BuildContext context) {
     final List<Widget> screens = [
