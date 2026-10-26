@@ -167,6 +167,26 @@ class MainActivity : FlutterActivity() {
                             }
                         } catch (_: Exception) {}
                     }
+                    
+                    val types = listOf(
+                        RingtoneManager.TYPE_ALARM to "منبه", 
+                        RingtoneManager.TYPE_NOTIFICATION to "إشعار", 
+                        RingtoneManager.TYPE_RINGTONE to "رنين"
+                    )
+                    for ((type, prefix) in types) {
+                        try {
+                            val manager = RingtoneManager(this)
+                            manager.setType(type)
+                            val cursor = manager.cursor
+                            while (cursor.moveToNext()) {
+                                val title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX)
+                                val uri = cursor.getString(RingtoneManager.URI_COLUMN_INDEX)
+                                val id = cursor.getString(RingtoneManager.ID_COLUMN_INDEX)
+                                sounds.add(mapOf("title" to "$prefix: $title", "uri" to "$uri/$id", "duration" to "0"))
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    
                     result.success(sounds)
                 }
                 "previewSound" -> {
