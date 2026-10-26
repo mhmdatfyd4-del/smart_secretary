@@ -72,11 +72,25 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_CANCEL) {
+            try {
+                val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                prefs.edit().remove("flutter.pending_alarm").apply()
+            } catch (_: Exception) {}
             stopAlarmAndSelf()
             return START_NOT_STICKY
         }
 
         if (intent?.action == ACTION_SNOOZE) {
+            val snoozeTime = System.currentTimeMillis() + (5 * 60 * 1000)
+            try {
+                val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                val pendingJson = prefs.getString("flutter.pending_alarm", null)
+                if (pendingJson != null) {
+                    val obj = org.json.JSONObject(pendingJson)
+                    obj.put("scheduledMillis", snoozeTime)
+                    prefs.edit().putString("flutter.pending_alarm", obj.toString()).apply()
+                }
+            } catch (_: Exception) {}
             snoozeAlarm()
             stopAlarmAndSelf()
             return START_NOT_STICKY
