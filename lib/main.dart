@@ -23,6 +23,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:image_picker/image_picker.dart';
 
+// 👈 ستريم اليوميات الجديد
+final StreamController<Map<String, dynamic>> _diaryVoiceStream = StreamController.broadcast();
+
 final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
 final FlutterTts _appTts = FlutterTts();
 final StreamController<String> _notificationActionController = StreamController<String>.broadcast();
@@ -34,6 +37,7 @@ const MethodChannel _settingsChannel = MethodChannel('com.example.secretary_app/
 const MethodChannel _nativeAlarmChannel = MethodChannel('com.example.secretary_app/native_alarm');
 const MethodChannel _soundChannel = MethodChannel('com.example.secretary_app/sounds');
 const MethodChannel _wakeWordChannel = MethodChannel('com.example.secretary_app/wake_word');
+const MethodChannel _shakeChannel = MethodChannel('com.example.secretary_app/shake'); // 👈 قناة الهز
 
 const Map<String, String> _maleNamesMap = {
   'محمد': 'assets/mohamed.png',
@@ -203,7 +207,6 @@ void _sortByTime(List<Map<String, dynamic>> list) {
 }
 
 String _getHijriDate(DateTime date) {
-  // دالة تقريبية لحساب التاريخ الهجري (بدون مكتبات خارجية)
   int day = date.day;
   int month = date.month;
   int year = date.year;
@@ -237,7 +240,7 @@ class AppSettings {
   bool greetingEnabled;
   bool adhanAlertEnabled;
   bool showAboveLockScreen;
-  bool shakeInBackgroundEnabled;
+  String shakeMode; // 👈 تعديل الهز
   bool muteBeep;
   String voiceGender;
   String defaultInterval;
@@ -258,7 +261,7 @@ class AppSettings {
     this.greetingEnabled = true,
     this.adhanAlertEnabled = true,
     this.showAboveLockScreen = false,
-    this.shakeInBackgroundEnabled = true,
+    this.shakeMode = 'app_open', // 👈 القيمة الافتراضية
     this.muteBeep = true,
     this.voiceGender = 'ذكر',
     this.defaultInterval = 'كل 10 ثواني',
@@ -298,7 +301,7 @@ class SettingsScreen extends StatefulWidget {
   final Future<void> Function(
     int hour, int minute, String voiceLevel,
     bool greeting, bool adhan, double ttsVol,
-    bool showLock, bool shakeBg, String voiceGender,
+    bool showLock, String shakeMode, String voiceGender,
     String defaultInterval, String customWakeWord,
     String wakeWordMode, String wakeWordTrigger,
     bool muteBeep, bool useOverlayAlarm,
@@ -328,7 +331,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _adhanAlertEnabled;
   late double _ttsVolume;
   late bool _showAboveLockScreen;
-  late bool _shakeInBackground;
+  late String _shakeMode;
   late bool _muteBeep;
   late String _voiceGender;
   late String _defaultInterval;
@@ -352,7 +355,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _origAdhanAlertEnabled;
   late double _origTtsVolume;
   late bool _origShowAboveLockScreen;
-  late bool _origShakeInBackground;
+  late String _origShakeMode;
   late bool _origMuteBeep;
   late String _origVoiceGender;
   late String _origDefaultInterval;
@@ -367,6 +370,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _origCustomImagePath;
 
   String? _defaultAlarmSound;
+  String? _defaultWeeklySound;
   String? _defaultEventSound;
 
   @override
@@ -379,7 +383,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _adhanAlertEnabled = widget.settings.adhanAlertEnabled;
     _ttsVolume = widget.ttsVolume;
     _showAboveLockScreen = widget.settings.showAboveLockScreen;
-    _shakeInBackground = widget.settings.shakeInBackgroundEnabled;
+    _shakeMode = widget.settings.shakeMode;
     _muteBeep = widget.settings.muteBeep;
     _voiceGender = widget.settings.voiceGender;
     _defaultInterval = widget.settings.defaultInterval;
@@ -402,7 +406,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _origAdhanAlertEnabled = _adhanAlertEnabled;
     _origTtsVolume = _ttsVolume;
     _origShowAboveLockScreen = _showAboveLockScreen;
-    _origShakeInBackground = _shakeInBackground;
+    _origShakeMode = _shakeMode;
     _origMuteBeep = _muteBeep;
     _origVoiceGender = _voiceGender;
     _origDefaultInterval = _defaultInterval;
@@ -424,19 +428,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {
       _defaultAlarmSound = prefs.getString('default_alarm_sound');
+      _defaultWeeklySound = prefs.getString('default_weekly_sound');
       _defaultEventSound = prefs.getString('default_event_sound');
     });
   }
 
   Future<void> _pickDefaultSound(String type) async {
-    final current = type == 'alarm' ? _defaultAlarmSound : _defaultEventSound;
+    final current = type == 'alarm' ? _defaultAlarmSound : (type == 'weekly' ? _defaultWeeklySound : _defaultEventSound);
     final result = await showDialog<String>(
       context: context,
       builder: (_) => SoundPickerDialog(currentUri: current, voiceGender: widget.settings.voiceGender),
     );
     if (result != null) {
       final prefs = await SharedPreferences.getInstance();
-      final key = type == 'alarm' ? 'default_alarm_sound' : 'default_event_sound';
+      final key = type == 'alarm' ? 'default_alarm_sound' : (type == 'weekly' ? 'default_weekly_sound' : 'default_event_sound');
       if (result == 'default') {
         await prefs.remove(key);
       } else {
@@ -445,6 +450,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() {
         if (type == 'alarm') _defaultAlarmSound = result == 'default' ? null : result;
+        else if (type == 'weekly') _defaultWeeklySound = result == 'default' ? null : result;
         else _defaultEventSound = result == 'default' ? null : result;
       });
     }
@@ -496,7 +502,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _adhanAlertEnabled != _origAdhanAlertEnabled ||
         _ttsVolume != _origTtsVolume ||
         _showAboveLockScreen != _origShowAboveLockScreen ||
-        _shakeInBackground != _origShakeInBackground ||
+        _shakeMode != _origShakeMode ||
         _muteBeep != _origMuteBeep ||
         _voiceGender != _origVoiceGender ||
         _defaultInterval != _origDefaultInterval ||
@@ -520,7 +526,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await widget.onSave(
       _defaultReminderHour, _defaultReminderMinute, _voiceLevel,
       _greetingEnabled, _adhanAlertEnabled, _ttsVolume,
-      _showAboveLockScreen, _shakeInBackground, _voiceGender,
+      _showAboveLockScreen, _shakeMode, _voiceGender,
       _defaultInterval, _wakeWordController.text.trim(), _wakeWordMode, _wakeWordTrigger,
       _muteBeep, _useOverlayAlarm,
       _isKidsMode, _customGreetingController.text.trim(), _tahajjudAlertEnabled, _isDarkMode, _customImagePath,
@@ -599,7 +605,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('🎵 صوت المنبه الافتراضي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          const Text('🎵 صوت منبه المهام الافتراضي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                           const SizedBox(height: 4),
                           Text(
                             _defaultAlarmSound == null
@@ -609,6 +615,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               fontSize: 12,
                               color: _defaultAlarmSound != null ? const Color(0xFFC5A059) : Colors.grey,
                               fontWeight: _defaultAlarmSound != null ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: InkWell(
+              onTap: () => _pickDefaultSound('weekly'),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_month, color: Color(0xFF1B2A4A), size: 26),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('🎵 صوت منبه الجدول الأسبوعي الافتراضي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          const SizedBox(height: 4),
+                          Text(
+                            _defaultWeeklySound == null
+                                ? (_voiceGender == 'ذكر' ? 'الافتراضي (السكرتير)' : 'الافتراضي (السكرتيرة)')
+                                : 'مخصص — بدون صوت سكرتيرة',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _defaultWeeklySound != null ? const Color(0xFFC5A059) : Colors.grey,
+                              fontWeight: _defaultWeeklySound != null ? FontWeight.bold : FontWeight.normal,
                             ),
                           ),
                         ],
@@ -902,21 +946,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             elevation: 2,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: _shakeInBackground ? const Color(0xFFC5A059) : Colors.transparent, width: 2),
+              side: BorderSide(color: _shakeMode != 'off' ? const Color(0xFFC5A059) : Colors.transparent, width: 2),
             ),
-            child: SwitchListTile(
-              secondary: Icon(Icons.vibration, color: _shakeInBackground ? const Color(0xFFC5A059) : const Color(0xFF1B2A4A), size: 26),
-              title: const Text('تشغيل الهز في الخلفية', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  _shakeInBackground ? 'الهز هيشتغل حتى لو التطبيق في الخلفية' : 'الهز مش هيشتغل غير لما التطبيق مفتوح',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Icon(Icons.vibration, color: _shakeMode != 'off' ? const Color(0xFFC5A059) : const Color(0xFF1B2A4A), size: 26),
+                    const SizedBox(width: 10),
+                    const Text('تشغيل الهز', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  ]),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _shakeMode,
+                    decoration: const InputDecoration(labelText: 'حالة الهز', border: OutlineInputBorder()),
+                    items: [
+                      DropdownMenuItem(value: 'off', child: Text('متوقف')),
+                      DropdownMenuItem(value: 'app_open', child: Text('التطبيق مفتوح فقط')),
+                      DropdownMenuItem(value: 'background', child: Text('التطبيق مفتوح + الخلفية')),
+                      DropdownMenuItem(value: 'always', child: Text('دائماً (حتى لو التطبيق مقفول)')),
+                    ],
+                    onChanged: (val) => setState(() => _shakeMode = val ?? 'off'),
+                  ),
+                ],
               ),
-              value: _shakeInBackground,
-              activeColor: const Color(0xFFC5A059),
-              onChanged: (v) => setState(() => _shakeInBackground = v),
             ),
           ),
           const SizedBox(height: 12),
@@ -1021,15 +1076,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   if (_wakeWordMode != 'off') ...[
                     const Divider(height: 30),
-                    const Text('إيه اللي يخلي السكرتير يصحى؟', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const Text('إيه اللي يخلي السكرتير يستمع؟', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
                       value: _wakeWordTrigger,
                       decoration: const InputDecoration(border: OutlineInputBorder()),
                       items: [
-                        DropdownMenuItem(value: 'both', child: Text('الاسم + الكلمة السرية')),
+                        DropdownMenuItem(value: 'both', child: Text('الاسم + كلمة السر')),
                         DropdownMenuItem(value: 'name_only', child: Text('اسم السكرتير فقط')),
-                        DropdownMenuItem(value: 'custom_only', child: Text('الكلمة السرية فقط')),
+                        DropdownMenuItem(value: 'custom_only', child: Text('كلمة السر فقط')),
                       ],
                       onChanged: (val) => setState(() => _wakeWordTrigger = val ?? 'both'),
                     ),
@@ -1038,7 +1093,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       controller: _wakeWordController,
                       enabled: _wakeWordTrigger != 'name_only',
                       decoration: InputDecoration(
-                        labelText: 'الكلمة السرية',
+                        labelText: 'كلمة السر',
                         hintText: 'مثال: يا بطل، يا سكرتير',
                         border: const OutlineInputBorder(),
                         fillColor: _wakeWordTrigger == 'name_only' ? Colors.grey.shade200 : null,
@@ -1081,7 +1136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _greetingEnabled = true;
                 _adhanAlertEnabled = true;
                 _showAboveLockScreen = false;
-                _shakeInBackground = true;
+                _shakeMode = 'app_open';
                 _muteBeep = true;
                 _voiceGender = 'ذكر';
                 _defaultInterval = 'كل 10 ثواني';
@@ -1102,7 +1157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               await widget.onSave(
                 18, 0, 'متوسط', 
                 true, true, 1.0, 
-                false, true, 'ذكر', 
+                false, 'app_open', 'ذكر', 
                 'كل 10 ثواني', 'يا سكرتير', 'off', 'both', 
                 true, false, 
                 false, 'أهلاً بك {user}. أنا {sec} {name}، هُز الهاتف في أي وقت لأكون في خدمتك.', false, false, null,
@@ -1823,6 +1878,7 @@ class _SoundPickerDialogState extends State<SoundPickerDialog> {
     );
   }
 }
+
 class MainDashboard extends StatefulWidget {
   final String secretaryName;
   final bool isUserMale;
@@ -1878,7 +1934,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   List<Map<String, dynamic>> _tasks = [];
   List<Map<String, dynamic>> _specialEvents = [];
   
-  // تعديل اليوميات عشان تشيل صور وتسجيلات ومهام
   Map<String, dynamic> _diaries = {}; 
 
   AppSettings _settings = AppSettings();
@@ -1908,6 +1963,24 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   double _playbackVolume = 1.0;
   double _playbackSpeed = 1.0;
   double _ttsVolume = 1.0;
+
+  // 👈 متغيرات جديدة للصوت والتداخل والتسبيح
+  String? _pendingVoiceAction;
+  String? _pendingRawCommand;
+  Timer? _pendingActionTimer;
+  Map<String, dynamic>? _pendingConflictTaskData;
+  int? _pendingConflictTaskIndex;
+  BuildContext? _conflictDialogContext;
+  Map<String, int> _tasbeehSubCounts = {};
+
+  static const List<Map<String, String>> _tasbeehItems = [
+    {'key': 'subhan', 'text': 'سبحان الله'},
+    {'key': 'subhan_bihamdih', 'text': 'سبحان الله وبحمده'},
+    {'key': 'subhan_adada', 'text': 'سبحان الله وبحمده عدد خلقه ورضا نفسه وزنة عرشه ومداد كلماته'},
+    {'key': 'subhan_azim', 'text': 'سبحان الله العظيم'},
+    {'key': 'astaghfirullah', 'text': 'أستغفر الله'},
+    {'key': 'salah_ala_nabi', 'text': 'اللهم صل على سيدنا محمد'},
+  ];
 
   static const Map<String, List<String>> _dayKeywords = {
     'السبت': ['السبت', 'سبت', 'يوم السبت', 'السبت الجاي', 'السبت الجاى'],
@@ -1958,6 +2031,15 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             Navigator.of(_alarmDialogContext!).pop();
             _alarmDialogContext = null;
           }
+        }
+      }
+    });
+
+    // 👈 استقبال أمر الهز من الأندرويد
+    _shakeChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onShakeDetected') {
+        if (!_isListening && !_starting && !_isRecording) {
+          _listenVoiceCommand();
         }
       }
     });
@@ -2244,6 +2326,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             }
             if (_isWakeWordListening) _isWakeWordListening = false;
 
+            if (_pendingVoiceAction != null && _pendingVoiceAction != 'confirm_time_conflict') {
+              _pendingVoiceAction = null;
+              _pendingRawCommand = null;
+              _pendingActionTimer?.cancel();
+            }
+
             if (_isTasbeehMode) {
               Future.delayed(const Duration(milliseconds: 300), () {
                 if (mounted && _isTasbeehMode && !_isListening) _listenVoiceCommand();
@@ -2253,6 +2341,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         },
         onError: (error) {
           if (mounted) {
+            final errorStr = error.toString().toLowerCase();
+            if ((errorStr.contains('network') || errorStr.contains('internet') || errorStr.contains('no_internet')) 
+                && _pendingVoiceAction == 'confirm_time_conflict') {
+              _speak("معلش يا $_userTitle، يبدو أن هناك مشكلة في الاتصال بالإنترنت. من فضلك استخدم الأزرار اللي على الشاشة.");
+              return; 
+            }
+
             if (_isListening) {
               setState(() => _isListening = false);
               if (_settings.wakeWordMode != 'off') {
@@ -2260,6 +2355,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               }
             }
             if (_isWakeWordListening) _isWakeWordListening = false;
+
+            if (_pendingVoiceAction != null && _pendingVoiceAction != 'confirm_time_conflict') {
+              _pendingVoiceAction = null;
+              _pendingRawCommand = null;
+              _pendingActionTimer?.cancel();
+            }
 
             if (_isTasbeehMode) {
               Future.delayed(const Duration(milliseconds: 300), () {
@@ -2275,570 +2376,603 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   void _initShakeDetector() {
+    _accelerometerSub?.cancel();
+
+    if (_settings.shakeMode == 'always') {
+      try { _shakeChannel.invokeMethod('startShakeService'); } catch (_) {}
+      return; 
+    } 
+    
+    try { _shakeChannel.invokeMethod('stopShakeService'); } catch (_) {}
+
+    if (_settings.shakeMode == 'off') return;
+
     _accelerometerSub = accelerometerEventStream().listen((AccelerometerEvent event) {
       double gX = event.x / 9.81;
       double gY = event.y / 9.81;
       double gZ = event.z / 9.81;
       double gForce = sqrt(gX * gX + gY * gY + gZ * gZ);
+      
       if (gForce > 2.2) {
         final now = DateTime.now();
         if (_lastShake != null && now.difference(_lastShake!) < const Duration(seconds: 3)) return;
-        if (_isInBackground && !_settings.shakeInBackgroundEnabled) return;
+        
+        if (_isInBackground && _settings.shakeMode != 'background') return;
+        
         _lastShake = now;
         if (!_isListening && !_starting && !_isRecording) _listenVoiceCommand();
       }
     });
   }
-
   void _startAdhanWatcher() {
-    _adhanTimer?.cancel();
-    _adhanTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted && _settings.adhanAlertEnabled) _checkAdhanTime();
+  _adhanTimer?.cancel();
+  _adhanTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+    if (mounted && _settings.adhanAlertEnabled) _checkAdhanTime();
+  });
+}
+
+Future<void> _checkAdhanTime({bool forceCheck = false}) async {
+  if (!_settings.adhanAlertEnabled) return;
+  try {
+    final times = await _calculatePrayerTimes();
+    final now = DateTime.now();
+
+    final Map<String, String> prayerMap = {
+      'الفجر': times['fajr'] ?? '',
+      'الظهر': times['dhuhr'] ?? '',
+      'العصر': times['asr'] ?? '',
+      'المغرب': times['maghrib'] ?? '',
+      'العشاء': times['isha'] ?? '',
+    };
+
+    final prefs = await SharedPreferences.getInstance();
+    final startDateStr = prefs.getString('adhan_schedule_start_date');
+    int dayOffset = 0;
+    if (startDateStr != null) {
+      final startDate = DateTime.parse(startDateStr);
+      dayOffset = now.difference(startDate).inDays;
+    }
+
+    final prayerIds = {'fajr': 1, 'dhuhr': 2, 'asr': 3, 'maghrib': 4, 'isha': 5};
+    final todayStr = DateFormat('yyyy-MM-dd').format(now);
+
+    for (final entry in prayerMap.entries) {
+      try {
+        final prayerTime = DateFormat('HH:mm').parse(entry.value);
+        final prayerDateTime = DateTime(now.year, now.month, now.day, prayerTime.hour, prayerTime.minute);
+        
+        final diffSeconds = now.difference(prayerDateTime).inSeconds;
+        final tolerance = forceCheck ? 300 : 90;
+        final isValidTime = diffSeconds >= 0 && diffSeconds <= tolerance;
+        
+        final alertKey = 'adhan_alerted_${todayStr}_${entry.key}';
+        final alreadyAlerted = prefs.getBool(alertKey) ?? false;
+
+        if (isValidTime && !alreadyAlerted) {
+          await prefs.setBool(alertKey, true);
+          
+          final key = _prayerKey(entry.key);
+          if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
+            await _notifications.cancel(5000 + (dayOffset * 10) + prayerIds[key]!);
+          }
+
+          if (_isInBackground) {
+            try {
+              await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
+                'id': entry.key.hashCode + 7000,
+                'title': 'أذان ${entry.key}',
+                'timestamp': DateTime.now().millisecondsSinceEpoch + 200,
+                'prefix': 'حان الآن موعد ',
+                'interval': 0, 
+              });
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+}
+
+Future<void> _loadData() async {
+  final prefs = await SharedPreferences.getInstance();
+  String? tasksString = prefs.getString('saved_tasks');
+  if (tasksString != null) {
+    setState(() {
+      _tasks = List<Map<String, dynamic>>.from(json.decode(tasksString));
     });
-  }
-
-  Future<void> _checkAdhanTime({bool forceCheck = false}) async {
-    if (!_settings.adhanAlertEnabled) return;
-    try {
-      final times = await _calculatePrayerTimes();
-      final now = DateTime.now();
-
-      final Map<String, String> prayerMap = {
-        'الفجر': times['fajr'] ?? '',
-        'الظهر': times['dhuhr'] ?? '',
-        'العصر': times['asr'] ?? '',
-        'المغرب': times['maghrib'] ?? '',
-        'العشاء': times['isha'] ?? '',
-      };
-
-      final prefs = await SharedPreferences.getInstance();
-      final startDateStr = prefs.getString('adhan_schedule_start_date');
-      int dayOffset = 0;
-      if (startDateStr != null) {
-        final startDate = DateTime.parse(startDateStr);
-        dayOffset = now.difference(startDate).inDays;
-      }
-
-      final prayerIds = {'fajr': 1, 'dhuhr': 2, 'asr': 3, 'maghrib': 4, 'isha': 5};
-      final todayStr = DateFormat('yyyy-MM-dd').format(now);
-
-      for (final entry in prayerMap.entries) {
-        try {
-          final prayerTime = DateFormat('HH:mm').parse(entry.value);
-          final prayerDateTime = DateTime(now.year, now.month, now.day, prayerTime.hour, prayerTime.minute);
-          
-          final diffSeconds = now.difference(prayerDateTime).inSeconds;
-          final tolerance = forceCheck ? 300 : 90;
-          final isValidTime = diffSeconds >= 0 && diffSeconds <= tolerance;
-          
-          final alertKey = 'adhan_alerted_${todayStr}_${entry.key}';
-          final alreadyAlerted = prefs.getBool(alertKey) ?? false;
-
-          if (isValidTime && !alreadyAlerted) {
-            await prefs.setBool(alertKey, true);
-            
-            final key = _prayerKey(entry.key);
-            if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
-              await _notifications.cancel(5000 + (dayOffset * 10) + prayerIds[key]!);
-            }
-
-            // شيلنا سطر الكلام عشان الأذان يكمل
-            if (_isInBackground) {
-              try {
-                await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
-                  'id': entry.key.hashCode + 7000,
-                  'title': 'أذان ${entry.key}',
-                  'timestamp': DateTime.now().millisecondsSinceEpoch + 200,
-                  'prefix': 'حان الآن موعد ',
-                  'interval': 0, 
-                });
-              } catch (_) {}
-            }
-          }
-        } catch (_) {}
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? tasksString = prefs.getString('saved_tasks');
-    if (tasksString != null) {
-      setState(() {
-        _tasks = List<Map<String, dynamic>>.from(json.decode(tasksString));
-      });
-      for (final t in _tasks) {
-        if (t['alarm'] == true && t['scheduled'] != null) {
-          final dt = DateTime.tryParse(t['scheduled'].toString());
-          if (dt != null && dt.isAfter(DateTime.now())) {
-            _scheduleContinuousAlarm(
-              t['task'].toString(), dt,
-              t['repeat'] ?? 'مرة واحدة',
-              t['repeatInterval'] ?? 'كل 10 ثواني',
-              List<String>.from(t['customDays'] ?? []),
-              soundUri: t['sound'],
-            );
-          }
-        }
-      }
-    }
-
-    String? eventsString = prefs.getString('saved_events');
-    if (eventsString != null) {
-      setState(() {
-        _specialEvents = List<Map<String, dynamic>>.from(json.decode(eventsString));
-      });
-      _sortByTime(_specialEvents);
-      for (final e in _specialEvents) {
-        _scheduleEventReminder(e);
-      }
-    } else {
-      setState(() => _specialEvents = []);
-    }
-
-    String? diariesString = prefs.getString('saved_diaries');
-    if (diariesString != null) {
-      setState(() {
-        _diaries = Map<String, dynamic>.from(json.decode(diariesString));
-      });
-    }
-
-    String? weeklyString = prefs.getString('saved_weekly_schedule');
-    if (weeklyString != null) {
-      setState(() {
-        _weeklySchedule = List<Map<String, dynamic>>.from(json.decode(weeklyString));
-      });
-      for (final t in _weeklySchedule) {
-        if (t['repeatInterval'] != 'بدون تنبيه' && t['scheduled'] != null) {
-          final dt = DateTime.tryParse(t['scheduled'].toString());
-          if (dt != null && dt.isAfter(DateTime.now())) {
-            _scheduleWeeklyAlarm(
-              t['task'].toString(), t['day'].toString(), dt, t['repeatInterval'] ?? 'مرة واحدة',
-              t['advanceReminder'] ?? 'في الموعد', soundUri: t['sound'],
-            );
-          }
-        }
-      }
-    }
-
-    _settings.defaultReminderHour = prefs.getInt('default_reminder_hour') ?? 18;
-    _settings.defaultReminderMinute = prefs.getInt('default_reminder_minute') ?? 0;
-    _settings.voiceLevel = prefs.getString('voice_level') ?? 'متوسط';
-    _settings.greetingEnabled = prefs.getBool('greeting_enabled') ?? true;
-    _settings.adhanAlertEnabled = prefs.getBool('adhan_alert_enabled') ?? true;
-    _settings.showAboveLockScreen = prefs.getBool('show_above_lock_screen') ?? false;
-    _settings.shakeInBackgroundEnabled = prefs.getBool('shake_in_background') ?? true;
-    _settings.muteBeep = prefs.getBool('mute_beep') ?? true;
-    _settings.voiceGender = prefs.getString('voice_gender') ?? 'ذكر';
-    _settings.defaultInterval = prefs.getString('default_interval') ?? 'كل 10 ثواني';
-    _settings.customWakeWord = prefs.getString('custom_wake_word') ?? 'يا سكرتير';
-    _settings.wakeWordMode = prefs.getString('wake_word_mode') ?? 'off';
-    _settings.wakeWordTrigger = prefs.getString('wake_word_trigger') ?? 'both';
-    _settings.useOverlayAlarm = prefs.getBool('use_overlay_alarm') ?? false;
-    _settings.isKidsMode = prefs.getBool('is_kids_mode') ?? false;
-    _settings.customGreeting = prefs.getString('custom_greeting') ?? 'أهلاً بك {user}. أنا {sec} {name}، هُز الهاتف في أي وقت لأكون في خدمتك.';
-    _settings.tahajjudAlertEnabled = prefs.getBool('tahajjud_alert_enabled') ?? false;
-    _settings.isDarkMode = prefs.getBool('is_dark_mode') ?? false;
-    _settings.customImagePath = prefs.getString('custom_secretary_image');
-    _tasbeehCount = prefs.getInt('tasbeeh_count') ?? 0;
-    _playbackVolume = prefs.getDouble('playback_volume') ?? 1.0;
-    _playbackSpeed = prefs.getDouble('playback_speed') ?? 1.0;
-    _ttsVolume = prefs.getDouble('tts_volume') ?? 1.0;
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _saveData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('saved_tasks', json.encode(_tasks));
-    await prefs.setString('saved_events', json.encode(_specialEvents));
-    await prefs.setString('saved_diaries', json.encode(_diaries));
-    await prefs.setString('saved_weekly_schedule', json.encode(_weeklySchedule));
-  }
-
-  Future<void> _saveSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('default_reminder_hour', _settings.defaultReminderHour);
-    await prefs.setInt('default_reminder_minute', _settings.defaultReminderMinute);
-    await prefs.setString('voice_level', _settings.voiceLevel);
-    await prefs.setBool('greeting_enabled', _settings.greetingEnabled);
-    await prefs.setBool('adhan_alert_enabled', _settings.adhanAlertEnabled);
-    await prefs.setBool('show_above_lock_screen', _settings.showAboveLockScreen);
-    await prefs.setBool('shake_in_background', _settings.shakeInBackgroundEnabled);
-    await prefs.setBool('mute_beep', _settings.muteBeep);
-    await prefs.setString('voice_gender', _settings.voiceGender);
-    await prefs.setString('default_interval', _settings.defaultInterval);
-    await prefs.setString('custom_wake_word', _settings.customWakeWord);
-    await prefs.setString('wake_word_mode', _settings.wakeWordMode);
-    await prefs.setString('wake_word_trigger', _settings.wakeWordTrigger);
-    await prefs.setBool('use_overlay_alarm', _settings.useOverlayAlarm);
-    await prefs.setBool('is_kids_mode', _settings.isKidsMode);
-    await prefs.setString('custom_greeting', _settings.customGreeting);
-    await prefs.setBool('tahajjud_alert_enabled', _settings.tahajjudAlertEnabled);
-    await prefs.setBool('is_dark_mode', _settings.isDarkMode);
-    if (_settings.customImagePath != null) {
-      await prefs.setString('custom_secretary_image', _settings.customImagePath!);
-    } else {
-      await prefs.remove('custom_secretary_image');
-    }
-    await prefs.setInt('tasbeeh_count', _tasbeehCount);
-    await prefs.setDouble('playback_volume', _playbackVolume);
-    await prefs.setDouble('playback_speed', _playbackSpeed);
-    await prefs.setDouble('tts_volume', _ttsVolume);
-  }
-
-  Future<void> _saveWeeklySchedule() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('saved_weekly_schedule', json.encode(_weeklySchedule));
-  }
-
-  int _getAdvanceMinutes(String reminder) {
-    switch (reminder) {
-      case 'قبلها بـ 5 دقائق': return 5;
-      case 'قبلها بـ 10 دقائق': return 10;
-      case 'قبلها بـ 15 دقيقة': return 15;
-      case 'قبلها بـ 20 دقيقة': return 20;
-      case 'قبلها بـ 30 دقيقة': return 30;
-      case 'قبلها بـ 45 دقيقة': return 45;
-      case 'قبلها بساعة': return 60;
-      case 'قبلها ب 6 ساعات': return 360;
-      case 'قبلها ب 12 ساعة': return 720;
-      case 'قبلها بـ 24 ساعة': return 1440;
-      default: return 0;
-    }
-  }
-
-  void _scheduleWeeklyAlarm(String taskTitle, String day, DateTime scheduledDateTime, String interval, String advanceReminder, {String? soundUri}) {
-    int advanceMins = _getAdvanceMinutes(advanceReminder);
-    DateTime alarmTime = scheduledDateTime.subtract(Duration(minutes: advanceMins));
-    _scheduleContinuousAlarm('جدول_${day}_$taskTitle', alarmTime, 'أسبوعي', interval, [day], soundUri: soundUri);
-  }
-
-  Future<void> _loadRecordings() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? recordingsString = prefs.getString('saved_recordings');
-    if (recordingsString != null) {
-      setState(() {
-        _recordings = List<Map<String, dynamic>>.from(json.decode(recordingsString));
-      });
-    }
-  }
-
-  Future<void> _saveRecordings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('saved_recordings', json.encode(_recordings));
-  }
-
-  Future<void> _startRecording() async {
-    try {
-      if (await _audioRecorder.hasPermission()) {
-        final dir = await getApplicationDocumentsDirectory();
-        final recordingsDir = Directory('${dir.path}/recordings');
-        if (!await recordingsDir.exists()) {
-          await recordingsDir.create(recursive: true);
-        }
-        final fileName = 'rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
-        final path = '${recordingsDir.path}/$fileName';
-
-        const config = RecordConfig(
-          encoder: AudioEncoder.aacLc, bitRate: 128000,
-          sampleRate: 44100, numChannels: 1,
-        );
-        await _audioRecorder.start(config, path: path);
-        setState(() {
-          _isRecording = true;
-          _recordingDuration = Duration.zero;
-        });
-
-        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-          if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في التسجيل: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _stopRecording() async {
-    try {
-      _recordingTimer?.cancel();
-      final path = await _audioRecorder.stop();
-      if (path != null) {
-        final newRecording = {
-          'path': path,
-          'name': 'تسجيل ${_recordings.length + 1}',
-          'duration': _formatDuration(_recordingDuration),
-          'createdAt': DateTime.now().toIso8601String(),
-        };
-        setState(() {
-          _recordings.insert(0, newRecording);
-          _isRecording = false;
-          _recordingDuration = Duration.zero;
-        });
-        await _saveRecordings();
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isRecording = false);
-    }
-  }
-
-  Future<void> _playRecording(String path) async {
-    try {
-      if (_currentlyPlayingPath == path) {
-        await _audioPlayer.stop();
-        await _positionSub?.cancel();
-        await _durationSub?.cancel();
-        setState(() {
-          _currentlyPlayingPath = null;
-          _currentPosition = Duration.zero;
-          _currentDuration = Duration.zero;
-        });
-      } else {
-        await _audioPlayer.stop();
-        await _positionSub?.cancel();
-        await _durationSub?.cancel();
-
-        _positionSub = _audioPlayer.onPositionChanged.listen((pos) {
-          if (mounted) setState(() => _currentPosition = pos);
-        });
-        _durationSub = _audioPlayer.onDurationChanged.listen((dur) {
-          if (mounted) setState(() => _currentDuration = dur);
-        });
-
-        await _audioPlayer.setVolume(_playbackVolume);
-        await _audioPlayer.setPlaybackRate(_playbackSpeed);
-        await _audioPlayer.play(DeviceFileSource(path));
-        setState(() => _currentlyPlayingPath = path);
-
-        _audioPlayer.onPlayerComplete.listen((_) {
-          if (mounted) {
-            setState(() {
-              _currentlyPlayingPath = null;
-              _currentPosition = Duration.zero;
-              _currentDuration = Duration.zero;
-            });
-          }
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في التشغيل: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _shareRecording(String path) async {
-    try {
-      final file = File(path);
-      if (await file.exists()) {
-        await Share.shareXFiles([XFile(path)], text: 'تسجيل صوتي');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في المشاركة: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteRecording(int index) async {
-    try {
-      final path = _recordings[index]['path'].toString();
-      final file = File(path);
-      if (await file.exists()) {
-        await file.delete();
-      }
-      setState(() {
-        _recordings.removeAt(index);
-      });
-      await _saveRecordings();
-    } catch (_) {}
-  }
-
-  void _renameRecording(int index) {
-    TextEditingController nameCtrl = TextEditingController(text: _recordings[index]['name'].toString());
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: const Text('إعادة تسمية التسجيل', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'الاسم الجديد')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
-            onPressed: () {
-              if (nameCtrl.text.isNotEmpty) {
-                setState(() {
-                  _recordings[index]['name'] = nameCtrl.text;
-                });
-                _saveRecordings();
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text('حفظ', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _eventRepeatTimer?.cancel();
-    _accelerometerSub?.cancel();
-    _adhanTimer?.cancel();
-    _recordingTimer?.cancel();
-    _positionSub?.cancel();
-    _durationSub?.cancel();
-    _audioRecorder.dispose();
-    _audioPlayer.dispose();
-    for (var timer in _activeTimers) {
-      timer.cancel();
-    }
-    _speech.cancel();
-    super.dispose();
-  }
-
-  Future<void> _configureVoice({bool skipGreeting = false}) async {
-    try {
-      await _tts.setLanguage("ar-EG");
-      await _tts.awaitSpeakCompletion(true);
-      await Future.delayed(const Duration(milliseconds: 150));
-    } catch (_) {}
-
-    final prefs = await SharedPreferences.getInstance();
-    final gender = prefs.getString('voice_gender') ?? _settings.voiceGender;
-
-    try {
-      final voices = await _getArabicVoices();
-      if (voices.isNotEmpty) {
-        await _tts.setVoice({
-          'name': voices.first['name']!,
-          'locale': voices.first['locale']!,
-        });
-        await Future.delayed(const Duration(milliseconds: 150));
-      }
-    } catch (_) {}
-
-    try {
-      if (gender == 'ذكر') {
-        await _tts.setPitch(0.6);
-        await _tts.setSpeechRate(_settings.speechRate);
-        await _tts.setVolume(1.0);
-      } else {
-        await _tts.setPitch(1.15);
-        await _tts.setSpeechRate(_settings.speechRate);
-        await _tts.setVolume(_settings.speechVolume * _ttsVolume);
-      }
-
-      if (!skipGreeting && _settings.greetingEnabled) {
-        String greeting = _settings.customGreeting
-            .replaceAll('{user}', _userTitle)
-            .replaceAll('{sec}', _secWord)
-            .replaceAll('{name}', _secretaryName);
-        if (_settings.isKidsMode) greeting = "أهلاً يا بطل! أنا صديقك $_secWord، هنساعدك نلعب ونتعلم مع بعض.";
-        await _tts.speak(greeting);
-      }
-    } catch (_) {}
-  }
-
-  Future<List<Map<String, String>>> _getArabicVoices() async {
-    try {
-      final voices = await _tts.getVoices;
-      if (voices is! List) return [];
-      final list = <Map<String, String>>[];
-      for (final v in voices) {
-        if (v is! Map) continue;
-        final name = v['name']?.toString() ?? '';
-        final locale = v['locale']?.toString() ?? '';
-        if (locale.toLowerCase().startsWith('ar') && name.isNotEmpty) {
-          list.add({'name': name, 'locale': locale});
-        }
-      }
-      return list;
-    } catch (_) {
-      return [];
-    }
-  }
-
-  Future<void> _speak(String text) async {
-    if (_settings.wakeWordMode != 'off') {
-      try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
-      if (_isWakeWordListening) {
-        try { await _speech.stop(); } catch (_) {}
-        _isWakeWordListening = false;
-      }
-    }
-
-    try {
-      final gender = _settings.voiceGender;
-      if (gender == 'ذكر') {
-        await _tts.setPitch(0.6);
-        await _tts.setSpeechRate(_settings.speechRate);
-        await _tts.setVolume(1.0);
-      } else {
-        await _tts.setPitch(1.15);
-        await _tts.setSpeechRate(_settings.speechRate);
-        await _tts.setVolume(_settings.speechVolume * _ttsVolume);
-      }
-      await _tts.speak(text);
-    } catch (e) {
-      debugPrint("TTS Error: $e");
-    }
-
-    if (_settings.wakeWordMode != 'off') {
-      Future.delayed(const Duration(seconds: 1), () {
-        try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-        if (!_isListening && !_isInBackground) _startWakeWordLoop();
-      });
-    }
-  }
-
-  Future<void> _listenVoiceCommand() async {
-    if (_isListening) {
-      await _speech.stop();
-      if (mounted) setState(() => _isListening = false);
-      try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-      return;
-    }
-    if (_starting) return;
-    _starting = true;
-    try {
-      if (!_speechReady) await _initSpeech();
-      if (!_speechReady) return;
-
-      try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
-
-      await _tts.stop();
-      try { await _speech.cancel(); } catch (_) {}
-      
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      if (mounted) {
-        setState(() => _isListening = true);
-        if (!_isTasbeehMode) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('🎤 التطبيق بيستمع ليك دلوقتي...', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
-              duration: Duration(seconds: 2),
-              backgroundColor: Color(0xFF1B2A4A),
-            ),
+    for (final t in _tasks) {
+      if (t['alarm'] == true && t['scheduled'] != null) {
+        final dt = DateTime.tryParse(t['scheduled'].toString());
+        if (dt != null && dt.isAfter(DateTime.now())) {
+          _scheduleContinuousAlarm(
+            t['task'].toString(), dt,
+            t['repeat'] ?? 'مرة واحدة',
+            t['repeatInterval'] ?? 'كل 10 ثواني',
+            List<String>.from(t['customDays'] ?? []),
+            soundUri: t['sound'],
           );
         }
       }
+    }
+  }
 
-      await _speech.listen(
-        localeId: "ar-EG", onDevice: false,
-        listenFor: const Duration(seconds: 60), pauseFor: const Duration(seconds: 10),
-        onResult: (val) {
+  String? eventsString = prefs.getString('saved_events');
+  if (eventsString != null) {
+    setState(() {
+      _specialEvents = List<Map<String, dynamic>>.from(json.decode(eventsString));
+    });
+    _sortByTime(_specialEvents);
+    for (final e in _specialEvents) {
+      _scheduleEventReminder(e);
+    }
+  } else {
+    setState(() => _specialEvents = []);
+  }
+
+  String? diariesString = prefs.getString('saved_diaries');
+  if (diariesString != null) {
+    setState(() {
+      _diaries = Map<String, dynamic>.from(json.decode(diariesString));
+    });
+  }
+
+  String? weeklyString = prefs.getString('saved_weekly_schedule');
+  if (weeklyString != null) {
+    setState(() {
+      _weeklySchedule = List<Map<String, dynamic>>.from(json.decode(weeklyString));
+    });
+    for (final t in _weeklySchedule) {
+      if (t['repeatInterval'] != 'بدون تنبيه' && t['scheduled'] != null) {
+        final dt = DateTime.tryParse(t['scheduled'].toString());
+        if (dt != null && dt.isAfter(DateTime.now())) {
+          _scheduleWeeklyAlarm(
+            t['task'].toString(), t['day'].toString(), dt, t['repeatInterval'] ?? 'مرة واحدة',
+            t['advanceReminder'] ?? 'في الموعد', soundUri: t['sound'],
+          );
+        }
+      }
+    }
+  }
+
+  _settings.defaultReminderHour = prefs.getInt('default_reminder_hour') ?? 18;
+  _settings.defaultReminderMinute = prefs.getInt('default_reminder_minute') ?? 0;
+  _settings.voiceLevel = prefs.getString('voice_level') ?? 'متوسط';
+  _settings.greetingEnabled = prefs.getBool('greeting_enabled') ?? true;
+  _settings.adhanAlertEnabled = prefs.getBool('adhan_alert_enabled') ?? true;
+  _settings.showAboveLockScreen = prefs.getBool('show_above_lock_screen') ?? false;
+  _settings.shakeMode = prefs.getString('shake_mode') ?? 'app_open';
+  _settings.muteBeep = prefs.getBool('mute_beep') ?? true;
+  _settings.voiceGender = prefs.getString('voice_gender') ?? 'ذكر';
+  _settings.defaultInterval = prefs.getString('default_interval') ?? 'كل 10 ثواني';
+  _settings.customWakeWord = prefs.getString('custom_wake_word') ?? 'يا سكرتير';
+  _settings.wakeWordMode = prefs.getString('wake_word_mode') ?? 'off';
+  _settings.wakeWordTrigger = prefs.getString('wake_word_trigger') ?? 'both';
+  _settings.useOverlayAlarm = prefs.getBool('use_overlay_alarm') ?? false;
+  _settings.isKidsMode = prefs.getBool('is_kids_mode') ?? false;
+  _settings.customGreeting = prefs.getString('custom_greeting') ?? 'أهلاً بك {user}. أنا {sec} {name}، هُز الهاتف في أي وقت لأكون في خدمتك.';
+  _settings.tahajjudAlertEnabled = prefs.getBool('tahajjud_alert_enabled') ?? false;
+  _settings.isDarkMode = prefs.getBool('is_dark_mode') ?? false;
+  _settings.customImagePath = prefs.getString('custom_secretary_image');
+  _tasbeehCount = prefs.getInt('tasbeeh_count') ?? 0;
+  _playbackVolume = prefs.getDouble('playback_volume') ?? 1.0;
+  _playbackSpeed = prefs.getDouble('playback_speed') ?? 1.0;
+  _ttsVolume = prefs.getDouble('tts_volume') ?? 1.0;
+  
+  for (var item in _tasbeehItems) {
+    _tasbeehSubCounts[item['key']!] = prefs.getInt('tasbeeh_${item['key']}') ?? 0;
+  }
+
+  if (mounted) setState(() {});
+}
+
+Future<void> _saveData() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('saved_tasks', json.encode(_tasks));
+  await prefs.setString('saved_events', json.encode(_specialEvents));
+  await prefs.setString('saved_diaries', json.encode(_diaries));
+  await prefs.setString('saved_weekly_schedule', json.encode(_weeklySchedule));
+}
+
+Future<void> _saveSettings() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt('default_reminder_hour', _settings.defaultReminderHour);
+  await prefs.setInt('default_reminder_minute', _settings.defaultReminderMinute);
+  await prefs.setString('voice_level', _settings.voiceLevel);
+  await prefs.setBool('greeting_enabled', _settings.greetingEnabled);
+  await prefs.setBool('adhan_alert_enabled', _settings.adhanAlertEnabled);
+  await prefs.setBool('show_above_lock_screen', _settings.showAboveLockScreen);
+  await prefs.setString('shake_mode', _settings.shakeMode);
+  await prefs.setBool('mute_beep', _settings.muteBeep);
+  await prefs.setString('voice_gender', _settings.voiceGender);
+  await prefs.setString('default_interval', _settings.defaultInterval);
+  await prefs.setString('custom_wake_word', _settings.customWakeWord);
+  await prefs.setString('wake_word_mode', _settings.wakeWordMode);
+  await prefs.setString('wake_word_trigger', _settings.wakeWordTrigger);
+  await prefs.setBool('use_overlay_alarm', _settings.useOverlayAlarm);
+  await prefs.setBool('is_kids_mode', _settings.isKidsMode);
+  await prefs.setString('custom_greeting', _settings.customGreeting);
+  await prefs.setBool('tahajjud_alert_enabled', _settings.tahajjudAlertEnabled);
+  await prefs.setBool('is_dark_mode', _settings.isDarkMode);
+  if (_settings.customImagePath != null) {
+    await prefs.setString('custom_secretary_image', _settings.customImagePath!);
+  } else {
+    await prefs.remove('custom_secretary_image');
+  }
+  await prefs.setInt('tasbeeh_count', _tasbeehCount);
+  for (var item in _tasbeehItems) {
+    await prefs.setInt('tasbeeh_${item['key']}', _tasbeehSubCounts[item['key']] ?? 0);
+  }
+  await prefs.setDouble('playback_volume', _playbackVolume);
+  await prefs.setDouble('playback_speed', _playbackSpeed);
+  await prefs.setDouble('tts_volume', _ttsVolume);
+}
+
+Future<void> _saveWeeklySchedule() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('saved_weekly_schedule', json.encode(_weeklySchedule));
+}
+
+int _getAdvanceMinutes(String reminder) {
+  switch (reminder) {
+    case 'قبلها بـ 5 دقائق': return 5;
+    case 'قبلها بـ 10 دقائق': return 10;
+    case 'قبلها بـ 15 دقيقة': return 15;
+    case 'قبلها بـ 20 دقيقة': return 20;
+    case 'قبلها بـ 30 دقيقة': return 30;
+    case 'قبلها بـ 45 دقيقة': return 45;
+    case 'قبلها بساعة': return 60;
+    case 'قبلها ب 6 ساعات': return 360;
+    case 'قبلها ب 12 ساعة': return 720;
+    case 'قبلها بـ 24 ساعة': return 1440;
+    default: return 0;
+  }
+}
+
+void _scheduleWeeklyAlarm(String taskTitle, String day, DateTime scheduledDateTime, String interval, String advanceReminder, {String? soundUri}) {
+  int advanceMins = _getAdvanceMinutes(advanceReminder);
+  DateTime alarmTime = scheduledDateTime.subtract(Duration(minutes: advanceMins));
+  _scheduleContinuousAlarm('جدول_${day}_$taskTitle', alarmTime, 'أسبوعي', interval, [day], soundUri: soundUri);
+}
+
+Future<void> _loadRecordings() async {
+  final prefs = await SharedPreferences.getInstance();
+  String? recordingsString = prefs.getString('saved_recordings');
+  if (recordingsString != null) {
+    setState(() {
+      _recordings = List<Map<String, dynamic>>.from(json.decode(recordingsString));
+    });
+  }
+}
+
+Future<void> _saveRecordings() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('saved_recordings', json.encode(_recordings));
+}
+
+Future<void> _startRecording() async {
+  try {
+    if (await _audioRecorder.hasPermission()) {
+      final dir = await getApplicationDocumentsDirectory();
+      final recordingsDir = Directory('${dir.path}/recordings');
+      if (!await recordingsDir.exists()) {
+        await recordingsDir.create(recursive: true);
+      }
+      final fileName = 'rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final path = '${recordingsDir.path}/$fileName';
+
+      const config = RecordConfig(
+        encoder: AudioEncoder.aacLc, bitRate: 128000,
+        sampleRate: 44100, numChannels: 1,
+      );
+      await _audioRecorder.start(config, path: path);
+      setState(() {
+        _isRecording = true;
+        _recordingDuration = Duration.zero;
+      });
+
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
+      });
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في التسجيل: $e')),
+      );
+    }
+  }
+}
+
+Future<void> _stopRecording() async {
+  try {
+    _recordingTimer?.cancel();
+    final path = await _audioRecorder.stop();
+    if (path != null) {
+      final newRecording = {
+        'path': path,
+        'name': 'تسجيل ${_recordings.length + 1}',
+        'duration': _formatDuration(_recordingDuration),
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+      setState(() {
+        _recordings.insert(0, newRecording);
+        _isRecording = false;
+        _recordingDuration = Duration.zero;
+      });
+      await _saveRecordings();
+    }
+  } catch (e) {
+    if (mounted) setState(() => _isRecording = false);
+  }
+}
+
+Future<void> _playRecording(String path) async {
+  try {
+    if (_currentlyPlayingPath == path) {
+      await _audioPlayer.stop();
+      await _positionSub?.cancel();
+      await _durationSub?.cancel();
+      setState(() {
+        _currentlyPlayingPath = null;
+        _currentPosition = Duration.zero;
+        _currentDuration = Duration.zero;
+      });
+    } else {
+      await _audioPlayer.stop();
+      await _positionSub?.cancel();
+      await _durationSub?.cancel();
+
+      _positionSub = _audioPlayer.onPositionChanged.listen((pos) {
+        if (mounted) setState(() => _currentPosition = pos);
+      });
+      _durationSub = _audioPlayer.onDurationChanged.listen((dur) {
+        if (mounted) setState(() => _currentDuration = dur);
+      });
+
+      await _audioPlayer.setVolume(_playbackVolume);
+      await _audioPlayer.setPlaybackRate(_playbackSpeed);
+      await _audioPlayer.play(DeviceFileSource(path));
+      setState(() => _currentlyPlayingPath = path);
+
+      _audioPlayer.onPlayerComplete.listen((_) {
+        if (mounted) {
+          setState(() {
+            _currentlyPlayingPath = null;
+            _currentPosition = Duration.zero;
+            _currentDuration = Duration.zero;
+          });
+        }
+      });
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في التشغيل: $e')),
+      );
+    }
+  }
+}
+
+Future<void> _shareRecording(String path) async {
+  try {
+    final file = File(path);
+    if (await file.exists()) {
+      await Share.shareXFiles([XFile(path)], text: 'تسجيل صوتي');
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في المشاركة: $e')),
+      );
+    }
+  }
+}
+
+Future<void> _deleteRecording(int index) async {
+  try {
+    final path = _recordings[index]['path'].toString();
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+    }
+    setState(() {
+      _recordings.removeAt(index);
+    });
+    await _saveRecordings();
+  } catch (_) {}
+}
+
+void _renameRecording(int index) {
+  TextEditingController nameCtrl = TextEditingController(text: _recordings[index]['name'].toString());
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      title: const Text('إعادة تسمية التسجيل', style: TextStyle(fontWeight: FontWeight.bold)),
+      content: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'الاسم الجديد')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+          onPressed: () {
+            if (nameCtrl.text.isNotEmpty) {
+              setState(() {
+                _recordings[index]['name'] = nameCtrl.text;
+              });
+              _saveRecordings();
+              Navigator.pop(ctx);
+            }
+          },
+          child: const Text('حفظ', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
+}
+
+@override
+void dispose() {
+  WidgetsBinding.instance.removeObserver(this);
+  _eventRepeatTimer?.cancel();
+  _accelerometerSub?.cancel();
+  _adhanTimer?.cancel();
+  _recordingTimer?.cancel();
+  _positionSub?.cancel();
+  _durationSub?.cancel();
+  _pendingActionTimer?.cancel();
+  _audioRecorder.dispose();
+  _audioPlayer.dispose();
+  for (var timer in _activeTimers) {
+    timer.cancel();
+  }
+  _speech.cancel();
+  super.dispose();
+}
+
+Future<void> _configureVoice({bool skipGreeting = false}) async {
+  try {
+    await _tts.setLanguage("ar-EG");
+    await _tts.awaitSpeakCompletion(true);
+    await Future.delayed(const Duration(milliseconds: 150));
+  } catch (_) {}
+
+  final prefs = await SharedPreferences.getInstance();
+  final gender = prefs.getString('voice_gender') ?? _settings.voiceGender;
+
+  try {
+    final voices = await _getArabicVoices();
+    if (voices.isNotEmpty) {
+      await _tts.setVoice({
+        'name': voices.first['name']!,
+        'locale': voices.first['locale']!,
+      });
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+  } catch (_) {}
+
+  try {
+    if (gender == 'ذكر') {
+      await _tts.setPitch(0.6);
+      await _tts.setSpeechRate(_settings.speechRate);
+      await _tts.setVolume(1.0);
+    } else {
+      await _tts.setPitch(1.15);
+      await _tts.setSpeechRate(_settings.speechRate);
+      await _tts.setVolume(_settings.speechVolume * _ttsVolume);
+    }
+
+    if (!skipGreeting && _settings.greetingEnabled) {
+      String greeting = _settings.customGreeting
+          .replaceAll('{user}', _userTitle)
+          .replaceAll('{sec}', _secWord)
+          .replaceAll('{name}', _secretaryName);
+      if (_settings.isKidsMode) greeting = "أهلاً يا بطل! أنا صديقك $_secWord، هنساعدك نلعب ونتعلم مع بعض.";
+      await _tts.speak(greeting);
+    }
+  } catch (_) {}
+}
+
+Future<List<Map<String, String>>> _getArabicVoices() async {
+  try {
+    final voices = await _tts.getVoices;
+    if (voices is! List) return [];
+    final list = <Map<String, String>>[];
+    for (final v in voices) {
+      if (v is! Map) continue;
+      final name = v['name']?.toString() ?? '';
+      final locale = v['locale']?.toString() ?? '';
+      if (locale.toLowerCase().startsWith('ar') && name.isNotEmpty) {
+        list.add({'name': name, 'locale': locale});
+      }
+    }
+    return list;
+  } catch (_) {
+    return [];
+  }
+}
+
+Future<void> _speak(String text) async {
+  if (_settings.wakeWordMode != 'off') {
+    try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
+    if (_isWakeWordListening) {
+      try { await _speech.stop(); } catch (_) {}
+      _isWakeWordListening = false;
+    }
+  }
+
+  try {
+    final gender = _settings.voiceGender;
+    if (gender == 'ذكر') {
+      await _tts.setPitch(0.6);
+      await _tts.setSpeechRate(_settings.speechRate);
+      await _tts.setVolume(1.0);
+    } else {
+      await _tts.setPitch(1.15);
+      await _tts.setSpeechRate(_settings.speechRate);
+      await _tts.setVolume(_settings.speechVolume * _ttsVolume);
+    }
+    await _tts.speak(text);
+  } catch (e) {
+    debugPrint("TTS Error: $e");
+  }
+
+  if (_settings.wakeWordMode != 'off') {
+    Future.delayed(const Duration(seconds: 1), () {
+      try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+      if (!_isListening && !_isInBackground) _startWakeWordLoop();
+    });
+  }
+}
+
+Future<void> _listenVoiceCommand() async {
+  if (_isListening) {
+    await _speech.stop();
+    if (mounted) setState(() => _isListening = false);
+    try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+    return;
+  }
+  if (_starting) return;
+  _starting = true;
+  try {
+    if (!_speechReady) await _initSpeech();
+    if (!_speechReady) return;
+
+    try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
+
+    await _tts.stop();
+    try { await _speech.cancel(); } catch (_) {}
+    
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    if (mounted) {
+      setState(() => _isListening = true);
+      if (!_isTasbeehMode) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎤 التطبيق بيستمع ليك دلوقتي...', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+            duration: Duration(seconds: 2),
+            backgroundColor: Color(0xFF1B2A4A),
+          ),
+        );
+      }
+    }
+
+    bool hasFinishedTasbeeh = false;
+
+    await _speech.listen(
+      localeId: "ar-EG", onDevice: false,
+      listenFor: const Duration(seconds: 60), pauseFor: const Duration(seconds: 10),
+      partialResults: true,
+      onResult: (val) {
+        if (_isTasbeehMode) {
+          if (val.finalResult && !hasFinishedTasbeeh) {
+            hasFinishedTasbeeh = true; 
+            _handleTasbeehResult(val.recognizedWords);
+            Future.delayed(const Duration(milliseconds: 300), () {
+              if (mounted && _isTasbeehMode) _listenVoiceCommand();
+            });
+          }
+        } else {
           if (val.finalResult) {
             if (mounted) setState(() => _isListening = false);
             if (_settings.wakeWordMode != 'off') {
@@ -2846,87 +2980,88 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             }
             _processSmartVoiceCommand(val.recognizedWords);
           }
-        },
-      );
-    } catch (e) {
-      debugPrint("Listen Error: $e");
-      if (mounted) setState(() => _isListening = false);
-      if (_settings.wakeWordMode != 'off') {
-        try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-      }
-    } finally {
-      _starting = false;
-    }
-  }
-
-  Future<void> _startWakeWordLoop() async {
-    if (_settings.wakeWordMode == 'off') return;
-    if (_isListening || _starting || _isRecording) return;
-    if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
-
-    _isWakeWordListening = true;
-    try {
-      await _speech.listen(
-        localeId: "ar-EG",
-        onDevice: false,
-        listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 60),
-        partialResults: true,
-        onResult: (val) {
-          if (val.recognizedWords.isEmpty) return;
-          
-          final compact = _norm(val.recognizedWords).replaceAll(RegExp(r'\s+'), '');
-          final nameCompact = _norm(_secretaryName).replaceAll(RegExp(r'\s+'), '');
-          final customCompact = _norm(_settings.customWakeWord).replaceAll(RegExp(r'\s+'), '');
-          final isGenericMatch = compact.contains('ياسكرتير') || compact.contains('ياسكرتيره') || compact.contains('ياسكرتيرة');
-          
-          bool isTriggered = false;
-          if (_settings.wakeWordTrigger == 'name_only') {
-            isTriggered = (nameCompact.isNotEmpty && compact.contains(nameCompact)) || isGenericMatch;
-          } else if (_settings.wakeWordTrigger == 'custom_only') {
-            isTriggered = customCompact.isNotEmpty && compact.contains(customCompact);
-          } else {
-            isTriggered = (nameCompact.isNotEmpty && compact.contains(nameCompact)) || 
-                          (customCompact.isNotEmpty && compact.contains(customCompact)) || 
-                          isGenericMatch;
-          }
-
-          if (isTriggered) {
-            _isWakeWordListening = false;
-            _speech.stop();
-            _listenVoiceCommand();
-          }
-        },
-      );
-      
-      _isWakeWordListening = false;
-      if (mounted && !_isListening && !_starting && !_isRecording && _settings.wakeWordMode != 'off') {
-        if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
-          Future.delayed(const Duration(milliseconds: 200), () {
-            if (mounted && !_isListening && !_starting && !_isRecording) {
-               _startWakeWordLoop();
-            }
-          });
         }
-      }
-    } catch (e) {
-      _isWakeWordListening = false;
-      debugPrint("WakeWord Error: $e");
-      if (mounted && _settings.wakeWordMode != 'off') {
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted && !_isListening && !_starting && !_isRecording && (!_isInBackground || _settings.wakeWordMode != 'app_open')) {
-            _startWakeWordLoop();
+      },
+    );
+  } catch (e) {
+    debugPrint("Listen Error: $e");
+    if (mounted) setState(() => _isListening = false);
+    if (_settings.wakeWordMode != 'off') {
+      try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+    }
+  } finally {
+    _starting = false;
+  }
+}
+
+Future<void> _startWakeWordLoop() async {
+  if (_settings.wakeWordMode == 'off') return;
+  if (_isListening || _starting || _isRecording) return;
+  if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
+
+  _isWakeWordListening = true;
+  try {
+    await _speech.listen(
+      localeId: "ar-EG",
+      onDevice: false,
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 60),
+      partialResults: true,
+      onResult: (val) {
+        if (val.recognizedWords.isEmpty) return;
+        
+        final compact = _norm(val.recognizedWords).replaceAll(RegExp(r'\s+'), '');
+        final nameCompact = _norm(_secretaryName).replaceAll(RegExp(r'\s+'), '');
+        final customCompact = _norm(_settings.customWakeWord).replaceAll(RegExp(r'\s+'), '');
+        final isGenericMatch = compact.contains('ياسكرتير') || compact.contains('ياسكرتيره') || compact.contains('ياسكرتيرة');
+        
+        bool isTriggered = false;
+        if (_settings.wakeWordTrigger == 'name_only') {
+          isTriggered = (nameCompact.isNotEmpty && compact.contains(nameCompact)) || isGenericMatch;
+        } else if (_settings.wakeWordTrigger == 'custom_only') {
+          isTriggered = customCompact.isNotEmpty && compact.contains(customCompact);
+        } else {
+          isTriggered = (nameCompact.isNotEmpty && compact.contains(nameCompact)) || 
+                        (customCompact.isNotEmpty && compact.contains(customCompact)) || 
+                        isGenericMatch;
+        }
+
+        if (isTriggered) {
+          _isWakeWordListening = false;
+          _speech.stop();
+          _listenVoiceCommand();
+        }
+      },
+    );
+    
+    _isWakeWordListening = false;
+    if (mounted && !_isListening && !_starting && !_isRecording && _settings.wakeWordMode != 'off') {
+      if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted && !_isListening && !_starting && !_isRecording) {
+             _startWakeWordLoop();
           }
         });
       }
     }
+  } catch (e) {
+    _isWakeWordListening = false;
+    debugPrint("WakeWord Error: $e");
+    if (mounted && _settings.wakeWordMode != 'off') {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && !_isListening && !_starting && !_isRecording && (!_isInBackground || _settings.wakeWordMode != 'app_open')) {
+          _startWakeWordLoop();
+        }
+      });
+    }
   }
-  Future<bool> _handleSocialReply(String cmd) async {
+}
+
+Future<bool> _handleSocialReply(String cmd) async {
   final userTitle = _userTitle;
   final secTitle = _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
   final now = DateTime.now();
 
-  // 👈 الردود الدينية (زودنا مترادفات)
   if (_hasAny(cmd, ['اطول ايه في القران', 'أطول آية', 'اطول سورة', 'أطول سورة'])) {
     await _speak("أطول آية في القرآن هي آية الدَّين في سورة البقرة، وعدد كلماتها 128 كلمة $userTitle.");
     return true;
@@ -2944,7 +3079,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return true;
   }
 
-  // 👈 عداد التسبيح
   if (_hasAny(cmd, ['سبحان الله', 'استغفر الله', 'الحمد لله', 'الله اكبر', 'لا اله الا الله', 'سبحان الله وبحمده'])) {
     setState(() => _tasbeehCount++);
     final prefs = await SharedPreferences.getInstance();
@@ -2957,7 +3091,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return true;
   }
 
-  // 👈 تحيات الصباح والمساء (زودنا مترادفات)
   if (_hasAny(cmd, ['صباح الخير', 'صباح النور', 'صباح الفل', 'صباحو', 'صبح صباح الخير', 'صباح الخيرات', 'صباح الورد', 'صباح العسل'])) {
     await _speak("صباح النور والسرور $userTitle ☀️ أتمنى لك يوم سعيد! النهاردة يوم جديد وفرصة جديدة.");
     return true;
@@ -2992,7 +3125,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return true;
   }
 
-  // 👈 الدعم النفسي (مع مراعاة النوع)
   if (_hasAny(cmd, ['تعبان', 'تعبانة', 'مش كويس', 'مش كويسة', 'مضايق', 'مضايقة', 'زعلان', 'زعلانة', 'حزين', 'حزينة', 'مش قادر', 'مش قادرة', 'مخنوق', 'مخنوقة'])) {
     await _speak("ألف سلامة عليك $userTitle، $_takeCareWord بالك من نفسك. $_youWant أفتحلك يومياتك تكتب فيها أو أحجزلك موعد، أنا تحت أمرك 💚.");
     return true;
@@ -3041,7 +3173,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return true;
   }
 
-  // 👈 النكت (مترادفات أكتر)
   if (_hasAny(cmd, ['نكته', 'نكتة', 'ضحكني', 'قولي نكته', 'اضحكني', 'حاجة تضحك', 'هزار', 'ضحكة', 'فشخرة', 'نكت'])) {
     final jokes = [
       "المدرس قال للطالب: لو معاك 10 جنيه وخدت منهم 5 جنيه، فاضلك كام؟ الطالب رد وقاله: خناقة كبيرة يا أستاذ! 😂",
@@ -3055,7 +3186,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return true;
   }
 
-  // 👈 الألغاز (مترادفات أكتر)
   if (_hasAny(cmd, ['لغز', 'الغاز', 'ألغاز', 'حزورة', 'حزازير', 'شغل دماغك', 'اسألني لغز', 'فزورة', 'فزازير', 'شغل مخك'])) {
     final riddles = [
       "شيء موجود في السماء، إذا أضفت إليه حرفاً واحداً أصبح في الأرض. فما هو؟",
@@ -3123,8 +3253,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   
   return false;
 }
-
-DateTime? _parseDiaryDate(String cmd) {
+  DateTime? _parseDiaryDate(String cmd) {
   final now = DateTime.now();
   if (cmd.contains('النهاردة') || cmd.contains('النهارده') || cmd.contains('اليوم')) return now;
   if (cmd.contains('اول امبارح') || cmd.contains('أول امبارح') || cmd.contains('قبل امبارح')) return now.subtract(const Duration(days: 2));
@@ -3204,7 +3333,6 @@ String _parseIntervalType(String cmd) {
 List<String> _extractWeeklyDaysFromCmd(String cmd) {
   final result = <String>[];
   
-  // 👈 التعديل الجديد: لو قال "النهاردة" أو "بكرة"
   if (_hasAny(cmd, ['النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم'])) {
     result.add(_weekDays[(DateTime.now().weekday) % 7]);
   }
@@ -3237,6 +3365,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     'الساعة', 'ساعة', 'الساعه', 'صباحا', 'صباحاً', 'مساء', 'مساءً',
     'الصبح', 'بالليل', 'الليل',
     'لي', 'لى', 'بكام', 'لحد',
+    'بصوت', 'بنغمة', 'نغمة', 'صوت', 'مرعب', 'ايفون', 'آيفون', 'مشهور', 'صحيان', 'قوي', 'السكرتير', 'السكرتيرة', 'الافتراضي'
   };
   for (final day in _weekDays) {
     stripRaw.add(day);
@@ -3282,7 +3411,87 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
   final nameNorm = _norm(_secretaryName);
   bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('يا سكرتيرة');
 
-  // 1. إيقاف المنبه
+  if (_pendingVoiceAction == 'confirm_time_conflict') {
+    _pendingActionTimer?.cancel();
+    if (_hasAny(cmd, ['احفظ', 'حفظ', 'احفظهم', 'خليهم', 'سيبهم', 'موافق', 'ايوه', 'أيوة', 'تمام', 'ماشي', 'احفظهم الاتنين'])) {
+      _handleConflictResolution(true);
+    } else {
+      _handleConflictResolution(false);
+    }
+    return;
+  }
+
+  if (_hasAny(cmd, ['خلاص', 'إلغاء', 'الغي', 'كفاية', 'كفايه'])) {
+    if (_pendingVoiceAction != null) {
+      _pendingVoiceAction = null;
+      _pendingRawCommand = null;
+      _pendingActionTimer?.cancel();
+      await _speak("تمام $userTitle، لغيت الأمر.");
+      return;
+    }
+  }
+
+  if (_pendingVoiceAction != null && _pendingRawCommand != null) {
+    final combined = '$_pendingRawCommand $rawCommand';
+    final action = _pendingVoiceAction;
+    _pendingVoiceAction = null;
+    _pendingRawCommand = null;
+    _pendingActionTimer?.cancel();
+
+    if (action == 'alarm_time') {
+      await _createAlarmFromVoice(combined, _norm(combined));
+      return;
+    } else if (action == 'weekly_day' || action == 'weekly_time') {
+      await _createWeeklyAlarmFromVoice(combined, _norm(combined));
+      return;
+    }
+  }
+
+  if (cmd.contains('يوميات') || cmd.contains('يومية') || cmd.contains('مفكرة')) {
+    if (_DiaryPageState.activeInstance != null) {
+      if (_hasAny(cmd, ['ضيف مهمة', 'ضيفي مهمة', 'حط مهمة', 'أضف مهمة', 'ضيفلي مهمة', 'ضيفيلي مهمة'])) {
+        final text = rawCommand.replaceAll(RegExp(r'(ضيف|ضيفي|حط|أضف|ضيفلي|ضيفيلي|مهمة|في|يومية|اليوميات|مفكرة|يا سكرتير|يا سكرتيرة)'), '').trim();
+        _diaryVoiceStream.add({'action': 'add_todo', 'text': text.isEmpty ? 'مهمة جديدة' : text});
+        await _speak("تمام $userTitle، ضفت المهمة في اليومية.");
+        return;
+      }
+      if (_hasAny(cmd, ['خلصت رقم', 'عملت رقم', 'تم رقم', 'done رقم'])) {
+        final m = RegExp(r'رقم\s*(\d+)').firstMatch(rawCommand);
+        if (m != null) {
+          final idx = int.parse(m.group(1)!) - 1;
+          _diaryVoiceStream.add({'action': 'mark_done', 'index': idx});
+          await _speak("تمام $userTitle، علمت على المهمة رقم ${idx + 1}.");
+          return;
+        }
+      }
+      if (_hasAny(cmd, ['ضيف صورة', 'ضيفي صورة', 'أضف صورة'])) {
+        _diaryVoiceStream.add({'action': 'add_image'});
+        await _speak("اختار الصورة يا $userTitle.");
+        return;
+      }
+      if (_hasAny(cmd, ['سجل صوت', 'سجلي صوت', 'ابدأ تسجيل'])) {
+        _diaryVoiceStream.add({'action': 'record_audio'});
+        await _speak("بدأت التسجيل يا $userTitle.");
+        return;
+      }
+      if (_hasAny(cmd, ['وقف تسجيل', 'وقفي تسجيل', 'خلصت تسجيل'])) {
+        _diaryVoiceStream.add({'action': 'record_audio'});
+        await _speak("تم إيقاف التسجيل.");
+        return;
+      }
+    }
+
+    final requestedDate = _parseDiaryDate(cmd);
+    if (requestedDate != null) {
+      _openDiaryPage(requestedDate);
+      await _speak("تم فتح يومية ${DateFormat('EEEE، dd MMMM', 'ar').format(requestedDate)} $userTitle.");
+    } else {
+      setState(() => _currentIndex = 1);
+      await _speak("تم فتح قسم اليوميات $userTitle، اختار اليوم اللي تحبه.");
+    }
+    return;
+  }
+
   if (_hasAny(cmd, ['خلاص', 'صحيت', 'صحيتي', 'قومت', 'قومتي', 'فوقت', 'فوقتي', 'اقفل', 'اقفلي', 'كفاية', 'كفايه', 'إيقاف', 'ايقاف', 'إلغاء', 'الغي', 'بس'])) {
     if (_isAlarmDialogOpen) {
       _activeAlarmLoopTimer?.cancel();
@@ -3331,7 +3540,6 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
     }
   }
 
-  // 2. التأجيل (Snooze) بالصوت (مع الحفاظ على التكرار)
   if (_hasAny(cmd, [
     'فكرني', 'أجله', 'أجلي', 'صحيني', 'نومة', 'قيلولة', 'استنى', 'استني',
     '5 دقايق', 'خمس دقايق', '10 دقايق', 'عشر دقايق', 'عشر دقائق',
@@ -3354,7 +3562,6 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
       final snoozeTime = DateTime.now().add(Duration(minutes: minutes));
       final snoozeTimestamp = DateTime.now().millisecondsSinceEpoch;
 
-      // 1. جدولة منبه التأجيل (بـ ID مميز عشان ميمسحش التكرار)
       _scheduleContinuousAlarm(
         originalTitle,
         snoozeTime,
@@ -3365,7 +3572,6 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
         customNotificationId: snoozeTimestamp + 1000000,
       );
 
-      // 2. الحفاظ على تكرار المنبه الأصلي
       if (_activeAlarmRepeat != null && _activeAlarmRepeat != 'مرة واحدة' && _activeAlarmScheduledTime != null) {
         _rescheduleRepeating(
           originalTitle,
@@ -3377,7 +3583,6 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
         );
       }
 
-      // 3. إغلاق النافذة وإيقاف الصوت
       if (_isAlarmDialogOpen) {
          _activeAlarmLoopTimer?.cancel();
          _tts.stop();
@@ -3394,7 +3599,6 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
     }
   }
 
-  // 3. وضع التركيز
   if (_hasAny(cmd, ['وضع التركيز', 'فوكس', 'ركز معايا'])) {
     setState(() => _settings.wakeWordMode = 'off');
     await _saveSettings();
@@ -3403,7 +3607,6 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
     return;
   }
 
-  // 4. أوامر وضع التسبيح
   if (_hasAny(cmd, ['وضع التسبيح', 'افتحي التسبيح', 'افتح التسبيح', 'ابدأ التسبيح'])) {
     setState(() {
       _currentIndex = 2;
@@ -3422,18 +3625,22 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
   }
 
   if (_hasAny(cmd, ['صفري', 'امسحي العداد', 'امسحي التسبيح', 'صفر العداد'])) {
-    setState(() => _tasbeehCount = 0);
+    setState(() {
+      _tasbeehCount = 0; 
+      _tasbeehSubCounts.clear();
+    });
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('tasbeeh_count', 0);
-    await _speak("تم تصفير العداد $userTitle.");
+    for (var item in _tasbeehItems) {
+      await prefs.setInt('tasbeeh_${item['key']}', 0);
+    }
+    await _speak("تم تصفير كل العدادات $userTitle.");
     return;
   }
 
   if (_hasAny(cmd, ['سبحان الله', 'الحمد لله', 'الله اكبر', 'لا اله الا الله'])) {
     if (_isTasbeehMode) {
-      setState(() => _tasbeehCount++);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('tasbeeh_count', _tasbeehCount);
+      _handleTasbeehResult(rawCommand);
       return; 
     } else {
       setState(() => _tasbeehCount++);
@@ -3446,17 +3653,6 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
 
   if (await _handleSocialReply(cmd)) return;
 
-  // 5. اليوميات
-  if ((cmd.contains('اقرا') || cmd.contains('اقرالي') || cmd.contains('اقرأيلي')) && cmd.contains('يوميات')) {
-    final key = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final diaryData = _diaries[key];
-    if (diaryData == null || diaryData['text'] == null || diaryData['text'].toString().isEmpty) {
-      await _speak("مفيش يوميات مكتوبة النهاردة $userTitle");
-    } else {
-      await _speak("يومياتك النهاردة: ${diaryData['text']}");
-    }
-    return;
-  }
   if (cmd.contains('اكتب') && cmd.contains('يوميات')) {
     if (mounted) _openDiaryPage(DateTime.now());
     await _speak("اتفضل $userTitle، اكتب يومياتك");
@@ -3691,7 +3887,8 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
     await _listTodayTasks();
     return;
   }
-    final alarmKeywords = [
+  
+  final alarmKeywords = [
     "فكرني", "فكريني", "فكروني", "فكرنى", "تفكرني", "تفكريني", "هتفكرني", "هتفكريني",
     "افتكرني", "افتكريني", "افتكرلي", "افتكرى لي", "هفتكرك",
     "ذكرني", "ذكريني", "ذكروني", "ذكرنى", "تذكرني", "تذكريني", "هتذكرني", "هتذكريني",
@@ -4047,17 +4244,57 @@ Future<void> _editWeeklyTaskByVoice(String rawCommand, String cmd) async {
   }
 }
 
+String? _parseSoundFromVoice(String cmd) {
+  if (_hasAny(cmd, ['صوت السكرتير', 'صوت السكرتيرة', 'الافتراضي', 'صوت عادي', 'من غير نغمة', 'صوتك'])) return 'secretary';
+  if (_hasAny(cmd, ['مرعب 1', 'مرعب واحد', 'رعب 1'])) return 'raw://alarm_scary1';
+  if (_hasAny(cmd, ['مرعب 2', 'مرعب اتنين', 'رعب 2'])) return 'raw://alarm_scary2';
+  if (_hasAny(cmd, ['ايفون', 'آيفون', 'iphone'])) return 'raw://alarm_iphone';
+  if (_hasAny(cmd, ['مشهور 1', 'مشهور واحد'])) return 'raw://alarm_famous1';
+  if (_hasAny(cmd, ['مشهور 2', 'مشهور اتنين'])) return 'raw://alarm_famous2';
+  if (_hasAny(cmd, ['صحيان قوي 1', 'صحيان قوي واحد', 'قوي 1'])) return 'raw://alarm_loud1';
+  if (_hasAny(cmd, ['صحيان قوي 2', 'صحيان قوي اتنين', 'قوي 2'])) return 'raw://alarm_loud2';
+  return 'use_default';
+}
+
+String _getSoundName(String? uri) {
+  if (uri == null) return 'صوت السكرتير';
+  if (uri.contains('scary1')) return 'نغمة مرعب 1';
+  if (uri.contains('scary2')) return 'نغمة مرعب 2';
+  if (uri.contains('iphone')) return 'نغمة آيفون';
+  if (uri.contains('famous1')) return 'نغمة مشهور 1';
+  if (uri.contains('famous2')) return 'نغمة مشهور 2';
+  if (uri.contains('loud1')) return 'نغمة صحيان قوي 1';
+  if (uri.contains('loud2')) return 'نغمة صحيان قوي 2';
+  return 'نغمة مخصصة';
+}
+
 Future<void> _createWeeklyAlarmFromVoice(String rawCommand, String cmd) async {
   final userTitle = _userTitle;
   final days = _extractWeeklyDaysFromCmd(cmd);
   if (days.isEmpty) {
+    _pendingVoiceAction = 'weekly_day';
+    _pendingRawCommand = rawCommand;
+    _pendingActionTimer?.cancel();
+    _pendingActionTimer = Timer(const Duration(seconds: 15), () {
+      _pendingVoiceAction = null;
+      _pendingRawCommand = null;
+    });
     await _speak("قوللي أنهي يوم في الأسبوع $userTitle؟");
+    _listenVoiceCommand();
     return;
   }
 
   final parsedHour = _parseHour(cmd);
   if (parsedHour == null) {
+    _pendingVoiceAction = 'weekly_time';
+    _pendingRawCommand = rawCommand;
+    _pendingActionTimer?.cancel();
+    _pendingActionTimer = Timer(const Duration(seconds: 15), () {
+      _pendingVoiceAction = null;
+      _pendingRawCommand = null;
+    });
     await _speak("في أي ساعة $userTitle؟");
+    _listenVoiceCommand();
     return;
   }
   var hour = parsedHour;
@@ -4066,6 +4303,14 @@ Future<void> _createWeeklyAlarmFromVoice(String rawCommand, String cmd) async {
   if (hour < 12 && isEvening) hour += 12;
 
   final intervalType = _parseIntervalType(cmd);
+  
+  var selectedSound = _parseSoundFromVoice(cmd);
+  if (selectedSound == 'use_default') {
+    final prefs = await SharedPreferences.getInstance();
+    selectedSound = prefs.getString('default_weekly_sound') ?? prefs.getString('default_alarm_sound');
+  } else if (selectedSound == 'secretary') {
+    selectedSound = null;
+  }
 
   String taskName = _extractWeeklyTaskName(rawCommand);
   if (taskName.isEmpty) taskName = 'موعد أسبوعي';
@@ -4092,12 +4337,12 @@ Future<void> _createWeeklyAlarmFromVoice(String rawCommand, String cmd) async {
         'scheduled': scheduledDateTime.toIso8601String(),
         'repeatInterval': intervalType,
         'advanceReminder': 'في الموعد',
-        'sound': null,
+        'sound': selectedSound,
       });
     });
 
     if (intervalType != 'بدون تنبيه') {
-      _scheduleWeeklyAlarm(taskName, day, scheduledDateTime, intervalType, 'في الموعد');
+      _scheduleWeeklyAlarm(taskName, day, scheduledDateTime, intervalType, 'في الموعد', soundUri: selectedSound);
     }
     successDays.add(day);
   }
@@ -4108,8 +4353,10 @@ Future<void> _createWeeklyAlarmFromVoice(String rawCommand, String cmd) async {
   final periodText = hour >= 12 ? 'مساءً' : 'صباحاً';
   String daysText = successDays.join('، ');
   if (successDays.length == 7) daysText = "كل أيام الأسبوع";
+  
+  final soundText = selectedSound == null ? "بصوت السكرتير" : "على ${_getSoundName(selectedSound)}";
 
-  await _speak("تمت الإضافة $userTitle! $taskName في أيام: $daysText الساعة $h12 $periodText.");
+  await _speak("تمت الإضافة $userTitle! $taskName في أيام: $daysText الساعة $h12 $periodText، $soundText.");
 }
 
 Future<void> _deleteTaskByVoice(String cmd) async {
@@ -4242,7 +4489,15 @@ Future<void> _createAlarmFromVoice(String rawCommand, String cmd) async {
   }
   final parsedHour = _parseHour(cmd);
   if (parsedHour == null) {
+    _pendingVoiceAction = 'alarm_time';
+    _pendingRawCommand = rawCommand;
+    _pendingActionTimer?.cancel();
+    _pendingActionTimer = Timer(const Duration(seconds: 15), () {
+      _pendingVoiceAction = null;
+      _pendingRawCommand = null;
+    });
     await _speak("في أي ساعة $userTitle؟");
+    _listenVoiceCommand();
     return;
   }
   var hour = parsedHour;
@@ -4268,6 +4523,14 @@ Future<void> _createAlarmFromVoice(String rawCommand, String cmd) async {
   final repeatType = _parseRepeatType(cmd);
   final intervalType = _parseIntervalType(cmd);
   final customDays = _parseCustomDays(cmd);
+  
+  var selectedSound = _parseSoundFromVoice(cmd);
+  if (selectedSound == 'use_default') {
+    final prefs = await SharedPreferences.getInstance();
+    selectedSound = prefs.getString('default_alarm_sound');
+  } else if (selectedSound == 'secretary') {
+    selectedSound = null;
+  }
 
   final strip = <String>{
     'اظبطلي', 'اضبطلي', 'اظبطيلي', 'اضبطيلي', 'اظبط', 'اضبط', 'اظبطي', 'اضبطي',
@@ -4306,7 +4569,8 @@ Future<void> _createAlarmFromVoice(String rawCommand, String cmd) async {
     'عاوز اضيف', 'عاوز أضيف', 'عاوزة اضيف', 'عاوزة أضيف',
     'يوم السبت', 'يوم الاحد', 'يوم الأحد', 'يوم الاتنين', 'يوم الاثنين',
     'يوم التلات', 'يوم الثلاثاء', 'يوم الاربع', 'يوم الأربعاء',
-    'يوم الخميس', 'يوم الجمعه', 'يوم الجمعة', 'يوم الحد'
+    'يوم الخميس', 'يوم الجمعه', 'يوم الجمعة', 'يوم الحد',
+    'بصوت', 'بنغمة', 'نغمة', 'صوت', 'مرعب', 'ايفون', 'آيفون', 'مشهور', 'صحيان', 'قوي', 'السكرتير', 'السكرتيرة', 'الافتراضي'
   };
   final nameNorm = _norm(_secretaryName);
   final kept = <String>[];
@@ -4336,11 +4600,11 @@ Future<void> _createAlarmFromVoice(String rawCommand, String cmd) async {
       'date': formattedDate, 'task': cleanTitle, 'time': formattedTime,
       'alarm': true, 'scheduled': scheduled.toIso8601String(),
       'repeat': repeatType, 'repeatInterval': intervalType, 'customDays': customDays,
-      'sound': null,
+      'sound': selectedSound,
     });
   });
   _saveData();
-  _scheduleContinuousAlarm(cleanTitle, scheduled, repeatType, intervalType, customDays);
+  _scheduleContinuousAlarm(cleanTitle, scheduled, repeatType, intervalType, customDays, soundUri: selectedSound);
 
   final h12 = scheduled.hour % 12 == 0 ? 12 : scheduled.hour % 12;
   final minuteText = scheduled.minute > 0 ? ' و ${scheduled.minute} دقيقة' : '';
@@ -4356,10 +4620,11 @@ Future<void> _createAlarmFromVoice(String rawCommand, String cmd) async {
   if (intervalType != 'بدون تنبيه') {
     intervalText = '، والتنبيه المستمر $intervalType';
   }
-  await _speak("تم التنفيذ $userTitle! تم تسجيل: $cleanTitle، الساعة $h12$minuteText $periodText$repeatText$intervalText.");
-}
+  final soundText = selectedSound == null ? "بصوت السكرتير" : "على ${_getSoundName(selectedSound)}";
 
-int _getIntervalSeconds(String interval) {
+  await _speak("تم التنفيذ $userTitle! تم تسجيل: $cleanTitle، الساعة $h12$minuteText $periodText$repeatText$intervalText، $soundText.");
+}
+  int _getIntervalSeconds(String interval) {
   switch (interval) {
     case 'مرة واحدة': return 0;
     case 'كل 10 ثواني': return 10;
@@ -4958,7 +5223,7 @@ void _openSettingsScreen() {
         ttsVolume: _ttsVolume,
         currentSecretaryName: _secretaryName,
         currentIsUserMale: _isUserMale,
-        onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeBg, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger, muteBeep, useOverlayAlarm, isKidsMode, customGreeting, tahajjudAlertEnabled, isDarkMode, customImagePath) async {
+        onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeMode, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger, muteBeep, useOverlayAlarm, isKidsMode, customGreeting, tahajjudAlertEnabled, isDarkMode, customImagePath) async {
           setState(() {
             _settings.defaultReminderHour = hour;
             _settings.defaultReminderMinute = minute;
@@ -4967,7 +5232,7 @@ void _openSettingsScreen() {
             _settings.adhanAlertEnabled = adhan;
             _ttsVolume = ttsVol;
             _settings.showAboveLockScreen = showLock;
-            _settings.shakeInBackgroundEnabled = shakeBg;
+            _settings.shakeMode = shakeMode;
             _settings.muteBeep = muteBeep;
             _settings.voiceGender = voiceGender;
             _settings.defaultInterval = defaultInterval;
@@ -5003,6 +5268,10 @@ void _openSettingsScreen() {
             } else {
               try { await _wakeWordChannel.invokeMethod('startWakeWord'); } catch (_) {}
             }
+
+            // إعادة تهيئة الهز بعد التعديل
+            _initShakeDetector();
+
           } catch (_) {}
         },
         onSaveSecretary: (name, voiceGender) async {
@@ -5165,13 +5434,11 @@ Future<void> _showTaskDialog({int? taskIndex}) async {
                   selectedTime.hour, selectedTime.minute,
                 ).subtract(Duration(minutes: advanceMins));
                 
-                // 👈 التعديل: منع حفظ موعد في وقت فات
                 if (scheduledDateTime.isBefore(DateTime.now())) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ الموعد فات! اختر وقت مستقبلي'), backgroundColor: Colors.red));
                   return;
                 }
 
-                // 👈 التعديل: التحقق من وجود موعد في نفس الوقت
                 final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
                 final formattedTime = selectedTime.format(context);
                 final existingConflict = _tasks.any((t) => 
@@ -5183,6 +5450,59 @@ Future<void> _showTaskDialog({int? taskIndex}) async {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('⚠️ تنبيه: يوجد موعد آخر في نفس الوقت!'), backgroundColor: Colors.amber, duration: Duration(seconds: 3)),
                   );
+
+                  _pendingConflictTaskData = {
+                    'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
+                    'task': taskCtrl.text,
+                    'time': selectedInterval == 'بدون تنبيه' ? 'بدون تنبيه' : selectedTime.format(context),
+                    'alarm': selectedInterval != 'بدون تنبيه',
+                    'scheduled': scheduledDateTime.toIso8601String(),
+                    'repeat': selectedRepeat,
+                    'repeatInterval': selectedInterval,
+                    'customDays': selectedDays,
+                    'sound': selectedSound,
+                    'advanceReminder': selectedAdvanceReminder,
+                  };
+                  _pendingConflictTaskIndex = taskIndex;
+                  _pendingVoiceAction = 'confirm_time_conflict';
+                  
+                  Navigator.pop(ctx);
+
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (conflictCtx) {
+                      _conflictDialogContext = conflictCtx;
+                      return AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        title: const Text('⚠️ تنبيه هام', style: TextStyle(fontWeight: FontWeight.bold)),
+                        content: const Text('فيه موعد تاني في نفس الوقت، تحب أحفظ الاتنين ولا ألغي؟', style: TextStyle(fontSize: 16)),
+                        actions: [
+                          TextButton(
+                            onPressed: () => _handleConflictResolution(false),
+                            child: const Text('إلغاء', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+                            onPressed: () => _handleConflictResolution(true),
+                            child: const Text('حفظ الاتنين', style: TextStyle(color: Colors.white)),
+                          ),
+                        ],
+                      );
+                    },
+                  ).then((_) { _conflictDialogContext = null; });
+
+                  _pendingActionTimer?.cancel();
+                  _pendingActionTimer = Timer(const Duration(seconds: 15), () {
+                    if (_pendingVoiceAction == 'confirm_time_conflict') {
+                      _handleConflictResolution(false);
+                      _speak("معلش يا $_userTitle، تم إلغاء الحفظ عشان مكتبتش رد.");
+                    }
+                  });
+                  
+                  _speak("في موعد تاني في نفس الوقت يا $_userTitle، تحب أحفظ الاتنين ولا ألغي؟");
+                  _listenVoiceCommand();
+                  return;
                 }
 
                 if (taskIndex == null) {
@@ -5238,18 +5558,15 @@ Future<void> _showTaskDialog({int? taskIndex}) async {
   );
 }
 
-Future<void> _addWeeklyTaskDialog(String day) async {
-  await _showWeeklyTaskDialog(day: day);
-}
-
-Future<void> _editWeeklyTaskDialog(int index) async {
+void _addWeeklyTaskDialog(String day) async { await _showWeeklyTaskDialog(day: day); }
+void _editWeeklyTaskDialog(int index) async {
   final task = _weeklySchedule[index];
   await _showWeeklyTaskDialog(day: task['day'].toString(), taskIndex: index);
 }
 
 Future<void> _showWeeklyTaskDialog({required String day, int? taskIndex}) async {
   final prefs = await SharedPreferences.getInstance();
-  final defaultSound = prefs.getString('default_alarm_sound');
+  final defaultSound = prefs.getString('default_weekly_sound') ?? prefs.getString('default_alarm_sound');
 
   Map<String, dynamic>? existingTask;
   if (taskIndex != null) {
@@ -5358,7 +5675,6 @@ Future<void> _showWeeklyTaskDialog({required String day, int? taskIndex}) async 
                   selectedTime.hour, selectedTime.minute,
                 );
                 
-                // 👈 التعديل: منع حفظ موعد في وقت فات
                 if (scheduledDateTime.isBefore(DateTime.now())) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ الموعد فات! اختر وقت مستقبلي'), backgroundColor: Colors.red));
                   return;
@@ -5419,7 +5735,7 @@ void _editSpecialEventDialog(int index) {
   _showEventDialog(eventIndex: index);
 }
 
-void _showEventDialog({int? eventIndex}) async {
+Future<void> _showEventDialog({int? eventIndex}) async {
   final prefs = await SharedPreferences.getInstance();
   final defaultEventSound = prefs.getString('default_event_sound');
 
@@ -5575,8 +5891,6 @@ void _showEventDialog({int? eventIndex}) async {
     ),
   );
 }
-
-
     @override
   Widget build(BuildContext context) {
     final List<Widget> screens = [
@@ -5941,7 +6255,6 @@ void _showEventDialog({int? eventIndex}) async {
             ),
           ]),
         ),
-        // 👈 كارت التاريخ الهجري
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 12),
           padding: const EdgeInsets.all(12),
@@ -6187,67 +6500,92 @@ void _showEventDialog({int? eventIndex}) async {
   }
 
   Widget _buildTasbeehCounter() {
-    return Center(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'أفضل الذكر:\nسبحان الله وبحمده، سبحان الله العظيم\nسبحان الله وبحمده عدد خلقه ورضا نفسه وزنة عرشه ومداد كلماته',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFFC5A059)),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 30),
-            Text('$_tasbeehCount', style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: Color(0xFFC5A059))),
-            const SizedBox(height: 30),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), minimumSize: const Size(200, 60)),
-              icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
-              label: const Text('تسبيح', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-              onPressed: () async {
-                setState(() => _tasbeehCount++);
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setInt('tasbeeh_count', _tasbeehCount);
-              },
-            ),
-            const SizedBox(height: 15),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, minimumSize: const Size(200, 60)),
-              icon: const Icon(Icons.refresh, color: Colors.white),
-              label: const Text('تصفير العداد', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-              onPressed: () async {
-                setState(() => _tasbeehCount = 0);
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setInt('tasbeeh_count', 0);
-              },
-            ),
-            const SizedBox(height: 15),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isTasbeehMode ? Colors.green : const Color(0xFF1B2A4A),
-                minimumSize: const Size(200, 60),
-              ),
-              icon: Icon(_isTasbeehMode ? Icons.mic : Icons.mic_none, color: Colors.white),
-              label: Text(
-                _isTasbeehMode ? 'إيقاف وضع التسبيح' : 'تشغيل وضع التسبيح الصوتي',
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              onPressed: () {
-                setState(() => _isTasbeehMode = !_isTasbeehMode);
-                if (_isTasbeehMode) {
-                  _listenVoiceCommand();
-                } else {
-                  _speech.stop();
-                }
-              },
-            ),
-            if (_isTasbeehMode) ...[
-              const SizedBox(height: 20),
-              const Text('🎤 وضع التسبيح الصوتي نشط...', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-            ]
-          ],
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)]),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            children: [
+              const Text('إجمالي التسبيح', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const SizedBox(height: 8),
+              Text('$_tasbeehCount', style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: Color(0xFFC5A059))),
+            ],
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+        ..._tasbeehItems.map((item) {
+          final key = item['key']!;
+          final text = item['text']!;
+          final count = _tasbeehSubCounts[key] ?? 0;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFC5A059).withOpacity(0.4)),
+            ),
+            child: Row(
+              children: [
+                Expanded(child: Text(text, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: const Color(0xFF1B2A4A), borderRadius: BorderRadius.circular(20)),
+                  child: Text('$count', style: const TextStyle(color: Color(0xFFC5A059), fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.add_circle, color: Color(0xFFC5A059), size: 30),
+                  onPressed: () async {
+                    setState(() {
+                      _tasbeehSubCounts[key] = count + 1;
+                      _tasbeehCount++;
+                    });
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setInt('tasbeeh_$key', _tasbeehSubCounts[key]!);
+                    await prefs.setInt('tasbeeh_count', _tasbeehCount);
+                  },
+                ),
+              ],
+            ),
+          );
+        }),
+        const SizedBox(height: 16),
+        ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red, minimumSize: const Size.fromHeight(50)),
+          icon: const Icon(Icons.refresh, color: Colors.white),
+          label: const Text('تصفير كل العدادات', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          onPressed: () async {
+            setState(() { _tasbeehCount = 0; _tasbeehSubCounts = {}; });
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setInt('tasbeeh_count', 0);
+            for (var item in _tasbeehItems) {
+              await prefs.setInt('tasbeeh_${item['key']}', 0);
+            }
+          },
+        ),
+        const SizedBox(height: 10),
+        ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _isTasbeehMode ? Colors.green : const Color(0xFF1B2A4A),
+            minimumSize: const Size.fromHeight(50),
+          ),
+          icon: Icon(_isTasbeehMode ? Icons.mic : Icons.mic_none, color: Colors.white),
+          label: Text(
+            _isTasbeehMode ? 'إيقاف وضع التسبيح الصوتي' : 'تشغيل وضع التسبيح الصوتي',
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          onPressed: () {
+            setState(() => _isTasbeehMode = !_isTasbeehMode);
+            if (_isTasbeehMode) { _listenVoiceCommand(); } else { _speech.stop(); }
+          },
+        ),
+      ],
     );
   }
 
@@ -6569,215 +6907,92 @@ void _showEventDialog({int? eventIndex}) async {
     );
   }
 
-  // 👈 دالة اليوميات التفاعلية الجديدة
   void _openDiaryPage(DateTime date) {
-    String key = DateFormat('yyyy-MM-dd').format(date);
-    String dayName = DateFormat('EEEE', 'ar').format(date);
-    String fullDate = DateFormat('dd MMMM yyyy', 'ar').format(date);
-    
-    Map<String, dynamic> diaryData = _diaries[key] ?? {'text': '', 'todos': [], 'images': [], 'audio': null};
-    if (diaryData['text'] == null) diaryData['text'] = '';
-    if (diaryData['todos'] == null) diaryData['todos'] = [];
-    if (diaryData['images'] == null) diaryData['images'] = [];
-
-    TextEditingController diaryCtrl = TextEditingController(text: diaryData['text']);
-
-    Navigator.push(context, MaterialPageRoute(builder: (_) => StatefulBuilder(
-      builder: (context, setStateInner) {
-        final ImagePicker picker = ImagePicker();
-
-        return Scaffold(
-          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          appBar: AppBar(
-            backgroundColor: const Color(0xFF1B2A4A),
-            foregroundColor: Colors.white,
-            title: const Text('تدوين اليوميات'),
-            actions: [
-              IconButton(icon: const Icon(Icons.check, color: Color(0xFFC5A059), size: 28), onPressed: () {
-                diaryData['text'] = diaryCtrl.text;
-                setState(() => _diaries[key] = diaryData);
-                _saveData();
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الحفظ!')));
-              })
-            ]
-          ),
-          body: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    borderRadius: BorderRadius.circular(12),
-                    border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 4))
-                  ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('اليوم: $dayName', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFC5A059))),
-                    const SizedBox(height: 4),
-                    Text('التاريخ: $fullDate | ${_getHijriDate(date)}', style: TextStyle(fontSize: 14, color: Theme.of(context).textTheme.bodySmall?.color, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-                const SizedBox(height: 15),
-                Expanded(
-                  child: ListView(
-                    children: [
-                      // النص الأساسي
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: TextField(
-                          controller: diaryCtrl,
-                          maxLines: null,
-                          minLines: 5,
-                          style: const TextStyle(fontSize: 16, height: 1.6),
-                          decoration: const InputDecoration(hintText: 'اكتب يومياتك هنا...', border: InputBorder.none)
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      // المهام (Todos)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('المهام المطلوبة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFFC5A059))),
-                          TextButton.icon(
-                            icon: const Icon(Icons.add_task, color: Color(0xFFC5A059)),
-                            label: const Text('إضافة مهمة', style: TextStyle(color: Color(0xFFC5A059))),
-                            onPressed: () {
-                              setStateInner(() {
-                                diaryData['todos'].add({'text': 'مهمة جديدة', 'done': false});
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                      if (diaryData['todos'].isEmpty)
-                        const Text('لا توجد مهام.', style: TextStyle(color: Colors.grey)),
-                      ...List.generate(diaryData['todos'].length, (index) {
-                        final todo = diaryData['todos'][index];
-                        return Card(
-                          color: todo['done'] ? Colors.green.withOpacity(0.1) : Theme.of(context).cardColor,
-                          child: ListTile(
-                            leading: Checkbox(
-                              value: todo['done'],
-                              activeColor: Colors.green,
-                              onChanged: (v) {
-                                setStateInner(() {
-                                  todo['done'] = v!;
-                                  // ترتيب: غير المكتمل فوق
-                                  diaryData['todos'].sort((a, b) => (a['done'] == true ? 1 : 0).compareTo(b['done'] == true ? 1 : 0));
-                                });
-                              },
-                            ),
-                            title: Text(
-                              todo['text'],
-                              style: TextStyle(
-                                decoration: todo['done'] ? TextDecoration.lineThrough : null,
-                                color: todo['done'] ? Colors.green : null,
-                              ),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                              onPressed: () {
-                                setStateInner(() {
-                                  diaryData['todos'].removeAt(index);
-                                });
-                              },
-                            ),
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 20),
-                      // الصور
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('الصور:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFFC5A059))),
-                          TextButton.icon(
-                            icon: const Icon(Icons.add_photo_alternate, color: Color(0xFFC5A059)),
-                            label: const Text('إضافة صورة', style: TextStyle(color: Color(0xFFC5A059))),
-                            onPressed: () async {
-                              final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-                              if (image != null) {
-                                setStateInner(() {
-                                  diaryData['images'].add(image.path);
-                                });
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                      if (diaryData['images'].isNotEmpty)
-                        SizedBox(
-                          height: 100,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: diaryData['images'].length,
-                            itemBuilder: (ctx, i) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.file(File(diaryData['images'][i]), width: 100, height: 100, fit: BoxFit.cover),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      const SizedBox(height: 20),
-                      // الصوت
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('تسجيل صوتي:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFFC5A059))),
-                          if (diaryData['audio'] == null)
-                            TextButton.icon(
-                              icon: const Icon(Icons.mic, color: Color(0xFFC5A059)),
-                              label: const Text('تسجيل', style: TextStyle(color: Color(0xFFC5A059))),
-                              onPressed: () async {
-                                if (await _audioRecorder.hasPermission()) {
-                                  final dir = await getApplicationDocumentsDirectory();
-                                  final path = '${dir.path}/diary_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
-                                  const config = RecordConfig(encoder: AudioEncoder.aacLc);
-                                  await _audioRecorder.start(config, path: path);
-                                  setStateInner(() => _isRecording = true);
-                                  
-                                  await Future.delayed(const Duration(seconds: 5)); // تسجيل 5 ثواني كمثال
-                                  final p = await _audioRecorder.stop();
-                                  setStateInner(() {
-                                    _isRecording = false;
-                                    if (p != null) diaryData['audio'] = p;
-                                  });
-                                }
-                              },
-                            ),
-                        ],
-                      ),
-                      if (diaryData['audio'] != null)
-                        ListTile(
-                          leading: const Icon(Icons.play_circle_fill, color: Color(0xFFC5A059)),
-                          title: const Text('تسجيل صوتي مرفق'),
-                          trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () {
-                            setStateInner(() => diaryData['audio'] = null);
-                          }),
-                          onTap: () => _playRecording(diaryData['audio']),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
+    final key = DateFormat('yyyy-MM-dd').format(date);
+    final data = _diaries[key] ?? {'text': '', 'todos': [], 'images': [], 'audio': null};
+    if (data['todos'] == null) data['todos'] = [];
+    if (data['images'] == null) data['images'] = [];
+    Navigator.push(context, MaterialPageRoute(builder: (_) => _DiaryPage(
+      date: date,
+      initialData: data,
+      onSave: (d, dData) async {
+        final k = DateFormat('yyyy-MM-dd').format(d);
+        setState(() => _diaries[k] = dData);
+        await _saveData();
       },
     )));
+  }
+
+  void _handleConflictResolution(bool save) {
+    _pendingActionTimer?.cancel();
+    _pendingVoiceAction = null;
+    final taskData = _pendingConflictTaskData;
+    final taskIdx = _pendingConflictTaskIndex;
+    _pendingConflictTaskData = null;
+    _pendingConflictTaskIndex = null;
+
+    if (_conflictDialogContext != null) {
+      Navigator.pop(_conflictDialogContext!);
+      _conflictDialogContext = null;
+    }
+
+    if (save && taskData != null) {
+      setState(() {
+        if (taskIdx == null) { _tasks.add(taskData); } else { _tasks[taskIdx] = taskData; }
+      });
+      _saveData();
+      if (taskData['repeatInterval'] != 'بدون تنبيه') {
+        _scheduleContinuousAlarm(
+          taskData['task'], DateTime.parse(taskData['scheduled']),
+          taskData['repeat'], taskData['repeatInterval'],
+          List<String>.from(taskData['customDays'] ?? []), soundUri: taskData['sound'],
+        );
+      }
+      _speak("تم حفظ الموعدين يا $_userTitle.");
+    } else {
+      _speak("تمام يا $_userTitle، تم إلغاء الحفظ.");
+    }
+  }
+
+  void _handleTasbeehResult(String rawText) {
+    final norm = _norm(rawText);
+    final matches = [
+      {'key': 'subhan_adada', 'text': _norm('سبحان الله وبحمده عدد خلقه ورضا نفسه وزنة عرشه ومداد كلماته')},
+      {'key': 'subhan_azim', 'text': _norm('سبحان الله العظيم')},
+      {'key': 'subhan_bihamdih', 'text': _norm('سبحان الله وبحمده')},
+      {'key': 'subhan', 'text': _norm('سبحان الله')},
+      {'key': 'astaghfirullah', 'text': _norm('استغفر الله')},
+      {'key': 'salah_ala_nabi', 'text': _norm('اللهم صل على سيدنا محمد')},
+    ];
+    
+    String remaining = norm;
+    final counts = <String, int>{};
+    
+    for (var m in matches) {
+      final text = m['text']!;
+      final key = m['key']!;
+      int idx = 0, cnt = 0;
+      while ((idx = remaining.indexOf(text, idx)) != -1) {
+        cnt++;
+        remaining = remaining.replaceRange(idx, idx + text.length, ' ' * text.length);
+        idx += text.length;
+      }
+      if (cnt > 0) counts[key] = (counts[key] ?? 0) + cnt;
+    }
+    
+    if (counts.isEmpty) return;
+    setState(() {
+      for (var entry in counts.entries) {
+        _tasbeehSubCounts[entry.key] = (_tasbeehSubCounts[entry.key] ?? 0) + entry.value;
+        _tasbeehCount += entry.value;
+      }
+    });
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setInt('tasbeeh_count', _tasbeehCount);
+      for (var entry in counts.entries) {
+        prefs.setInt('tasbeeh_${entry.key}', _tasbeehSubCounts[entry.key] ?? 0);
+      }
+    });
   }
 } // 👈 قوس إغلاق كلاس _MainDashboardState
 
@@ -6852,7 +7067,6 @@ class _AdhkarCardState extends State<_AdhkarCard> {
   }
 }
 
-// 👈 كلاس تحريك الصورة (لازم يكون برة الكلاس الأساسي)
 class _TalkingImage extends StatefulWidget {
   final String imagePath;
   final bool isTalking;
@@ -6910,6 +7124,176 @@ class _TalkingImageState extends State<_TalkingImage> with SingleTickerProviderS
               alignment: Alignment.bottomCenter,
               errorBuilder: (c, e, s) => const Icon(Icons.person, size: 100, color: Colors.white54),
             ),
+    );
+  }
+}
+
+class _DiaryPage extends StatefulWidget {
+  final DateTime date;
+  final Map<String, dynamic> initialData;
+  final Future<void> Function(DateTime, Map<String, dynamic>) onSave;
+  const _DiaryPage({required this.date, required this.initialData, required this.onSave});
+  @override
+  State<_DiaryPage> createState() => _DiaryPageState();
+}
+
+class _DiaryPageState extends State<_DiaryPage> {
+  static _DiaryPageState? activeInstance;
+  late Map<String, dynamic> diaryData;
+  late TextEditingController diaryCtrl;
+  StreamSubscription? _voiceSub;
+  final AudioRecorder _recorder = AudioRecorder();
+  final ImagePicker _picker = ImagePicker();
+  bool _isRecordingNow = false;
+
+  @override
+  void initState() {
+    super.initState();
+    activeInstance = this;
+    diaryData = widget.initialData;
+    diaryCtrl = TextEditingController(text: diaryData['text'] ?? '');
+    _voiceSub = _diaryVoiceStream.stream.listen(_handleVoiceCommand);
+  }
+
+  void _handleVoiceCommand(Map<String, dynamic> cmd) {
+    if (!mounted) return;
+    final action = cmd['action'];
+    if (action == 'add_todo') {
+      setState(() { diaryData['todos'].add({'text': cmd['text'] ?? 'مهمة', 'done': false}); });
+    } else if (action == 'mark_done') {
+      final idx = (cmd['index'] as int?) ?? 0;
+      if (idx >= 0 && idx < diaryData['todos'].length) {
+        setState(() { diaryData['todos'][idx]['done'] = true; });
+      }
+    } else if (action == 'add_image') {
+      _addImage();
+    } else if (action == 'record_audio') {
+      _toggleRecording();
+    }
+  }
+
+  Future<void> _addImage() async {
+    final XFile? img = await _picker.pickImage(source: ImageSource.gallery);
+    if (img != null) setState(() => diaryData['images'].add(img.path));
+  }
+
+  Future<void> _toggleRecording() async {
+    if (_isRecordingNow) {
+      final p = await _recorder.stop();
+      setState(() { _isRecordingNow = false; if (p != null) diaryData['audio'] = p; });
+    } else {
+      if (await _recorder.hasPermission()) {
+        final dir = await getApplicationDocumentsDirectory();
+        final path = '${dir.path}/diary_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        await _recorder.start(const RecordConfig(), path: path);
+        setState(() => _isRecordingNow = true);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    if (activeInstance == this) activeInstance = null;
+    _voiceSub?.cancel();
+    diaryCtrl.dispose();
+    _recorder.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1B2A4A),
+        foregroundColor: Colors.white,
+        title: const Text('تدوين اليوميات'),
+        actions: [
+          IconButton(icon: const Icon(Icons.check, color: Color(0xFFC5A059), size: 28), onPressed: () async {
+            diaryData['text'] = diaryCtrl.text;
+            await widget.onSave(widget.date, diaryData);
+            if (mounted) Navigator.pop(context);
+          })
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity, padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(12),
+                border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 4))
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('اليوم: ${DateFormat('EEEE', 'ar').format(widget.date)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFC5A059))),
+                const SizedBox(height: 4),
+                Text('التاريخ: ${DateFormat('dd MMMM yyyy', 'ar').format(widget.date)} | ${_getHijriDate(widget.date)}', style: TextStyle(fontSize: 14, color: Theme.of(context).textTheme.bodySmall?.color, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+            const SizedBox(height: 15),
+            Expanded(
+              child: ListView(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
+                    child: TextField(
+                      controller: diaryCtrl, maxLines: null, minLines: 5, style: const TextStyle(fontSize: 16, height: 1.6),
+                      decoration: const InputDecoration(hintText: 'اكتب يومياتك هنا...', border: InputBorder.none)
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    const Text('المهام المطلوبة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFFC5A059))),
+                    TextButton.icon(icon: const Icon(Icons.add_task, color: Color(0xFFC5A059)), label: const Text('إضافة مهمة', style: TextStyle(color: Color(0xFFC5A059))), onPressed: () {
+                      setState(() { diaryData['todos'].add({'text': 'مهمة جديدة', 'done': false}); });
+                    }),
+                  ]),
+                  if (diaryData['todos'].isEmpty) const Text('لا توجد مهام.', style: TextStyle(color: Colors.grey)),
+                  ...List.generate(diaryData['todos'].length, (index) {
+                    final todo = diaryData['todos'][index];
+                    return Card(
+                      color: todo['done'] ? Colors.green.withOpacity(0.1) : Theme.of(context).cardColor,
+                      child: ListTile(
+                        leading: Checkbox(value: todo['done'], activeColor: Colors.green, onChanged: (v) {
+                          setState(() {
+                            todo['done'] = v!;
+                            diaryData['todos'].sort((a, b) => (a['done'] == true ? 1 : 0).compareTo(b['done'] == true ? 1 : 0));
+                          });
+                        }),
+                        title: Text(todo['text'], style: TextStyle(decoration: todo['done'] ? TextDecoration.lineThrough : null, color: todo['done'] ? Colors.green : null)),
+                        trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 20), onPressed: () {
+                          setState(() { diaryData['todos'].removeAt(index); });
+                        }),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 20),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    const Text('الصور:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFFC5A059))),
+                    TextButton.icon(icon: const Icon(Icons.add_photo_alternate, color: Color(0xFFC5A059)), label: const Text('إضافة صورة', style: TextStyle(color: Color(0xFFC5A059))), onPressed: _addImage),
+                  ]),
+                  if (diaryData['images'].isNotEmpty)
+                    SizedBox(height: 100, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: diaryData['images'].length, itemBuilder: (ctx, i) {
+                      return Padding(padding: const EdgeInsets.only(right: 8.0), child: ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(diaryData['images'][i]), width: 100, height: 100, fit: BoxFit.cover)));
+                    })),
+                  const SizedBox(height: 20),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    const Text('تسجيل صوتي:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFFC5A059))),
+                    if (diaryData['audio'] == null)
+                      TextButton.icon(icon: const Icon(Icons.mic, color: Color(0xFFC5A059)), label: const Text('تسجيل', style: TextStyle(color: Color(0xFFC5A059))), onPressed: _toggleRecording),
+                  ]),
+                  if (diaryData['audio'] != null)
+                    ListTile(leading: const Icon(Icons.play_circle_fill, color: Color(0xFFC5A059)), title: const Text('تسجيل صوتي مرفق'), trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => diaryData['audio'] = null))),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
