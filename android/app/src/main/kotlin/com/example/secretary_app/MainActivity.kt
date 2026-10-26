@@ -22,6 +22,7 @@ class MainActivity : FlutterActivity() {
     private val ALARM_CHANNEL = "com.example.secretary_app/native_alarm"
     private val SOUND_CHANNEL = "com.example.secretary_app/sounds"
     private val WAKE_WORD_CHANNEL = "com.example.secretary_app/wake_word"
+    private val SHAKE_CHANNEL = "com.example.secretary_app/shake" // 👈 الجديد
 
     private var previewPlayer: MediaPlayer? = null
     private var previewRingtone: android.media.Ringtone? = null
@@ -47,14 +48,27 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // 👈 الريسيفر الجديد بتاع الهز
+    private val shakeReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.example.secretary_app.SHAKE_DETECTED") {
+                flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                    MethodChannel(it, SHAKE_CHANNEL).invokeMethod("onShakeDetected", null)
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.example.secretary_app.WAKE_WORD_DETECTED"), Context.RECEIVER_NOT_EXPORTED)
             registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.example.secretary_app.ALARM_STOPPED_BY_VOICE"), Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(shakeReceiver, android.content.IntentFilter("com.example.secretary_app.SHAKE_DETECTED"), Context.RECEIVER_NOT_EXPORTED) // 👈
         } else {
             registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.example.secretary_app.WAKE_WORD_DETECTED"))
             registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.example.secretary_app.ALARM_STOPPED_BY_VOICE"))
+            registerReceiver(shakeReceiver, android.content.IntentFilter("com.example.secretary_app.SHAKE_DETECTED")) // 👈
         }
 
         if (intent?.getBooleanExtra("WAKE_WORD_DETECTED", false) == true) {
@@ -75,6 +89,7 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         try { unregisterReceiver(wakeWordReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(alarmStopReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(shakeReceiver) } catch (_: Exception) {} // 👈
         super.onDestroy()
     }
 
@@ -244,6 +259,23 @@ class MainActivity : FlutterActivity() {
                 "isWakeWordPending" -> {
                     result.success(pendingWakeWord)
                     pendingWakeWord = false
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // 👈 ربط قناة الهز بفلاتر
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SHAKE_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startShakeService" -> {
+                    val intent = Intent(this, ShakeService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+                    result.success(true)
+                }
+                "stopShakeService" -> {
+                    val intent = Intent(this, ShakeService::class.java)
+                    stopService(intent)
+                    result.success(true)
                 }
                 else -> result.notImplemented()
             }
