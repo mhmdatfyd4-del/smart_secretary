@@ -71,7 +71,7 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
-        <!-- 👈 السطر الجديد الخاص بخدمة الهز -->
+        <!-- 👈 خدمة الهز الجديدة -->
         <service
             android:name=".ShakeService"
             android:exported="false"
