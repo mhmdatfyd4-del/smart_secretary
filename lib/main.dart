@@ -5558,8 +5558,8 @@ Future<void> _showTaskDialog({int? taskIndex}) async {
   );
 }
 
-void _addWeeklyTaskDialog(String day) async { await _showWeeklyTaskDialog(day: day); }
-void _editWeeklyTaskDialog(int index) async {
+Future<void> _addWeeklyTaskDialog(String day) async { await _showWeeklyTaskDialog(day: day); }
+Future<void> _editWeeklyTaskDialog(int index) async {
   final task = _weeklySchedule[index];
   await _showWeeklyTaskDialog(day: task['day'].toString(), taskIndex: index);
 }
