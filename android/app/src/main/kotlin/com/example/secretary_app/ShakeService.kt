@@ -23,7 +23,7 @@ class ShakeService : Service(), SensorEventListener {
     private var accelerometer: Sensor? = null
     private var lastShakeTime: Long = 0
     private val SHAKE_THRESHOLD = 2.2f
-    private val SHAKE_COOLDOWN = 3000L // 3 ثواني
+    private val SHAKE_COOLDOWN = 3000L 
 
     override fun onCreate() {
         super.onCreate()
@@ -36,7 +36,6 @@ class ShakeService : Service(), SensorEventListener {
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         val mode = prefs.getString("flutter.shake_mode", "off") ?: "off"
 
-        // لو الوضع اتغير لغير "دائماً" نقفل الخدمة
         if (mode != "always") {
             stopSelf()
             return START_NOT_STICKY
@@ -70,7 +69,6 @@ class ShakeService : Service(), SensorEventListener {
         val mode = prefs.getString("flutter.shake_mode", "off") ?: "off"
         
         if (mode == "always") {
-            // إعادة تشغيل الخدمة لو التطبيق اتقفل من الـ Recent Apps
             val restartIntent = Intent(applicationContext, ShakeService::class.java)
             restartIntent.setPackage(packageName)
             val pendingIntent = PendingIntent.getService(
@@ -100,7 +98,6 @@ class ShakeService : Service(), SensorEventListener {
                 if (now - lastShakeTime > SHAKE_COOLDOWN) {
                     lastShakeTime = now
                     
-                    // إرسال بث لفلاتر عشان تفتح
                     val shakeIntent = Intent("com.example.secretary_app.SHAKE_DETECTED")
                     shakeIntent.setPackage(packageName)
                     sendBroadcast(shakeIntent)
