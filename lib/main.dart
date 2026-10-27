@@ -2537,17 +2537,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               await _notifications.cancel(5000 + (dayOffset * 10) + prayerIds[key]!);
             }
 
-            if (_isInBackground) {
-              try {
-                await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
-                  'id': entry.key.hashCode + 7000,
-                  'title': 'أذان ${entry.key}',
-                  'timestamp': DateTime.now().millisecondsSinceEpoch + 200,
-                  'prefix': 'حان الآن موعد ',
-                  'interval': 0, 
-                });
-              } catch (_) {}
-            }
+
           }
         } catch (_) {}
       }
@@ -5027,17 +5017,14 @@ void _startAlarmLoop(
   _activeAlarmCustomDays = List.from(customDays);
   _activeAlarmSoundUri = soundUri;
 
-  void speakAlert() {
-    if (_isInBackground) return;
-    if (!hasCustomSound) {
-      _speak("حَانَ الآنَ مَوْعِدُ: $taskTitle");
-    } else if (soundUri != null) {
-      try {
-        _soundChannel.invokeMethod('previewSound', {'uri': soundUri});
-      } catch (_) {}
-    }
-    HapticFeedback.vibrate();
+void speakAlert() {
+  if (_isInBackground) return;
+  if (!hasCustomSound) {
+    _speak("حَانَ الآنَ مَوْعِدُ: $taskTitle");
   }
+  // 👈 شيلنا أمر previewSound عشان الصوت بيتشغل من AlarmService مباشرة
+  HapticFeedback.vibrate();
+}
 
   if (interval != 'بدون تنبيه') {
     speakAlert();
