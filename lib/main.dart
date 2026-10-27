@@ -7395,7 +7395,7 @@ Future<void> _showEventDialog({int? eventIndex}) async {
             });
             _speak("تَمَّ تَسْجِيلُ الذِّكْرِ. البَاقِي: $newCount");
           } else {
-            _speak("لَقَدْ أَكْمَلْتَ هَذَا الذِّكْرَ $userTitle.");
+            _speak("لَقَدْ أَكْمَلْتَ هَذَا الذِّكْرَ $_userTitle.");
           }
           anyFound = true;
         }
