@@ -8166,19 +8166,19 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
   }
 
   void _changeMonth(int offset) {
-    setState(() {
-      _currentHijriDate = HijriCalendar(
-        _currentHijriDate.hYear,
-        _currentHijriDate.hMonth + offset,
-        1,
-      );
-    });
+  setState(() {
+    final newHijri = HijriCalendar();
+    newHijri.hYear = _currentHijriDate.hYear;
+    newHijri.hMonth = _currentHijriDate.hMonth + offset;
+    newHijri.hDay = 1;
+    _currentHijriDate = newHijri;
+  });
   }
 
   @override
   Widget build(BuildContext context) {
     int daysInMonth = _currentHijriDate.lengthOfMonth;
-    DateTime firstDayOfMonth = _currentHijriDate.gregorian;
+    DateTime firstDayOfMonth = _currentHijriDate.hijriToGregorian(_currentHijriDate.hYear, _currentHijriDate.hMonth, 1);
     int firstDayWeekday = firstDayOfMonth.weekday;
     int startOffset = (firstDayWeekday + 1) % 7;
 
@@ -8192,7 +8192,7 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
               onPressed: () => _changeMonth(-1),
             ),
             Text(
-              '${_currentHijriDate.monthName} ${_currentHijriDate.hYear} هـ',
+              '${_currentHijriDate.getLongMonthName()} ${_currentHijriDate.hYear} هـ',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFC5A059)),
             ),
             IconButton(
@@ -8219,8 +8219,11 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
           itemBuilder: (context, index) {
             if (index < startOffset) return const SizedBox.shrink();
             int day = index - startOffset + 1;
-            HijriCalendar hDay = HijriCalendar(_currentHijriDate.hYear, _currentHijriDate.hMonth, day);
-            DateTime gDate = hDay.gregorian;
+            HijriCalendar hDay = HijriCalendar();
+hDay.hYear = _currentHijriDate.hYear;
+hDay.hMonth = _currentHijriDate.hMonth;
+hDay.hDay = day;
+DateTime gDate = hDay.hijriToGregorian(hDay.hYear, hDay.hMonth, hDay.hDay);
             bool isSelected = gDate.year == widget.selectedDate.year && gDate.month == widget.selectedDate.month && gDate.day == widget.selectedDate.day;
 
             return InkWell(
