@@ -35,10 +35,14 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     private var intervalSeconds: Int = 0
     
     private val handler = Handler(Looper.getMainLooper())
+    
+    // 👈 تعديل 1: التكرار يقطع النغمة ويبدأها من الأول
     private val repeatRunnable = object : Runnable {
         override fun run() {
             val hasCustomSound = !customSoundUri.isNullOrEmpty() && customSoundUri != "default" && customSoundUri != "null"
-            if (!hasCustomSound) {
+            if (hasCustomSound) {
+                playCustomSound(customSoundUri!!) 
+            } else {
                 speakTts(currentPrefix, currentTitle)
             }
             if (intervalSeconds > 0) {
@@ -148,21 +152,25 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             putExtra(EXTRA_INTERVAL, intervalSeconds)
         }
         val pendingIntent = PendingIntent.getBroadcast(
-            this, currentTitle.hashCode() + 5000, intent,
+            this, currentTitle.hashCode + 5000, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val alarmClockInfo = AlarmManager.AlarmClockInfo(snoozeTime, pendingIntent)
         alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
     }
 
+    // 👈 تعديل 2: إضافة release عشان الصوت يقف فوراً
     private fun stopAlarmAndSelf() {
         handler.removeCallbacks(repeatRunnable)
         tts?.stop()
         mediaPlayer?.stop()
+        mediaPlayer?.release() 
+        mediaPlayer = null      
         stopForeground(true)
         stopSelf()
     }
 
+    // 👈 تعديل 3: isLooping = true عشان النغمة تفضل شغالة
     private fun playCustomSound(uriStr: String) {
         try {
             mediaPlayer?.release()
@@ -176,17 +184,19 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
                 setDataSource(this@AlarmService, uri)
+                isLooping = true 
                 prepare()
                 start()
             }
         } catch (e: Exception) { speakTts(DEFAULT_PREFIX, "تنبيه هام") }
     }
 
+    // 👈 تعديل 4: توحيد اللغة ar-EG
     private fun speakTts(prefix: String, text: String) {
         if (isTtsReady) {
             val audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
             tts?.setAudioAttributes(audioAttributes)
-            tts?.setLanguage(Locale("ar"))
+            tts?.setLanguage(Locale("ar-EG")) 
             tts?.speak("$prefix$text", TextToSpeech.QUEUE_FLUSH, null, "alarm")
         } else { pendingText = "$prefix|$text" }
     }
