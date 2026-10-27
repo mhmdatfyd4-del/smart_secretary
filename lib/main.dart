@@ -3334,6 +3334,157 @@ Future<bool> _handleSocialReply(String cmd) async {
   
   return false;
 }
+  DateTime? _parseDiaryDate(String cmd) {
+  final now = DateTime.now();
+  if (cmd.contains('النهاردة') || cmd.contains('النهارده') || cmd.contains('اليوم')) return now;
+  if (cmd.contains('اول امبارح') || cmd.contains('أول امبارح') || cmd.contains('قبل امبارح')) return now.subtract(const Duration(days: 2));
+  if (cmd.contains('امبارح') || cmd.contains('امبارحه') || cmd.contains('امس') || cmd.contains('البارح') || cmd.contains('البارحة') || cmd.contains('البارحه')) return now.subtract(const Duration(days: 1));
+  if (cmd.contains('بعد بكره') || cmd.contains('بعد بكرة') || cmd.contains('بعد غد')) return now.add(const Duration(days: 2));
+  if (cmd.contains('بكره') || cmd.contains('بكرة') || cmd.contains('غدا') || cmd.contains('غداً')) return now.add(const Duration(days: 1));
+
+  final dayKeywords = {
+    DateTime.saturday: ['السبت', 'سبت'],
+    DateTime.sunday: ['الاحد', 'الأحد', 'الحد', 'حد'],
+    DateTime.monday: ['الاتنين', 'الاثنين', 'اتنين'],
+    DateTime.tuesday: ['التلات', 'الثلاثاء', 'تلات'],
+    DateTime.wednesday: ['الاربع', 'الأربعاء', 'اربع'],
+    DateTime.thursday: ['الخميس', 'خميس'],
+    DateTime.friday: ['الجمعه', 'الجمعة', 'جمعه'],
+  };
+
+  int? targetWeekday;
+  for (final entry in dayKeywords.entries) {
+    if (_hasAny(cmd, entry.value)) {
+      targetWeekday = entry.key;
+      break;
+    }
+  }
+
+  if (targetWeekday != null) {
+    final isLast = _hasAny(cmd, ['اللي فات', 'اللى فات', 'الماضي', 'اللي عدى', 'اللى عدى']);
+    final isNext = _hasAny(cmd, ['الجاي', 'القادم', 'اللي جاي', 'اللى جاي']);
+    if (isLast) {
+      var diff = now.weekday - targetWeekday;
+      if (diff <= 0) diff += 7;
+      return now.subtract(Duration(days: diff));
+    } else if (isNext) {
+      var diff = targetWeekday - now.weekday;
+      if (diff <= 0) diff += 7;
+      return now.add(Duration(days: diff));
+    } else {
+      var diff = targetWeekday - now.weekday;
+      if (diff < 0) diff += 7;
+      return now.add(Duration(days: diff));
+    }
+  }
+  return null;
+}
+
+List<String> _parseCustomDays(String cmd) {
+  final days = <String>[];
+  _dayKeywords.forEach((dayName, keywords) {
+    if (_hasAny(cmd, keywords)) days.add(dayName);
+  });
+  return days;
+}
+
+String _parseRepeatType(String cmd) {
+  final customDays = _parseCustomDays(cmd);
+  if (customDays.isNotEmpty) return 'مخصص';
+  if (_hasAny(cmd, ['كل يوم', 'يومي', 'يوميا', 'يومياً', 'كل يوم الصبح', 'كل يوم بالليل', 'يوم بيوم', 'يوم بعد يوم', 'كل يومين', 'دائما', 'على طول', 'كل صباح', 'كل مساء', 'كل ليله', 'بشكل يومي'])) return 'يومي';
+  if (_hasAny(cmd, ['كل اسبوع', 'اسبوعي', 'اسبوعيا', 'كل جمعه', 'كل جمعة', 'كل 7 ايام', 'اسبوع ورا اسبوع'])) return 'أسبوعي';
+  if (_hasAny(cmd, ['كل شهر', 'شهري', 'شهريا', 'كل 30 يوم', 'شهر ورا شهر', 'كل اول الشهر'])) return 'شهري';
+  return 'مرة واحدة';
+}
+
+String _parseIntervalType(String cmd) {
+  if (_hasAny(cmd, ['بدون تنبيه', 'بدون تنبيهات', 'مش محتاج تنبيه', 'مش عايز تنبيه', 'مش عايزة تنبيه', 'من غير تنبيه', 'بلاش تنبيه', 'مش عاوزة تنبيه'])) return 'بدون تنبيه';
+  if (_hasAny(cmd, ['مره واحده بس', 'مرة واحدة بس', 'تنبيه واحد بس', 'مش محتاج يتكرر', 'مش محتاجة يتكرر'])) return 'مرة واحدة';
+  if (_hasAny(cmd, ['كل 10 ثواني', 'كل عشر ثواني', 'كل عشره ثواني'])) return 'كل 10 ثواني';
+  if (_hasAny(cmd, ['كل 20 ثانية', 'كل عشرين ثانيه'])) return 'كل 20 ثانية';
+  if (_hasAny(cmd, ['كل 30 ثانية', 'كل تلاتين ثانيه', 'نص دقيقه', 'نصف دقيقة'])) return 'كل 30 ثانية';
+  if (_hasAny(cmd, ['كل دقيقة', 'كل دقيقه', 'كل 60 ثانيه'])) return 'كل دقيقة';
+  if (_hasAny(cmd, ['كل دقيقتين'])) return 'كل دقيقتين';
+  if (_hasAny(cmd, ['كل 3 دقايق', 'كل تلات دقايق'])) return 'كل 3 دقايق';
+  if (_hasAny(cmd, ['كل 5 دقايق', 'كل خمس دقايق'])) return 'كل 5 دقايق';
+  if (_hasAny(cmd, ['كل 10 دقايق', 'كل عشر دقايق'])) return 'كل 10 دقايق';
+  return 'كل 10 ثواني';
+}
+
+List<String> _extractWeeklyDaysFromCmd(String cmd) {
+  final result = <String>[];
+  
+  if (_hasAny(cmd, ['النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم'])) {
+    result.add(_weekDays[(DateTime.now().weekday) % 7]);
+  }
+  if (_hasAny(cmd, ['بكره', 'بكرة', 'غدا', 'غداً'])) {
+    result.add(_weekDays[(DateTime.now().add(const Duration(days: 1)).weekday) % 7]);
+  }
+
+  for (final day in _weekDays) {
+    if (result.contains(day)) continue;
+    final keywords = _dayKeywords[day] ?? [day];
+    if (_hasAny(cmd, keywords)) {
+      result.add(day);
+    }
+  }
+  return result;
+}
+
+String _extractWeeklyTaskName(String rawCommand) {
+  final stripRaw = <String>{
+    'امسح', 'امسحي', 'احذف', 'احذفي', 'شيل', 'شيلي', 'الغي', 'الغى', 'الغيلي',
+    'مسح', 'حذف', 'امسحلي', 'امسحيلي',
+    'عدل', 'عدلي', 'عدللي', 'عدليلي', 'غير', 'غيري', 'غيرلي', 'غيريلي',
+    'بدل', 'بدلي', 'بدللي', 'بدليلي', 'تعديل', 'تعديلي',
+    'ضيف', 'ضيفي', 'ضيفلي', 'اضف', 'أضف', 'أضفي', 'حط', 'حطي', 'حطلي',
+    'سجل', 'سجلي', 'سجللي', 'اعمل', 'اعملي', 'اعمللي',
+    'الجدول', 'جدول', 'الاسبوعي', 'الأسبوعي', 'اسبوعي', 'أسبوعي',
+    'جدولي', 'جدولى', 'بتاعي', 'بتاعى',
+    'في', 'من', 'على', 'علي', 'بتاع', 'بتاعه', 'بتاعت', 'يوم',
+    'موعد', 'ميعاد', 'الميعاد', 'الموعد', 'و',
+    'الساعة', 'ساعة', 'الساعه', 'صباحا', 'صباحاً', 'مساء', 'مساءً',
+    'الصبح', 'بالليل', 'الليل',
+    'لي', 'لى', 'بكام', 'لحد',
+    'بصوت', 'بنغمة', 'نغمة', 'صوت', 'مرعب', 'ايفون', 'آيفون', 'مشهور', 'صحيان', 'قوي', 'السكرتير', 'السكرتيرة', 'الافتراضي'
+  };
+  for (final day in _weekDays) {
+    stripRaw.add(day);
+    stripRaw.add('يوم $day');
+    stripRaw.add(day.replaceAll('ال', ''));
+    final keywords = _dayKeywords[day] ?? [];
+    for (final k in keywords) {
+      stripRaw.add(k);
+    }
+  }
+  final strip = stripRaw.map((e) => _norm(e)).toSet();
+  final nameNorm = _norm(_secretaryName);
+  final kept = <String>[];
+  
+  for (final t in rawCommand.split(RegExp(r'\s+'))) {
+    final n = _norm(t);
+    if (n.isEmpty) continue;
+    if (strip.contains(n) || n == nameNorm) continue;
+    
+    String nWithoutWaw = n.startsWith('و') ? n.substring(1) : n;
+    if (strip.contains(nWithoutWaw)) continue;
+    
+    bool isDay = false;
+    for (final day in _weekDays) {
+       if (_hasAny(nWithoutWaw, _dayKeywords[day] ?? [day])) {
+         isDay = true;
+         break;
+       }
+    }
+    if (isDay) continue;
+
+    if (RegExp(r'^\d{1,2}(:\d{2})?$').hasMatch(n)) continue;
+    if (_hourWords.containsKey(n) || _hourWords.containsKey(nWithoutWaw)) continue;
+    if (n == 'ونص' || n == 'وربع' || n == 'وثلث') continue;
+    kept.add(t);
+  }
+  return kept.join(' ').trim();
+}
     Future<void> _processSmartVoiceCommand(String rawCommand) async {
     final userTitle = _userTitle;
     final cmd = _norm(rawCommand);
@@ -7633,6 +7784,25 @@ class _DiaryPageState extends State<_DiaryPage> {
       setState(() => _isRecordingNow = true);
     }
   }
+  Future<void> _toggleRecording() async {
+  if (_isRecordingNow) {
+    final p = await _recorder.stop();
+    setState(() { 
+      _isRecordingNow = false; 
+      if (p != null) {
+        _entries.add({'type': 'audio', 'content': p, 'time': DateTime.now()});
+        _sortEntries();
+      }
+    });
+  } else {
+    if (await _recorder.hasPermission()) {
+      final dir = await getApplicationDocumentsDirectory();
+      final path = '${dir.path}/diary_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _recorder.start(const RecordConfig(), path: path);
+      setState(() => _isRecordingNow = true);
+    }
+  }
+  }
 
   Future<void> _stopRecording() async {
     final path = await _recorder.stop();
@@ -7998,9 +8168,9 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
   void _changeMonth(int offset) {
     setState(() {
       _currentHijriDate = HijriCalendar(
-        hYear: _currentHijriDate.hYear,
-        hMonth: _currentHijriDate.hMonth + offset,
-        hDay: 1,
+        _currentHijriDate.hYear,
+        _currentHijriDate.hMonth + offset,
+        1,
       );
     });
   }
@@ -8008,7 +8178,7 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
   @override
   Widget build(BuildContext context) {
     int daysInMonth = _currentHijriDate.lengthOfMonth;
-    DateTime firstDayOfMonth = _currentHijriDate.gregorianDate;
+    DateTime firstDayOfMonth = _currentHijriDate.gregorian;
     int firstDayWeekday = firstDayOfMonth.weekday;
     int startOffset = (firstDayWeekday + 1) % 7;
 
@@ -8049,8 +8219,8 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
           itemBuilder: (context, index) {
             if (index < startOffset) return const SizedBox.shrink();
             int day = index - startOffset + 1;
-            HijriCalendar hDay = HijriCalendar(hYear: _currentHijriDate.hYear, hMonth: _currentHijriDate.hMonth, hDay: day);
-            DateTime gDate = hDay.gregorianDate;
+            HijriCalendar hDay = HijriCalendar(_currentHijriDate.hYear, _currentHijriDate.hMonth, day);
+            DateTime gDate = hDay.gregorian;
             bool isSelected = gDate.year == widget.selectedDate.year && gDate.month == widget.selectedDate.month && gDate.day == widget.selectedDate.day;
 
             return InkWell(
