@@ -36,7 +36,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     
     private val handler = Handler(Looper.getMainLooper())
     
-    // 👈 تعديل 1: التكرار يقطع النغمة ويبدأها من الأول
     private val repeatRunnable = object : Runnable {
         override fun run() {
             val hasCustomSound = !customSoundUri.isNullOrEmpty() && customSoundUri != "default" && customSoundUri != "null"
@@ -150,15 +149,17 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
             putExtra(EXTRA_SOUND_URI, customSoundUri)
             putExtra(EXTRA_SHOW_ON_SCREEN, true)
             putExtra(EXTRA_INTERVAL, intervalSeconds)
-        }val pendingIntent = PendingIntent.getBroadcast(
-    this, currentTitle.hashCode() + 5000, intent, // 👈 ضيف الأقواس هنا
-    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-)
+        }
+        
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, currentTitle.hashCode() + 5000, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        
         val alarmClockInfo = AlarmManager.AlarmClockInfo(snoozeTime, pendingIntent)
         alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
     }
 
-    // 👈 تعديل 2: إضافة release عشان الصوت يقف فوراً
     private fun stopAlarmAndSelf() {
         handler.removeCallbacks(repeatRunnable)
         tts?.stop()
@@ -169,7 +170,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         stopSelf()
     }
 
-    // 👈 تعديل 3: isLooping = true عشان النغمة تفضل شغالة
     private fun playCustomSound(uriStr: String) {
         try {
             mediaPlayer?.release()
@@ -190,7 +190,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         } catch (e: Exception) { speakTts(DEFAULT_PREFIX, "تنبيه هام") }
     }
 
-    // 👈 تعديل 4: توحيد اللغة ar-EG
     private fun speakTts(prefix: String, text: String) {
         if (isTtsReady) {
             val audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
