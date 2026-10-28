@@ -1045,22 +1045,7 @@ Card(
               onChanged: null,
             ),
           ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: SwitchListTile(
-              secondary: const Icon(Icons.nights_stay, color: Color(0xFF1B2A4A), size: 26),
-              title: const Text('تنبيه الثلث الأخير من الليل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              subtitle: const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Text('تنبيه للقيام وصلاة التهجد', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              ),
-              value: _tahajjudAlertEnabled,
-              activeColor: const Color(0xFF1B2A4A),
-              onChanged: (v) => setState(() => _tahajjudAlertEnabled = v),
-            ),
-          ),
+          
           const SizedBox(height: 12),
           Card(
             elevation: 2,
