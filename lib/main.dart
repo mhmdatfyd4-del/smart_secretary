@@ -233,7 +233,9 @@ class AppSettings {
   bool isDarkMode;
   String? customImagePath;
   bool salatAlaNabiEnabled;
-String salatAlaNabiInterval;
+  String salatAlaNabiInterval;
+  String customUserTitle;
+  String customSecTitle;
 
   AppSettings({
     this.defaultReminderHour = 18,
@@ -256,7 +258,9 @@ String salatAlaNabiInterval;
     this.isDarkMode = false,
     this.customImagePath,
     this.salatAlaNabiEnabled = false,
-this.salatAlaNabiInterval = 'كل ساعة',
+    this.salatAlaNabiInterval = 'كل ساعة',
+    this.customUserTitle = '',
+    this.customSecTitle = '',
   });
 
   double get speechRate {
@@ -327,9 +331,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _isDarkMode;
   String? _customImagePath;
   late bool _salatAlaNabiEnabled;
-late String _salatAlaNabiInterval;
-late bool _origSalatAlaNabiEnabled;
-late String _origSalatAlaNabiInterval;
+  late String _salatAlaNabiInterval;
+  late bool _origSalatAlaNabiEnabled;
+  late String _origSalatAlaNabiInterval;
+  
+  final TextEditingController _userTitleController = TextEditingController();
+  final TextEditingController _secTitleController = TextEditingController();
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _wakeWordController = TextEditingController();
@@ -390,9 +397,17 @@ late String _origSalatAlaNabiInterval;
     _customGreetingController.text = widget.settings.customGreeting;
     _customImagePath = widget.settings.customImagePath;
     _salatAlaNabiEnabled = widget.settings.salatAlaNabiEnabled;
-_salatAlaNabiInterval = widget.settings.salatAlaNabiInterval;
-_origSalatAlaNabiEnabled = _salatAlaNabiEnabled;
-_origSalatAlaNabiInterval = _salatAlaNabiInterval;
+    _salatAlaNabiInterval = widget.settings.salatAlaNabiInterval;
+    _origSalatAlaNabiEnabled = _salatAlaNabiEnabled;
+    _origSalatAlaNabiInterval = _salatAlaNabiInterval;
+    _userTitleController.text = widget.settings.customUserTitle;
+    _secTitleController.text = widget.settings.customSecTitle;
+
+    SharedPreferences.getInstance().then((prefs) {
+      setState(() {
+        _customImagePath = prefs.getString('custom_img_${_nameController.text}');
+      });
+    });
 
     _origDefaultReminderHour = _defaultReminderHour;
     _origDefaultReminderMinute = _defaultReminderMinute;
@@ -461,7 +476,11 @@ _origSalatAlaNabiInterval = _salatAlaNabiInterval;
               onTap: () async {
                 Navigator.pop(ctx);
                 final XFile? image = await picker.pickImage(source: ImageSource.camera);
-                if (image != null) setState(() => _customImagePath = image.path);
+                if (image != null) {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setString('custom_img_${_nameController.text}', image.path);
+                  setState(() => _customImagePath = image.path);
+                }
               },
             ),
             ListTile(
@@ -470,7 +489,11 @@ _origSalatAlaNabiInterval = _salatAlaNabiInterval;
               onTap: () async {
                 Navigator.pop(ctx);
                 final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-                if (image != null) setState(() => _customImagePath = image.path);
+                if (image != null) {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setString('custom_img_${_nameController.text}', image.path);
+                  setState(() => _customImagePath = image.path);
+                }
               },
             ),
           ],
@@ -484,6 +507,8 @@ _origSalatAlaNabiInterval = _salatAlaNabiInterval;
     _nameController.dispose();
     _wakeWordController.dispose();
     _customGreetingController.dispose();
+    _userTitleController.dispose();
+    _secTitleController.dispose();
     super.dispose();
   }
 
@@ -511,8 +536,10 @@ _origSalatAlaNabiInterval = _salatAlaNabiInterval;
         _defaultAlarmSound != _origDefaultAlarmSound ||
         _defaultWeeklySound != _origDefaultWeeklySound ||
         _defaultEventSound != _origDefaultEventSound ||
-      _salatAlaNabiEnabled != _origSalatAlaNabiEnabled ||
-_salatAlaNabiInterval != _origSalatAlaNabiInterval ||
+        _salatAlaNabiEnabled != _origSalatAlaNabiEnabled ||
+        _salatAlaNabiInterval != _origSalatAlaNabiInterval ||
+        _userTitleController.text != widget.settings.customUserTitle ||
+        _secTitleController.text != widget.settings.customSecTitle ||
         _customImagePath != _origCustomImagePath;
   }
 
@@ -522,7 +549,9 @@ _salatAlaNabiInterval != _origSalatAlaNabiInterval ||
     if (_defaultWeeklySound == null) await prefs.remove('default_weekly_sound'); else await prefs.setString('default_weekly_sound', _defaultWeeklySound!);
     if (_defaultEventSound == null) await prefs.remove('default_event_sound'); else await prefs.setString('default_event_sound', _defaultEventSound!);
     await prefs.setBool('salat_ala_nabi_enabled', _salatAlaNabiEnabled);
-await prefs.setString('salat_ala_nabi_interval', _salatAlaNabiInterval);
+    await prefs.setString('salat_ala_nabi_interval', _salatAlaNabiInterval);
+    await prefs.setString('custom_user_title', _userTitleController.text.trim());
+    await prefs.setString('custom_sec_title', _secTitleController.text.trim());
 
     final newName = _nameController.text.trim().isEmpty
         ? (_voiceGender == 'ذكر' ? 'محمد' : 'سارة')
@@ -549,7 +578,8 @@ await prefs.setString('salat_ala_nabi_interval', _salatAlaNabiInterval);
   @override
   Widget build(BuildContext context) {
     final names = _getNamesForGender(_voiceGender);
-    final secTitle = _voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
+    final defaultSecTitle = _voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
+    final secTitle = _secTitleController.text.trim().isNotEmpty ? _secTitleController.text.trim() : defaultSecTitle;
 
     return Scaffold(
       appBar: AppBar(
@@ -721,32 +751,49 @@ await prefs.setString('salat_ala_nabi_interval', _salatAlaNabiInterval);
                   ]),
                   const SizedBox(height: 10),
                   Center(
-                    child: GestureDetector(
-                      onTap: _pickCustomImage,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        width: 100, height: 100,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFFC5A059), width: 3),
-                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8)],
-                          image: DecorationImage(
-                            image: _customImagePath != null 
-                                ? FileImage(File(_customImagePath!)) as ImageProvider
-                                : AssetImage(_getSecretaryImage(_nameController.text, _voiceGender)),
-                            fit: BoxFit.cover,
-                            alignment: Alignment.topCenter,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        GestureDetector(
+                          onTap: _pickCustomImage,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            width: 100, height: 100,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0xFFC5A059), width: 3),
+                              image: DecorationImage(
+                                image: _customImagePath != null ? FileImage(File(_customImagePath!)) as ImageProvider : AssetImage(_getSecretaryImage(_nameController.text, _voiceGender)),
+                                fit: BoxFit.cover, alignment: Alignment.topCenter,
+                              ),
+                            ),
+                            child: Align(
+                              alignment: Alignment.bottomRight,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(color: Color(0xFF1B2A4A), shape: BoxShape.circle),
+                                child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                              ),
+                            ),
                           ),
                         ),
-                        child: Align(
-                          alignment: Alignment.bottomRight,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(color: Color(0xFF1B2A4A), shape: BoxShape.circle),
-                            child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                        if (_customImagePath != null)
+                          Positioned(
+                            top: 0, left: 0,
+                            child: GestureDetector(
+                              onTap: () async {
+                                final prefs = await SharedPreferences.getInstance();
+                                await prefs.remove('custom_img_${_nameController.text}');
+                                setState(() => _customImagePath = null);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                child: const Icon(Icons.close, color: Colors.white, size: 16),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 15),
@@ -763,7 +810,13 @@ await prefs.setString('salat_ala_nabi_interval', _salatAlaNabiInterval);
                           color: isSelected ? Colors.black : Colors.black87,
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                         ),
-                        onPressed: () => setState(() => _nameController.text = name),
+                        onPressed: () async {
+                          setState(() => _nameController.text = name);
+                          final prefs = await SharedPreferences.getInstance();
+                          setState(() {
+                            _customImagePath = prefs.getString('custom_img_$name');
+                          });
+                        },
                       );
                     }).toList(),
                   ),
@@ -925,44 +978,43 @@ await prefs.setString('salat_ala_nabi_interval', _salatAlaNabiInterval);
             ),
           ),
           const SizedBox(height: 12),
-          const SizedBox(height: 12),
-Card(
-  elevation: 2,
-  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-  child: Padding(
-    padding: const EdgeInsets.all(16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Row(children: [
-          Icon(Icons.favorite, color: Color(0xFFC5A059), size: 26),
-          SizedBox(width: 10),
-          Text('تذكير الصلاة على النبي ﷺ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        ]),
-        const SizedBox(height: 12),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('تشغيل التذكير الصوتي', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-          subtitle: const Text('هيشتغل في الخلفية بصوت مخصص', style: TextStyle(fontSize: 12, color: Colors.grey)),
-          value: _salatAlaNabiEnabled,
-          activeColor: const Color(0xFF1B2A4A),
-          onChanged: (v) => setState(() => _salatAlaNabiEnabled = v),
-        ),
-        if (_salatAlaNabiEnabled) ...[
-          const Divider(),
-          const Text('التكرار:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            value: _salatAlaNabiInterval,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-            items: ['كل ساعة', 'كل ساعتين', 'كل 3 ساعات', 'كل 4 ساعات', 'كل 6 ساعات'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-            onChanged: (val) => setState(() => _salatAlaNabiInterval = val ?? 'كل ساعة'),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(children: [
+                    Icon(Icons.favorite, color: Color(0xFFC5A059), size: 26),
+                    SizedBox(width: 10),
+                    Text('تذكير الصلاة على النبي ﷺ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  ]),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('تشغيل التذكير الصوتي', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    value: _salatAlaNabiEnabled,
+                    activeColor: const Color(0xFF1B2A4A),
+                    onChanged: (v) => setState(() => _salatAlaNabiEnabled = v),
+                  ),
+                  if (_salatAlaNabiEnabled) ...[
+                    const Divider(),
+                    const Text('التكرار:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: _salatAlaNabiInterval,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: ['كل ساعة', 'كل ساعتين', 'كل 3 ساعات', 'كل 4 ساعات', 'كل 6 ساعات'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                      onChanged: (val) => setState(() => _salatAlaNabiInterval = val ?? 'كل ساعة'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
-        ],
-      ],
-    ),
-  ),
-),
+          const SizedBox(height: 12),
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(
@@ -1036,16 +1088,40 @@ Card(
             child: SwitchListTile(
               secondary: const Icon(Icons.child_care, color: Colors.grey, size: 26),
               title: const Text('وضع الطفل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey)),
-              subtitle: const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Text('قريباً... (السكرتير هيتكلم بأسلوب مبسط ومرح)', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              ),
+              subtitle: const Text('قريباً...', style: TextStyle(fontSize: 12, color: Colors.grey)),
               value: false,
               activeColor: Colors.grey,
               onChanged: null,
             ),
           ),
-          
+          const SizedBox(height: 12),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('لقبك (الافتراضي: يا فندم):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 5),
+                  TextField(
+                    controller: _userTitleController,
+                    onChanged: (v) => setState(() {}),
+                    decoration: const InputDecoration(hintText: 'يا فندم، يا كابتن...', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 15),
+                  const Text('لقب السكرتير (الافتراضي: السكرتير):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 5),
+                  TextField(
+                    controller: _secTitleController,
+                    onChanged: (v) => setState(() {}),
+                    decoration: const InputDecoration(hintText: 'السكرتير، مساعدي...', border: OutlineInputBorder()),
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 12),
           Card(
             elevation: 2,
@@ -1187,6 +1263,8 @@ Card(
                       _defaultAlarmSound = _origDefaultAlarmSound;
                       _defaultWeeklySound = _origDefaultWeeklySound;
                       _defaultEventSound = _origDefaultEventSound;
+                      _userTitleController.text = widget.settings.customUserTitle;
+                      _secTitleController.text = widget.settings.customSecTitle;
                     });
                   },
                 ),
@@ -1229,6 +1307,8 @@ Card(
                       _defaultWeeklySound = null;
                       _defaultEventSound = null;
                       _customGreetingController.text = 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.';
+                      _userTitleController.clear();
+                      _secTitleController.clear();
                     });
 
                     await widget.onSave(
@@ -1245,6 +1325,8 @@ Card(
                     await prefs.remove('default_alarm_sound');
                     await prefs.remove('default_weekly_sound');
                     await prefs.remove('default_event_sound');
+                    await prefs.remove('custom_user_title');
+                    await prefs.remove('custom_sec_title');
 
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -2060,6 +2142,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   int? _pendingConflictTaskIndex;
   BuildContext? _conflictDialogContext;
   Map<String, int> _tasbeehSubCounts = {};
+  Map<String, dynamic>? _pendingEventData;
 
   static const List<Map<String, String>> _tasbeehItems = [
     {'key': 'subhan', 'text': 'سبحان الله'},
@@ -2103,9 +2186,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     'الجمعة': ['الجمعه', 'الجمعة', 'جمعه', 'جمعة', 'يوم الجمعه', 'يوم الجمعة'],
   };
 
-  String get _userTitle => _isUserMale ? "يا فندم" : "يا أستاذة";
-  String get _secTitle => _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
-  String get _secWord => _settings.voiceGender == 'ذكر' ? 'سكرتيرك' : 'سكرتيرتك';
+  String get _userTitle => _settings.customUserTitle.trim().isNotEmpty ? _settings.customUserTitle.trim() : (_isUserMale ? "يا فندم" : "يا أستاذة");
+  String get _secTitle => _settings.customSecTitle.trim().isNotEmpty ? _settings.customSecTitle.trim() : (_settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة');
+  String get _secWord => _settings.customSecTitle.trim().isNotEmpty ? _settings.customSecTitle.trim() : (_settings.voiceGender == 'ذكر' ? 'سكرتيرك' : 'سكرتيرتك');
   String get _pronoun => _isUserMale ? "وانت" : "وانتي";
   String get _takeCareWord => _isUserMale ? "خد" : "خدي";
   String get _readyWord => _settings.voiceGender == 'ذكر' ? "جاهز" : "جاهزة";
@@ -2422,59 +2505,60 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     } catch (_) {}
   }
+
   Future<void> _scheduleSalatAlaNabi() async {
-  for (int i = 8000; i <= 8500; i++) {
-    try { await _notifications.cancel(i); } catch (_) {}
-  }
-  
-  if (!_settings.salatAlaNabiEnabled) return;
+    for (int i = 8000; i <= 8500; i++) {
+      try { await _notifications.cancel(i); } catch (_) {}
+    }
+    
+    if (!_settings.salatAlaNabiEnabled) return;
 
-  int intervalHours = 1;
-  if (_settings.salatAlaNabiInterval == 'كل ساعتين') intervalHours = 2;
-  if (_settings.salatAlaNabiInterval == 'كل 3 ساعات') intervalHours = 3;
-  if (_settings.salatAlaNabiInterval == 'كل 4 ساعات') intervalHours = 4;
-  if (_settings.salatAlaNabiInterval == 'كل 6 ساعات') intervalHours = 6;
+    int intervalHours = 1;
+    if (_settings.salatAlaNabiInterval == 'كل ساعتين') intervalHours = 2;
+    if (_settings.salatAlaNabiInterval == 'كل 3 ساعات') intervalHours = 3;
+    if (_settings.salatAlaNabiInterval == 'كل 4 ساعات') intervalHours = 4;
+    if (_settings.salatAlaNabiInterval == 'كل 6 ساعات') intervalHours = 6;
 
-  final now = DateTime.now();
-  int notificationId = 8000;
-  int count = 0;
-  
-  const int maxNotifications = 480; 
-  const int totalHoursToSchedule = 30 * 24; 
+    final now = DateTime.now();
+    int notificationId = 8000;
+    int count = 0;
+    
+    const int maxNotifications = 480; 
+    const int totalHoursToSchedule = 30 * 24; 
 
-  for (int i = 1; i <= totalHoursToSchedule; i++) {
-     if (i % intervalHours != 0) continue; 
-     
-     final scheduledTime = now.add(Duration(hours: i));
-     
-     final androidDetails = AndroidNotificationDetails(
-      'salat_ala_nabi_channel_v1',
-      'تذكير الصلاة على النبي',
-      channelDescription: 'تنبيهات تذكير الصلاة على النبي',
-      importance: Importance.max,
-      priority: Priority.max,
-      playSound: true,
-      sound: const RawResourceAndroidNotificationSound('salat_ala_nabi'),
-      enableVibration: true,
-      category: AndroidNotificationCategory.reminder,
-    );
-
-    try {
-      await _notifications.zonedSchedule(
-        notificationId,
+    for (int i = 1; i <= totalHoursToSchedule; i++) {
+       if (i % intervalHours != 0) continue; 
+       
+       final scheduledTime = now.add(Duration(hours: i));
+       
+       final androidDetails = AndroidNotificationDetails(
+        'salat_ala_nabi_channel_v1',
         'تذكير الصلاة على النبي',
-        'قال رسول الله ﷺ: من صلى عليَّ صلاةً صلى الله عليه بها عشرًا',
-        tz.TZDateTime.from(scheduledTime, tz.local),
-        NotificationDetails(android: androidDetails),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        channelDescription: 'تنبيهات تذكير الصلاة على النبي',
+        importance: Importance.max,
+        priority: Priority.max,
+        playSound: true,
+        sound: const RawResourceAndroidNotificationSound('salat_ala_nabi'),
+        enableVibration: true,
+        category: AndroidNotificationCategory.reminder,
       );
-      notificationId++;
-      count++;
-    } catch (_) {}
 
-    if (count >= maxNotifications) break;
-  }
+      try {
+        await _notifications.zonedSchedule(
+          notificationId,
+          'تذكير الصلاة على النبي',
+          'قال رسول الله ﷺ: من صلى عليَّ صلاةً صلى الله عليه بها عشرًا',
+          tz.TZDateTime.from(scheduledTime, tz.local),
+          NotificationDetails(android: androidDetails),
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        );
+        notificationId++;
+        count++;
+      } catch (_) {}
+
+      if (count >= maxNotifications) break;
+    }
   }
 
   Future<void> _initSpeech() async {
@@ -2489,8 +2573,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               }
             }
             if (_isWakeWordListening) _isWakeWordListening = false;
-
-            // 👈 شيلنا المسح من هنا عشان السكرتير مينساش الحوار
 
             if (_isTasbeehMode) {
               Future.delayed(const Duration(milliseconds: 300), () {
@@ -2509,7 +2591,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             final errorStr = error.toString().toLowerCase();
             if ((errorStr.contains('network') || errorStr.contains('internet') || errorStr.contains('no_internet')) 
                 && _pendingVoiceAction == 'confirm_time_conflict') {
-              _speak("معلش يا $_userTitle، يبدو أن هناك مشكلة في الاتصال بالإنترنت. من فضلك استخدم الأزرار اللي على الشاشة.");
+              _speak("معلش $_userTitle، يبدو أن هناك مشكلة في الاتصال بالإنترنت. من فضلك استخدم الأزرار اللي على الشاشة.");
               return; 
             }
 
@@ -2520,8 +2602,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               }
             }
             if (_isWakeWordListening) _isWakeWordListening = false;
-
-            // 👈 شيلنا المسح من هنا برضه
 
             if (_isTasbeehMode) {
               Future.delayed(const Duration(milliseconds: 300), () {
@@ -2622,8 +2702,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             if (key.isNotEmpty && dayOffset >= 0 && dayOffset < 30) {
               await _notifications.cancel(5000 + (dayOffset * 10) + prayerIds[key]!);
             }
-
-            // 👈 شيلنا البلوك بتاع _nativeAlarmChannel عشان مفيش صوت مكرر
           }
         } catch (_) {}
       }
@@ -2711,11 +2789,14 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _settings.isDarkMode = prefs.getBool('is_dark_mode') ?? false;
     _settings.customImagePath = prefs.getString('custom_secretary_image');
     _settings.salatAlaNabiEnabled = prefs.getBool('salat_ala_nabi_enabled') ?? false;
-_settings.salatAlaNabiInterval = prefs.getString('salat_ala_nabi_interval') ?? 'كل ساعة';
+    _settings.salatAlaNabiInterval = prefs.getString('salat_ala_nabi_interval') ?? 'كل ساعة';
+    _settings.customUserTitle = prefs.getString('custom_user_title') ?? '';
+    _settings.customSecTitle = prefs.getString('custom_sec_title') ?? '';
 
-Future.delayed(const Duration(seconds: 2), () {
-  _scheduleSalatAlaNabi();
-});
+    Future.delayed(const Duration(seconds: 2), () {
+      _scheduleSalatAlaNabi();
+    });
+    
     _tasbeehCount = prefs.getInt('tasbeeh_count') ?? 0;
     _playbackVolume = prefs.getDouble('playback_volume') ?? 1.0;
     _playbackSpeed = prefs.getDouble('playback_speed') ?? 1.0;
@@ -2774,821 +2855,938 @@ Future.delayed(const Duration(seconds: 2), () {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('saved_weekly_schedule', json.encode(_weeklySchedule));
   }
+
   int _getAdvanceMinutes(String reminder) {
-  switch (reminder) {
-    case 'قبلها بـ 5 دقائق': return 5;
-    case 'قبلها بـ 10 دقائق': return 10;
-    case 'قبلها بـ 15 دقيقة': return 15;
-    case 'قبلها بـ 20 دقيقة': return 20;
-    case 'قبلها بـ 30 دقيقة': return 30;
-    case 'قبلها بـ 45 دقيقة': return 45;
-    case 'قبلها بساعة': return 60;
-    case 'قبلها ب 6 ساعات': return 360;
-    case 'قبلها ب 12 ساعة': return 720;
-    case 'قبلها بـ 24 ساعة': return 1440;
-    default: return 0;
-  }
-}
-
-void _scheduleWeeklyAlarm(String taskTitle, String day, DateTime scheduledDateTime, String interval, String advanceReminder, {String? soundUri}) {
-  int advanceMins = _getAdvanceMinutes(advanceReminder);
-  DateTime alarmTime = scheduledDateTime.subtract(Duration(minutes: advanceMins));
-  _scheduleContinuousAlarm('جدول_${day}_$taskTitle', alarmTime, 'أسبوعي', interval, [day], soundUri: soundUri);
-}
-
-Future<void> _loadRecordings() async {
-  final prefs = await SharedPreferences.getInstance();
-  String? recordingsString = prefs.getString('saved_recordings');
-  if (recordingsString != null) {
-    setState(() {
-      _recordings = List<Map<String, dynamic>>.from(json.decode(recordingsString));
-    });
-  }
-}
-
-Future<void> _saveRecordings() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('saved_recordings', json.encode(_recordings));
-}
-
-Future<void> _startRecording() async {
-  try {
-    if (await _audioRecorder.hasPermission()) {
-      final dir = await getApplicationDocumentsDirectory();
-      final recordingsDir = Directory('${dir.path}/recordings');
-      if (!await recordingsDir.exists()) {
-        await recordingsDir.create(recursive: true);
-      }
-      final fileName = 'rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      final path = '${recordingsDir.path}/$fileName';
-
-      const config = RecordConfig(
-        encoder: AudioEncoder.aacLc, bitRate: 128000,
-        sampleRate: 44100, numChannels: 1,
-      );
-      await _audioRecorder.start(config, path: path);
-      setState(() {
-        _isRecording = true;
-        _recordingDuration = Duration.zero;
-      });
-
-      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
-      });
-    }
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ في التسجيل: $e')),
-      );
+    switch (reminder) {
+      case 'قبلها بـ 5 دقائق': return 5;
+      case 'قبلها بـ 10 دقائق': return 10;
+      case 'قبلها بـ 15 دقيقة': return 15;
+      case 'قبلها بـ 20 دقيقة': return 20;
+      case 'قبلها بـ 30 دقيقة': return 30;
+      case 'قبلها بـ 45 دقيقة': return 45;
+      case 'قبلها بساعة': return 60;
+      case 'قبلها ب 6 ساعات': return 360;
+      case 'قبلها ب 12 ساعة': return 720;
+      case 'قبلها بـ 24 ساعة': return 1440;
+      default: return 0;
     }
   }
-}
 
-Future<void> _stopRecording() async {
-  try {
-    _recordingTimer?.cancel();
-    final path = await _audioRecorder.stop();
-    if (path != null) {
-      final newRecording = {
-        'path': path,
-        'name': 'تسجيل ${_recordings.length + 1}',
-        'duration': _formatDuration(_recordingDuration),
-        'createdAt': DateTime.now().toIso8601String(),
-      };
-      setState(() {
-        _recordings.insert(0, newRecording);
-        _isRecording = false;
-        _recordingDuration = Duration.zero;
-      });
-      await _saveRecordings();
-    }
-  } catch (e) {
-    if (mounted) setState(() => _isRecording = false);
+  void _scheduleWeeklyAlarm(String taskTitle, String day, DateTime scheduledDateTime, String interval, String advanceReminder, {String? soundUri}) {
+    int advanceMins = _getAdvanceMinutes(advanceReminder);
+    DateTime alarmTime = scheduledDateTime.subtract(Duration(minutes: advanceMins));
+    _scheduleContinuousAlarm('جدول_${day}_$taskTitle', alarmTime, 'أسبوعي', interval, [day], soundUri: soundUri);
   }
-}
 
-Future<void> _playRecording(String path) async {
-  try {
-    if (_currentlyPlayingPath == path) {
-      await _audioPlayer.stop();
-      await _positionSub?.cancel();
-      await _durationSub?.cancel();
+  Future<void> _loadRecordings() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? recordingsString = prefs.getString('saved_recordings');
+    if (recordingsString != null) {
       setState(() {
-        _currentlyPlayingPath = null;
-        _currentPosition = Duration.zero;
-        _currentDuration = Duration.zero;
+        _recordings = List<Map<String, dynamic>>.from(json.decode(recordingsString));
       });
-    } else {
-      await _audioPlayer.stop();
-      await _positionSub?.cancel();
-      await _durationSub?.cancel();
+    }
+  }
 
-      _positionSub = _audioPlayer.onPositionChanged.listen((pos) {
-        if (mounted) setState(() => _currentPosition = pos);
-      });
-      _durationSub = _audioPlayer.onDurationChanged.listen((dur) {
-        if (mounted) setState(() => _currentDuration = dur);
-      });
+  Future<void> _saveRecordings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('saved_recordings', json.encode(_recordings));
+  }
 
-      await _audioPlayer.setVolume(_playbackVolume);
-      await _audioPlayer.setPlaybackRate(_playbackSpeed);
-      await _audioPlayer.play(DeviceFileSource(path));
-      setState(() => _currentlyPlayingPath = path);
-
-      _audioPlayer.onPlayerComplete.listen((_) {
-        if (mounted) {
-          setState(() {
-            _currentlyPlayingPath = null;
-            _currentPosition = Duration.zero;
-            _currentDuration = Duration.zero;
-          });
+  Future<void> _startRecording() async {
+    try {
+      if (await _audioRecorder.hasPermission()) {
+        final dir = await getApplicationDocumentsDirectory();
+        final recordingsDir = Directory('${dir.path}/recordings');
+        if (!await recordingsDir.exists()) {
+          await recordingsDir.create(recursive: true);
         }
-      });
-    }
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ في التشغيل: $e')),
-      );
-    }
-  }
-}
+        final fileName = 'rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        final path = '${recordingsDir.path}/$fileName';
 
-Future<void> _shareRecording(String path) async {
-  try {
-    final file = File(path);
-    if (await file.exists()) {
-      await Share.shareXFiles([XFile(path)], text: 'تسجيل صوتي');
-    }
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ في المشاركة: $e')),
-      );
-    }
-  }
-}
+        const config = RecordConfig(
+          encoder: AudioEncoder.aacLc, bitRate: 128000,
+          sampleRate: 44100, numChannels: 1,
+        );
+        await _audioRecorder.start(config, path: path);
+        setState(() {
+          _isRecording = true;
+          _recordingDuration = Duration.zero;
+        });
 
-Future<void> _deleteRecording(int index) async {
-  try {
-    final path = _recordings[index]['path'].toString();
-    final file = File(path);
-    if (await file.exists()) {
-      await file.delete();
-    }
-    setState(() {
-      _recordings.removeAt(index);
-    });
-    await _saveRecordings();
-  } catch (_) {}
-}
-
-void _renameRecording(int index) {
-  TextEditingController nameCtrl = TextEditingController(text: _recordings[index]['name'].toString());
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      title: const Text('إعادة تسمية التسجيل', style: TextStyle(fontWeight: FontWeight.bold)),
-      content: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'الاسم الجديد')),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
-          onPressed: () {
-            if (nameCtrl.text.isNotEmpty) {
-              setState(() {
-                _recordings[index]['name'] = nameCtrl.text;
-              });
-              _saveRecordings();
-              Navigator.pop(ctx);
-            }
-          },
-          child: const Text('حفظ', style: TextStyle(color: Colors.white)),
-        ),
-      ],
-    ),
-  );
-}
-
-@override
-void dispose() {
-  WidgetsBinding.instance.removeObserver(this);
-  _eventRepeatTimer?.cancel();
-  _accelerometerSub?.cancel();
-  _adhanTimer?.cancel();
-  _recordingTimer?.cancel();
-  _positionSub?.cancel();
-  _durationSub?.cancel();
-  _pendingActionTimer?.cancel();
-  _audioRecorder.dispose();
-  _audioPlayer.dispose();
-  for (var timer in _activeTimers) {
-    timer.cancel();
-  }
-  _speech.cancel();
-  super.dispose();
-}
-
-Future<void> _configureVoice({bool skipGreeting = false}) async {
-  try {
-    await _tts.setLanguage("ar-EG");
-    await _tts.awaitSpeakCompletion(true);
-    await Future.delayed(const Duration(milliseconds: 150));
-  } catch (_) {}
-
-  final prefs = await SharedPreferences.getInstance();
-  final gender = prefs.getString('voice_gender') ?? _settings.voiceGender;
-
-  try {
-    final voices = await _getArabicVoices();
-    if (voices.isNotEmpty) {
-      await _tts.setVoice({
-        'name': voices.first['name']!,
-        'locale': voices.first['locale']!,
-      });
-      await Future.delayed(const Duration(milliseconds: 150));
-    }
-  } catch (_) {}
-
-  try {
-    if (gender == 'ذكر') {
-      await _tts.setPitch(0.6);
-      await _tts.setSpeechRate(_settings.speechRate);
-      await _tts.setVolume(1.0);
-    } else {
-      await _tts.setPitch(1.15);
-      await _tts.setSpeechRate(_settings.speechRate);
-      await _tts.setVolume(_settings.speechVolume * _ttsVolume);
-    }
-
-    if (!skipGreeting && _settings.greetingEnabled) {
-      String greeting = _settings.customGreeting;
-      
-      // 👈 ضبط الجنس
-      if (_isUserMale) {
-        greeting = greeting.replaceAll('{user}', 'يَا فَنْدِم');
-      } else {
-        greeting = greeting.replaceAll('{user}', 'يَا أُسْتَاذَة');
-        greeting = greeting.replaceAll('بِكَ', 'بِكِ');
-        greeting = greeting.replaceAll('بك ', 'بِكِ ');
-        greeting = greeting.replaceAll('بك.', 'بِكِ.');
+        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
+        });
       }
-      
-      greeting = greeting.replaceAll('{sec}', _secWord).replaceAll('{name}', _secretaryName);
-      
-      if (_settings.isKidsMode) greeting = "أَهْلاً يَا بَطَل! أَنَا صَدِيقُكَ $_secWord، هَنُسَاعِدَكْ نِلْعَبْ وَنِتْعَلِّمْ مَعْ بَعْض.";
-      await _tts.speak(greeting);
-    }
-  } catch (_) {}
-}
-
-Future<List<Map<String, String>>> _getArabicVoices() async {
-  try {
-    final voices = await _tts.getVoices;
-    if (voices is! List) return [];
-    final list = <Map<String, String>>[];
-    for (final v in voices) {
-      if (v is! Map) continue;
-      final name = v['name']?.toString() ?? '';
-      final locale = v['locale']?.toString() ?? '';
-      if (locale.toLowerCase().startsWith('ar') && name.isNotEmpty) {
-        list.add({'name': name, 'locale': locale});
-      }
-    }
-    return list;
-  } catch (_) {
-    return [];
-  }
-}
-
-Future<void> _speak(String text) async {
-  if (_settings.wakeWordMode != 'off') {
-    try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
-    if (_isWakeWordListening) {
-      try { await _speech.stop(); } catch (_) {}
-      _isWakeWordListening = false;
-    }
-  }
-
-  try {
-    final gender = _settings.voiceGender;
-    if (gender == 'ذكر') {
-      await _tts.setPitch(0.6);
-      await _tts.setSpeechRate(_settings.speechRate);
-      await _tts.setVolume(1.0);
-    } else {
-      await _tts.setPitch(1.15);
-      await _tts.setSpeechRate(_settings.speechRate);
-      await _tts.setVolume(_settings.speechVolume * _ttsVolume);
-    }
-    await _tts.speak(text);
-  } catch (e) {
-    debugPrint("TTS Error: $e");
-  }
-
-  if (_settings.wakeWordMode != 'off') {
-    Future.delayed(const Duration(seconds: 1), () {
-      try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-      if (!_isListening && !_isInBackground) _startWakeWordLoop();
-    });
-  }
-}
-
-Future<void> _listenVoiceCommand() async {
-  if (_isListening) {
-    await _speech.stop();
-    if (mounted) setState(() => _isListening = false);
-    try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-    return;
-  }
-  if (_starting) return;
-  _starting = true;
-  try {
-    if (!_speechReady) await _initSpeech();
-    if (!_speechReady) return;
-
-    try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
-
-    await _tts.stop();
-    try { await _speech.cancel(); } catch (_) {}
-    
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    if (mounted) {
-      setState(() => _isListening = true);
-      if (!_isTasbeehMode && !_isAdhkarMode) {
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🎤 التطبيق بيستمع ليك دلوقتي...', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
-            duration: Duration(seconds: 2),
-            backgroundColor: Color(0xFF1B2A4A),
-          ),
+          SnackBar(content: Text('خطأ في التسجيل: $e')),
         );
       }
     }
-
-    bool hasFinishedTasbeeh = false;
-    bool hasFinishedAdhkar = false;
-
-    await _speech.listen(
-      localeId: "ar-EG", onDevice: false,
-      listenFor: const Duration(seconds: 60), pauseFor: const Duration(seconds: 10),
-      partialResults: true,
-      onResult: (val) {
-        if (_isTasbeehMode) {
-          if (val.finalResult && !hasFinishedTasbeeh) {
-            hasFinishedTasbeeh = true; 
-            _handleTasbeehResult(val.recognizedWords);
-            Future.delayed(const Duration(milliseconds: 300), () {
-              if (mounted && _isTasbeehMode) _listenVoiceCommand();
-            });
-          }
-        } else if (_isAdhkarMode) {
-          if (val.finalResult && !hasFinishedAdhkar) {
-            hasFinishedAdhkar = true;
-            _handleAdhkarResult(val.recognizedWords);
-            Future.delayed(const Duration(milliseconds: 300), () {
-              if (mounted && _isAdhkarMode) _listenVoiceCommand();
-            });
-          }
-        } else {
-          if (val.finalResult) {
-            if (mounted) setState(() => _isListening = false);
-            if (_settings.wakeWordMode != 'off') {
-              try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-            }
-            _processSmartVoiceCommand(val.recognizedWords);
-          }
-        }
-      },
-    );
-  } catch (e) {
-    debugPrint("Listen Error: $e");
-    if (mounted) setState(() => _isListening = false);
-    if (_settings.wakeWordMode != 'off') {
-      try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-    }
-  } finally {
-    _starting = false;
   }
-}
 
-Future<void> _startWakeWordLoop() async {
-  if (_settings.wakeWordMode == 'off') return;
-  if (_isListening || _starting || _isRecording) return;
-  if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
+  Future<void> _stopRecording() async {
+    try {
+      _recordingTimer?.cancel();
+      final path = await _audioRecorder.stop();
+      if (path != null) {
+        final newRecording = {
+          'path': path,
+          'name': 'تسجيل ${_recordings.length + 1}',
+          'duration': _formatDuration(_recordingDuration),
+          'createdAt': DateTime.now().toIso8601String(),
+        };
+        setState(() {
+          _recordings.insert(0, newRecording);
+          _isRecording = false;
+          _recordingDuration = Duration.zero;
+        });
+        await _saveRecordings();
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isRecording = false);
+    }
+  }
 
-  _isWakeWordListening = true;
-  try {
-    await _speech.listen(
-      localeId: "ar-EG",
-      onDevice: false,
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 60),
-      partialResults: true,
-      onResult: (val) {
-        if (val.recognizedWords.isEmpty) return;
-        
-        final compact = _norm(val.recognizedWords).replaceAll(RegExp(r'\s+'), '');
-        final nameCompact = _norm(_secretaryName).replaceAll(RegExp(r'\s+'), '');
-        final customCompact = _norm(_settings.customWakeWord).replaceAll(RegExp(r'\s+'), '');
-        final isGenericMatch = compact.contains('ياسكرتير') || compact.contains('ياسكرتيره') || compact.contains('ياسكرتيرة');
-        
-        bool isTriggered = false;
-        if (_settings.wakeWordTrigger == 'name_only') {
-          isTriggered = (nameCompact.isNotEmpty && compact.contains(nameCompact)) || isGenericMatch;
-        } else if (_settings.wakeWordTrigger == 'custom_only') {
-          isTriggered = customCompact.isNotEmpty && compact.contains(customCompact);
-        } else {
-          isTriggered = (nameCompact.isNotEmpty && compact.contains(nameCompact)) || 
-                        (customCompact.isNotEmpty && compact.contains(customCompact)) || 
-                        isGenericMatch;
-        }
+  Future<void> _playRecording(String path) async {
+    try {
+      if (_currentlyPlayingPath == path) {
+        await _audioPlayer.stop();
+        await _positionSub?.cancel();
+        await _durationSub?.cancel();
+        setState(() {
+          _currentlyPlayingPath = null;
+          _currentPosition = Duration.zero;
+          _currentDuration = Duration.zero;
+        });
+      } else {
+        await _audioPlayer.stop();
+        await _positionSub?.cancel();
+        await _durationSub?.cancel();
 
-        if (isTriggered) {
-          _isWakeWordListening = false;
-          _speech.stop();
-          _listenVoiceCommand();
-        }
-      },
+        _positionSub = _audioPlayer.onPositionChanged.listen((pos) {
+          if (mounted) setState(() => _currentPosition = pos);
+        });
+        _durationSub = _audioPlayer.onDurationChanged.listen((dur) {
+          if (mounted) setState(() => _currentDuration = dur);
+        });
+
+        await _audioPlayer.setVolume(_playbackVolume);
+        await _audioPlayer.setPlaybackRate(_playbackSpeed);
+        await _audioPlayer.play(DeviceFileSource(path));
+        setState(() => _currentlyPlayingPath = path);
+
+        _audioPlayer.onPlayerComplete.listen((_) {
+          if (mounted) {
+            setState(() {
+              _currentlyPlayingPath = null;
+              _currentPosition = Duration.zero;
+              _currentDuration = Duration.zero;
+            });
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في التشغيل: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareRecording(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await Share.shareXFiles([XFile(path)], text: 'تسجيل صوتي');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في المشاركة: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteRecording(int index) async {
+    try {
+      final path = _recordings[index]['path'].toString();
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+      setState(() {
+        _recordings.removeAt(index);
+      });
+      await _saveRecordings();
+    } catch (_) {}
+  }
+
+  void _renameRecording(int index) {
+    TextEditingController nameCtrl = TextEditingController(text: _recordings[index]['name'].toString());
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Text('إعادة تسمية التسجيل', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'الاسم الجديد')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+            onPressed: () {
+              if (nameCtrl.text.isNotEmpty) {
+                setState(() {
+                  _recordings[index]['name'] = nameCtrl.text;
+                });
+                _saveRecordings();
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('حفظ', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
-    
-    _isWakeWordListening = false;
-    if (mounted && !_isListening && !_starting && !_isRecording && _settings.wakeWordMode != 'off') {
-      if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
-        Future.delayed(const Duration(milliseconds: 200), () {
-          if (mounted && !_isListening && !_starting && !_isRecording) {
-             _startWakeWordLoop();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _eventRepeatTimer?.cancel();
+    _accelerometerSub?.cancel();
+    _adhanTimer?.cancel();
+    _recordingTimer?.cancel();
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _pendingActionTimer?.cancel();
+    _audioRecorder.dispose();
+    _audioPlayer.dispose();
+    for (var timer in _activeTimers) {
+      timer.cancel();
+    }
+    _speech.cancel();
+    super.dispose();
+  }
+
+  Future<void> _configureVoice({bool skipGreeting = false}) async {
+    try {
+      await _tts.setLanguage("ar-EG");
+      await _tts.awaitSpeakCompletion(true);
+      await Future.delayed(const Duration(milliseconds: 150));
+    } catch (_) {}
+
+    final prefs = await SharedPreferences.getInstance();
+    final gender = prefs.getString('voice_gender') ?? _settings.voiceGender;
+
+    try {
+      final voices = await _getArabicVoices();
+      if (voices.isNotEmpty) {
+        await _tts.setVoice({
+          'name': voices.first['name']!,
+          'locale': voices.first['locale']!,
+        });
+        await Future.delayed(const Duration(milliseconds: 150));
+      }
+    } catch (_) {}
+
+    try {
+      if (gender == 'ذكر') {
+        await _tts.setPitch(0.6);
+        await _tts.setSpeechRate(_settings.speechRate);
+        await _tts.setVolume(1.0);
+      } else {
+        await _tts.setPitch(1.15);
+        await _tts.setSpeechRate(_settings.speechRate);
+        await _tts.setVolume(_settings.speechVolume * _ttsVolume);
+      }
+
+      if (!skipGreeting && _settings.greetingEnabled) {
+        String greeting = _settings.customGreeting;
+        
+        String userPrefix = _settings.customUserTitle.trim().isNotEmpty ? _settings.customUserTitle.trim() : (_isUserMale ? 'يَا فَنْدِم' : 'يَا أُسْتَاذَة');
+        greeting = greeting.replaceAll('{user}', userPrefix);
+        
+        if (!_isUserMale) {
+          greeting = greeting.replaceAll('بِكَ', 'بِكِ');
+          greeting = greeting.replaceAll('بك ', 'بِكِ ');
+          greeting = greeting.replaceAll('بك.', 'بِكِ.');
+        }
+        
+        greeting = greeting.replaceAll('{sec}', _secWord).replaceAll('{name}', _secretaryName);
+        
+        if (_settings.isKidsMode) greeting = "أَهْلاً يَا بَطَل! أَنَا صَدِيقُكَ $_secWord، هَنُسَاعِدَكْ نِلْعَبْ وَنِتْعَلِّمْ مَعْ بَعْض.";
+        await _tts.speak(greeting);
+      }
+    } catch (_) {}
+  }
+
+  Future<List<Map<String, String>>> _getArabicVoices() async {
+    try {
+      final voices = await _tts.getVoices;
+      if (voices is! List) return [];
+      final list = <Map<String, String>>[];
+      for (final v in voices) {
+        if (v is! Map) continue;
+        final name = v['name']?.toString() ?? '';
+        final locale = v['locale']?.toString() ?? '';
+        if (locale.toLowerCase().startsWith('ar') && name.isNotEmpty) {
+          list.add({'name': name, 'locale': locale});
+        }
+      }
+      return list;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _speak(String text) async {
+    if (_settings.wakeWordMode != 'off') {
+      try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
+      if (_isWakeWordListening) {
+        try { await _speech.stop(); } catch (_) {}
+        _isWakeWordListening = false;
+      }
+    }
+
+    try {
+      final gender = _settings.voiceGender;
+      if (gender == 'ذكر') {
+        await _tts.setPitch(0.6);
+        await _tts.setSpeechRate(_settings.speechRate);
+        await _tts.setVolume(1.0);
+      } else {
+        await _tts.setPitch(1.15);
+        await _tts.setSpeechRate(_settings.speechRate);
+        await _tts.setVolume(_settings.speechVolume * _ttsVolume);
+      }
+      await _tts.speak(text);
+    } catch (e) {
+      debugPrint("TTS Error: $e");
+    }
+
+    if (_settings.wakeWordMode != 'off') {
+      Future.delayed(const Duration(seconds: 1), () {
+        try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+        if (!_isListening && !_isInBackground) _startWakeWordLoop();
+      });
+    }
+  }
+
+  Future<void> _listenVoiceCommand() async {
+    if (_isListening) {
+      await _speech.stop();
+      if (mounted) setState(() => _isListening = false);
+      try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+      return;
+    }
+    if (_starting) return;
+    _starting = true;
+    try {
+      if (!_speechReady) await _initSpeech();
+      if (!_speechReady) return;
+
+      try { await _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
+
+      await _tts.stop();
+      try { await _speech.cancel(); } catch (_) {}
+      
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      if (mounted) {
+        setState(() => _isListening = true);
+        if (!_isTasbeehMode && !_isAdhkarMode) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🎤 التطبيق بيستمع ليك دلوقتي...', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+              duration: Duration(seconds: 2),
+              backgroundColor: Color(0xFF1B2A4A),
+            ),
+          );
+        }
+      }
+
+      bool hasFinishedTasbeeh = false;
+      bool hasFinishedAdhkar = false;
+
+      await _speech.listen(
+        localeId: "ar-EG", onDevice: false,
+        listenFor: const Duration(seconds: 60), pauseFor: const Duration(seconds: 10),
+        partialResults: true,
+        onResult: (val) {
+          if (_isTasbeehMode) {
+            if (val.finalResult && !hasFinishedTasbeeh) {
+              hasFinishedTasbeeh = true; 
+              _handleTasbeehResult(val.recognizedWords);
+              Future.delayed(const Duration(milliseconds: 300), () {
+                if (mounted && _isTasbeehMode) _listenVoiceCommand();
+              });
+            }
+          } else if (_isAdhkarMode) {
+            if (val.finalResult && !hasFinishedAdhkar) {
+              hasFinishedAdhkar = true;
+              _handleAdhkarResult(val.recognizedWords);
+              Future.delayed(const Duration(milliseconds: 300), () {
+                if (mounted && _isAdhkarMode) _listenVoiceCommand();
+              });
+            }
+          } else {
+            if (val.finalResult) {
+              if (mounted) setState(() => _isListening = false);
+              if (_settings.wakeWordMode != 'off') {
+                try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+              }
+              _processSmartVoiceCommand(val.recognizedWords);
+            }
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint("Listen Error: $e");
+      if (mounted) setState(() => _isListening = false);
+      if (_settings.wakeWordMode != 'off') {
+        try { await _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+      }
+    } finally {
+      _starting = false;
+    }
+  }
+
+  Future<void> _startWakeWordLoop() async {
+    if (_settings.wakeWordMode == 'off') return;
+    if (_isListening || _starting || _isRecording) return;
+    if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
+
+    _isWakeWordListening = true;
+    try {
+      await _speech.listen(
+        localeId: "ar-EG",
+        onDevice: false,
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 60),
+        partialResults: true,
+        onResult: (val) {
+          if (val.recognizedWords.isEmpty) return;
+          
+          final compact = _norm(val.recognizedWords).replaceAll(RegExp(r'\s+'), '');
+          final nameCompact = _norm(_secretaryName).replaceAll(RegExp(r'\s+'), '');
+          final customCompact = _norm(_settings.customWakeWord).replaceAll(RegExp(r'\s+'), '');
+          final isGenericMatch = compact.contains('ياسكرتير') || compact.contains('ياسكرتيره') || compact.contains('ياسكرتيرة');
+          
+          bool isTriggered = false;
+          if (_settings.wakeWordTrigger == 'name_only') {
+            isTriggered = (nameCompact.isNotEmpty && compact.contains(nameCompact)) || isGenericMatch;
+          } else if (_settings.wakeWordTrigger == 'custom_only') {
+            isTriggered = customCompact.isNotEmpty && compact.contains(customCompact);
+          } else {
+            isTriggered = (nameCompact.isNotEmpty && compact.contains(nameCompact)) || 
+                          (customCompact.isNotEmpty && compact.contains(customCompact)) || 
+                          isGenericMatch;
+          }
+
+          if (isTriggered) {
+            _isWakeWordListening = false;
+            _speech.stop();
+            _listenVoiceCommand();
+          }
+        },
+      );
+      
+      _isWakeWordListening = false;
+      if (mounted && !_isListening && !_starting && !_isRecording && _settings.wakeWordMode != 'off') {
+        if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
+          Future.delayed(const Duration(milliseconds: 200), () {
+            if (mounted && !_isListening && !_starting && !_isRecording) {
+               _startWakeWordLoop();
+            }
+          });
+        }
+      }
+    } catch (e) {
+      _isWakeWordListening = false;
+      debugPrint("WakeWord Error: $e");
+      if (mounted && _settings.wakeWordMode != 'off') {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted && !_isListening && !_starting && !_isRecording && (!_isInBackground || _settings.wakeWordMode != 'app_open')) {
+            _startWakeWordLoop();
           }
         });
       }
     }
-  } catch (e) {
-    _isWakeWordListening = false;
-    debugPrint("WakeWord Error: $e");
-    if (mounted && _settings.wakeWordMode != 'off') {
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && !_isListening && !_starting && !_isRecording && (!_isInBackground || _settings.wakeWordMode != 'app_open')) {
-          _startWakeWordLoop();
-        }
-      });
+  }
+
+  Future<bool> _handleSocialReply(String cmd) async {
+    final userTitle = _userTitle;
+    final secTitle = _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
+    final now = DateTime.now();
+
+    if (_hasAny(cmd, ['اطول ايه في القران', 'أطول آية', 'اطول سورة', 'أطول سورة'])) {
+      await _speak("أَطْوَلُ آيَةٍ فِي القُرْآنِ هِيَ آيَةُ الدَّيْنِ فِي سُورَةِ البَقَرَةِ، وَعَدَدُ كَلِمَاتِهَا 128 كَلِمَة $userTitle.");
+      return true;
     }
-  }
-}
-
-Future<bool> _handleSocialReply(String cmd) async {
-  final userTitle = _userTitle;
-  final secTitle = _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
-  final now = DateTime.now();
-
-  if (_hasAny(cmd, ['اطول ايه في القران', 'أطول آية', 'اطول سورة', 'أطول سورة'])) {
-    await _speak("أَطْوَلُ آيَةٍ فِي القُرْآنِ هِيَ آيَةُ الدَّيْنِ فِي سُورَةِ البَقَرَةِ، وَعَدَدُ كَلِمَاتِهَا 128 كَلِمَة $userTitle.");
-    return true;
-  }
-  if (_hasAny(cmd, ['اول سوره نزلت', 'أول سورة', 'اول ما نزل'])) {
-    await _speak("أَوَّلُ مَا نَزَلَ مِنَ القُرْآنِ هُوَ قَوْلُهُ تَعَالَى: (اقْرَأْ بِاسْمِ رَبِّكَ الَّذِي خَلَقَ) فِي سُورَةِ العَلَق $userTitle.");
-    return true;
-  }
-  if (_hasAny(cmd, ['اركان الاسلام', 'أركان الإسلام', 'اركان الايمان'])) {
-    await _speak("أَرْكَانُ الإِسْلَامِ خَمْسَةٌ: شَهَادَةُ أَنْ لَا إِلَهَ إِلَّا اللَّهُ وَأَنَّ مُحَمَّداً رَسُولُ اللَّهِ، وَإِقَامُ الصَّلَاةِ، وَإِيتَاءُ الزَّكَاةِ، وَصَوْمُ رَمَضَانَ، وَحَجُّ البَيْتِ لِمَنِ اسْتَطَاعَ إِلَيْهِ سَبِيلًا.");
-    return true;
-  }
-  if (_hasAny(cmd, ['عندي امتحان', 'امتحان بكرة', 'امتحان بكره', 'امتحان قريب'])) {
-    await _speak("رَبَّنَا يُوَفِّقْكَ $userTitle، $_dontForget تُصَلِّي الفَجْرَ $_sleepWord بَدْرِي، وَ$_studyWord كُوَيِّسْ وَرَبَّنَا $_withYou.");
-    return true;
-  }
-
-  if (_hasAny(cmd, ['سبحان الله', 'استغفر الله', 'الحمد لله', 'الله اكبر', 'لا اله الا الله', 'سبحان الله وبحمده'])) {
-    setState(() => _tasbeehCount++);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('tasbeeh_count', _tasbeehCount);
-    await _speak("جَزَاكَ اللَّهُ خَيْراً $userTitle، تَمَّ تَسْجِيلُ التَّسْبِيحَةِ. عَدَدُ التَّسْبِيحَاتِ: $_tasbeehCount.");
-    return true;
-  }
-  if (_hasAny(cmd, ['شوف العداد', 'العداد كام', 'سبحت كام', 'كام تسبيحة'])) {
-    await _speak("لَقَدْ سَبَّحْتَ $userTitle $_tasbeehCount مَرَّةً.");
-    return true;
-  }
-
-  if (_hasAny(cmd, ['صباح الخير', 'صباح النور', 'صباح الفل', 'صباحو', 'صبح صباح الخير', 'صباح الخيرات', 'صباح الورد', 'صباح العسل'])) {
-    await _speak("صَبَاحُ النُّورِ وَالسُّرُورِ $userTitle ☀️ أَتَمَنَّى لَكَ يَوْمَ سَعِيد! النَّهَارْدَة يَوْمْ جَدِيدْ وَفُرْصَة جَدِيدَة.");
-    return true;
-  }
-  if (_hasAny(cmd, ['صباح الفل والياسمين', 'صباح الحب', 'صباح الجمال'])) {
-    await _speak("صَبَاحُ الفُلِّ وَاليَاسَمِينِ وَالوَرْدِ $userTitle 🌸 يَوْمَكَ يَبْدَأُ بِخَيْرٍ إِنْ شَاءَ اللَّهُ.");
-    return true;
-  }
-  if (_hasAny(cmd, ['مساء الخير', 'مساء النور', 'مساء الفل', 'مسائو', 'مسا الخير', 'مساء الخيرات', 'مساء الورد', 'مساء العسل', 'مساء الحب'])) {
-    await _speak("مَسَاءُ النُّورِ وَالفُلِّ وَاليَاسَمِينِ $userTitle 🌙 أَتَمَنَّى تِكُونْ بِخِير. الوَقْتْ اتْأَخَّرْ، لَازِمْ جِسْمَكْ يِرْتَاحْ.");
-    return true;
-  }
-  if (_hasAny(cmd, ['اهلا', 'أهلاً', 'مرحبا', 'هاي', 'hello', 'hi', 'ازيك', 'ازيك يا', 'عامل ايه', 'عاملة ايه', 'إيه الأخبار', 'ايه الاخبار'])) {
-    await _speak("أَهْلاً بِيكَ $userTitle 🌟 أَنَا $secTitle الشَّخْصِيِّ بِتَاعَكْ، تَحْتْ أَمْرَكْ دَايْمًا.");
-    return true;
-  }
-
-  if (_hasAny(cmd, ['بحبك', 'احبك', 'أحبك', 'بعشقك', 'من عشاقك', 'انتي حبيبتي', 'انت حبيبي'])) {
-    await _speak("وَأَنَا كَمَانْ بِحِبَّكَ $userTitle 💛 دَهْ أَنَا تَحْتْ أَمْرَكْ دَايْمًا.");
-    return true;
-  }
-  if (_hasAny(cmd, ['وحشتني', 'وحشتينى', 'وحشني', 'اشتقتلك', 'اشتقت لك', 'مشتاقلك', 'مشتاقة لك'])) {
-    await _speak("$_pronoun كَمَانْ وَحَشْتِنِي $userTitle، أَنَا $_readyWord لِأَيِّ خِدْمَة 💛.");
-    return true;
-  }
-  if (_hasAny(cmd, ['شاطر', 'شاطرة', 'ذكي', 'ذكية', 'عسل', 'برنس', 'جامد', 'جامدة', 'ممتاز', 'ممتازة', 'تسلم ايدك', 'تسلم إيدك'])) {
-    await _speak("دَهْ مِنْ زُوقَكْ $userTitle، شُكْراً عَلَى المُجَامَلَةِ الحَلْوَةِ دِي 🙏.");
-    return true;
-  }
-  if (_hasAny(cmd, ['ربنا يخليك', 'ربنا يخليكي', 'ربنا يسعدك', 'ربنا يوفقك', 'ربنا يخليك ليا', 'ربنا يكرمك'])) {
-    await _speak("وَرَبَّنَا يِخَلِّيكْ لِيَا $userTitle، أَنَا فِي خِدْمَتِكَ دَايْمًا 💛.");
-    return true;
-  }
-
-  if (_hasAny(cmd, ['تعبان', 'تعبانة', 'مش كويس', 'مش كويسة', 'مضايق', 'مضايقة', 'زعلان', 'زعلانة', 'حزين', 'حزينة', 'مش قادر', 'مش قادرة', 'مخنوق', 'مخنوقة'])) {
-    await _speak("أَلْفْ سَلَامَة عَلِيكْ $userTitle، $_takeCareWord بِالَكْ مِنْ نَفْسَكْ. $_youWant أَفْتَحْلَكْ يَوْمِيَّاتَكْ تِكْتِبْ فِيهَا أَوْ أَحْجِزْلَكْ مَوْعِدْ، أَنَا تَحْتْ أَمْرَكْ 💚.");
-    return true;
-  }
-  if (_hasAny(cmd, ['مبسوط', 'مبسوطة', 'فرحان', 'فرحانة', 'سعيد', 'سعيدة', 'الحمد لله مبسوط'])) {
-    await _speak("وَأَنَا كَمَانْ $_happyWord لِيكْ $userTitle 😊 رَبَّنَا يِدِيمْ الفَرْحَة عَلِيكْ.");
-    return true;
-  }
-  if (_hasAny(cmd, ['زهقان', 'زهقانة', 'مليت', 'حاسس بالوحدة', 'حاسة بالوحدة', 'طفشان', 'طفشانة', 'مخنوق ومش عارف أعمل ايه', 'مخنوقة ومش عارفة أعمل ايه'])) {
-    await _speak("مَا تِزْعَلْشْ $userTitle، أَنَا مَعَاكْ. تِحِبْ أَحْكِيلَكْ نُكْتَة تِضَحِّكَكْ؟ وَلَا أَحْكِيلَكْ لُغْزْ تِشْغَلْ دِمَاغَكْ شُوَيَّةْ؟");
-    return true;
-  }
-  if (_hasAny(cmd, ['خايف', 'خايفة', 'قلقان', 'قلقانة', 'متوتر', 'متوترة'])) {
-    await _speak("هَدِّي نَفْسَكْ $userTitle، كُلِّ حَاجَة هَتْبَقَى تَمَام. أَنَا هِنَا $_youWant $_youTalk.");
-    return true;
-  }
-
-  if (_hasAny(cmd, ['جعان', 'جعانة', 'عايز اكل', 'عايزة اكل', 'مش لاقي اكل', 'مش لاقية اكل'])) {
-    await _speak("خُدْ بِالَكْ مِنْ نَفْسَكْ $userTitle، لَازِمْ تَاكُلْ حَاجَة. تِحِبْ أَفَكِّرَكْ بِمَوْعِدْ الأَكِلْ؟ 💚.");
-    return true;
-  }
-  if (_hasAny(cmd, ['عطشان', 'عطشانة', 'عايز اشرب', 'عايزة اشرب'])) {
-    await _speak("اشْرَبْ مَيَّة وَهَتِرْتَاحْ $userTitle، صِحَّتَكْ تِهِمَّنِي 💧.");
-    return true;
-  }
-  if (_hasAny(cmd, ['قرفان', 'قرفانة'])) {
-    await _speak("رَبَّنَا يُعِينَكْ $userTitle، خُدْ نَفَسْ عَمِيقْ وَغَيِّرْ جَوْ.");
-    return true;
-  }
-
-  if (_hasAny(cmd, ['الساعه كام', 'الساعة كام', 'الوقت ايه', 'الساعة كم', 'الوقت كام', 'الساعه كم'])) {
-    final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
-    final period = now.hour >= 12 ? 'مَسَاءً' : 'صَبَاحاً';
-    final min = now.minute.toString().padLeft(2, '0');
-    await _speak("السَّاعَة $hour:$min $period $userTitle.");
-    return true;
-  }
-  if (_hasAny(cmd, ['التاريخ ايه', 'تاريخ اليوم', 'انهاردة كام', 'تاريخ النهاردة', 'تاريخ النهارده'])) {
-    final date = DateFormat('dd MMMM yyyy', 'ar').format(now);
-    await _speak("تَارِيخْ النَّهَارْدَة هُوَ $date $userTitle.");
-    return true;
-  }
-  if (_hasAny(cmd, ['اليوم ايه', 'يوم ايه النهاردة', 'انهاردة يوم ايه', 'اسم اليوم ايه'])) {
-    final dayName = DateFormat('EEEE', 'ar').format(now);
-    await _speak("النَّهَارْدَة يَوْمْ $dayName $userTitle.");
-    return true;
-  }
-
-  if (_hasAny(cmd, ['نكته', 'نكتة', 'ضحكني', 'قولي نكته', 'اضحكني', 'حاجة تضحك', 'هزار', 'ضحكة', 'فشخرة', 'نكت'])) {
-    final jokes = [
-      "المُدَرِّسْ قَالْ لِلطَّالِبْ: لَوْ مَعَاكْ 10 جِنِيهْ وَخَدِتْ مِنْهُمْ 5 جِنِيهْ، فَاضِلَكْ كَامْ؟ الطَّالِبْ رَدْ وَقَالَهْ: خِنَاقَة كَبِيرَة يَا أُسْتَاذ! 😂",
-      "وَاحِدْ صَاحِبَهْ سَأَلَهْ: إِيهْ الجَدِيدْ فِي المُوبَايِلْ اللي جِبْتَهْ دَهْ؟ قَالَهْ: دَهْ بِيِقْرَا البَصْمَة! صَاحِبَهْ قَالَهْ: يَا رَاجُلْ؟! طِيبْ جَرَّبْتْ تِفْتَحَهْ بِبَصْمَة رِجْلَكْ؟ 😂",
-      "وَاحِدْ رَاحْ لِلصَّيْدَلِي وَقَالَهْ: عِنْدَكْ دَوَا لِلصَّلَعْ؟ الصَّيْدَلِي قَالَهْ: أَيُوهْ، عَايِزَهْ فِي كِيسْ وَلَا فِي إِزَازَةْ؟ 😂",
-      "وَاحِدْ رَكِبْ تَاكْسِي وَقَالْ لِلسَّوَّاقْ: يَا أُسْطَى وَدِّينِي الجَامِعَة. الأُسْطَى بَصَلَهْ وَقَالَهْ: طِيبْ، هَتِقْعُدْ فِينْ؟ 😂"
-    ];
-    final randomJoke = jokes[random.nextInt(jokes.length)];
-    await _speak("$userTitle، خُدْ دِي: $randomJoke");
-    return true;
-  }
-
-  if (_hasAny(cmd, ['لغز', 'الغاز', 'ألغاز', 'حزورة', 'حزازير', 'شغل دماغك', 'اسألني لغز', 'فزورة', 'فزازير', 'شغل مخك'])) {
-    final riddles = [
-      "شَيْءٌ مَوْجُودٌ فِي السَّمَاءِ، إِذَا أَضَفْتَ إِلَيْهِ حَرْفاً وَاحِداً أَصْبَحَ فِي الأَرْضِ. فَمَا هُوَ؟",
-      "مَا هُوَ الشَّيْءُ الَّذِي يَكْتُبُ وَلَا يَقْرَأُ؟",
-      "مَا هُوَ الشَّيْءُ الَّذِي كُلَّمَا زَادَ نَقَصَ؟",
-      "شَيْءٌ لَهُ أَسْنَانٌ وَلَا يَعَضُّ، مَا هُوَ؟",
-    ];
-    final answers = [
-      "نَجْم، لَوْ ضِفْتَلَهْ حَرْفَ المِيمْ بِيِبْقَى مَنْجَمْ.",
-      "القَلَمْ.",
-      "العُمْرْ.",
-      "المِشْطْ.",
-    ];
-    int randomIndex = random.nextInt(riddles.length);
-    await _speak("$userTitle، خُدْ اللُّغْزْ دَهْ: ${riddles[randomIndex]}");
-    await Future.delayed(const Duration(seconds: 10));
-    await _speak("فَكَّرْتْ؟ الإِجَابَة هِيَ: ${answers[randomIndex]}");
-    return true;
-  }
-
-  if (_hasAny(cmd, ['شكرا', 'شكراً', 'متشكر', 'متشكرة', 'مشكور', 'مشكورة', 'ميرسي', 'ميرسى', 'ثانكس', 'تسلم', 'تسلمي', 'تسلم ايدك', 'تسلم إيدك'])) {
-    await _speak("العَفْو $userTitle، دَهْ وَاجِبِي 🙏.");
-    return true;
-  }
-  if (_hasAny(cmd, ['تصبح على خير', 'تصبحى على خير', 'تصبحي على خير', 'تصبحوا على خير', 'ليلتك سعيدة', 'ليلة سعيدة'])) {
-    await _speak("$_pronoun مِنْ أَهْلِهْ $userTitle، تُصْبَحْ عَلَى خَيْرٍ وَأَحْلَامٍ سَعِيدَة 🌙.");
-    return true;
-  }
-  if (_hasAny(cmd, ['اسمك ايه', 'اسمك إيه', 'اسمك ايش', 'انت مين', 'انتي مين', 'مين انت', 'مين انتي'])) {
-    await _speak("اِسْمِي $_secretaryName، $secTitle الشَّخْصِيِّ بِتَاعَكْ، تَحْتْ أَمْرَكْ $userTitle.");
-    return true;
-  }
-  if (_hasAny(cmd, ['بتعمل ايه', 'بتعملي ايه', 'بتعمل إيه', 'بتشتغل ايه', 'بتشغلي ايه', 'مشغول بايه', 'مشغولة بايه'])) {
-    await _speak("بَسْتَ نَى أَوَامِرَكْ $userTitle، جَاهِزْ أَرُدْ عَلَى أَيِّ حَاجَة 👌.");
-    return true;
-  }
-  if (_hasAny(cmd, ['تمام', 'ماشي', 'اوكي', 'أوكي', 'ok', 'طيب', 'حاضر', 'خلاص كده'])) {
-    await _speak("تَمَام $userTitle 👌.");
-    return true;
-  }
-  if (_hasAny(cmd, ['سلام عليكم', 'السلام عليكم', 'باي', 'يلا سلام', 'مع السلامة', 'سلام'])) {
-    await _speak("وَعَلَيْكُمْ السَّلَامُ وَرَحْمَةُ اللَّهِ وَبَرَكَاتُهُ $userTitle، فِي رِعَايَةِ اللَّهِ 🌟.");
-    return true;
-  }
-  if (_hasAny(cmd, ['يلا', 'يالا', 'بسرعة', 'بسرعه', 'حالا', 'حالاً', 'دلوقتي'])) {
-    await _speak("حَاضِرْ $userTitle، أَنَا فِي الخِدْمَة 🏃.");
-    return true;
-  }
-  if (_hasAny(cmd, ['انت موجود', 'انتي موجودة', 'معايا', 'سامعني', 'سامعاني', 'سامعنى'])) {
-    await _speak("أَيُوهْ $userTitle، أَنَا $_listenWord وَأَنَا فِي الخِدْمَة 👂.");
-    return true;
-  }
-  if (_hasAny(cmd, ['صحة', 'أيوة', 'ايوه', 'ايوة', 'نعم', 'اه', 'آه'])) {
-    await _speak("فِي الخِدْمَة $userTitle 👌.");
-    return true;
-  }
-  if (_hasAny(cmd, ['مبروك', 'ألف مبروك', 'الف مبروك'])) {
-    await _speak("اللَّهُ يُبَارِكْ فِيكْ $userTitle، عُقْبَالْ كُلِّ حَاجَة حَلْوَة 🎉.");
-    return true;
-  }
-  if (_hasAny(cmd, ['سلامتك', 'الف سلامة', 'ألف سلامة'])) {
-    await _speak("اللَّهُ يُسَلِّمَكْ $userTitle 💚.");
-    return true;
-  }
-  
-  return false;
-}
-  DateTime? _parseDiaryDate(String cmd) {
-  final now = DateTime.now();
-  if (cmd.contains('النهاردة') || cmd.contains('النهارده') || cmd.contains('اليوم')) return now;
-  if (cmd.contains('اول امبارح') || cmd.contains('أول امبارح') || cmd.contains('قبل امبارح')) return now.subtract(const Duration(days: 2));
-  if (cmd.contains('امبارح') || cmd.contains('امبارحه') || cmd.contains('امس') || cmd.contains('البارح') || cmd.contains('البارحة') || cmd.contains('البارحه')) return now.subtract(const Duration(days: 1));
-  if (cmd.contains('بعد بكره') || cmd.contains('بعد بكرة') || cmd.contains('بعد غد')) return now.add(const Duration(days: 2));
-  if (cmd.contains('بكره') || cmd.contains('بكرة') || cmd.contains('غدا') || cmd.contains('غداً')) return now.add(const Duration(days: 1));
-
-  final dayKeywords = {
-    DateTime.saturday: ['السبت', 'سبت'],
-    DateTime.sunday: ['الاحد', 'الأحد', 'الحد', 'حد'],
-    DateTime.monday: ['الاتنين', 'الاثنين', 'اتنين'],
-    DateTime.tuesday: ['التلات', 'الثلاثاء', 'تلات'],
-    DateTime.wednesday: ['الاربع', 'الأربعاء', 'اربع'],
-    DateTime.thursday: ['الخميس', 'خميس'],
-    DateTime.friday: ['الجمعه', 'الجمعة', 'جمعه'],
-  };
-
-  int? targetWeekday;
-  for (final entry in dayKeywords.entries) {
-    if (_hasAny(cmd, entry.value)) {
-      targetWeekday = entry.key;
-      break;
+    if (_hasAny(cmd, ['اول سوره نزلت', 'أول سورة', 'اول ما نزل'])) {
+      await _speak("أَوَّلُ مَا نَزَلَ مِنَ القُرْآنِ هُوَ قَوْلُهُ تَعَالَى: (اقْرَأْ بِاسْمِ رَبِّكَ الَّذِي خَلَقَ) فِي سُورَةِ العَلَق $userTitle.");
+      return true;
     }
+    if (_hasAny(cmd, ['اركان الاسلام', 'أركان الإسلام', 'اركان الايمان'])) {
+      await _speak("أَرْكَانُ الإِسْلَامِ خَمْسَةٌ: شَهَادَةُ أَنْ لَا إِلَهَ إِلَّا اللَّهُ وَأَنَّ مُحَمَّداً رَسُولُ اللَّهِ، وَإِقَامُ الصَّلَاةِ، وَإِيتَاءُ الزَّكَاةِ، وَصَوْمُ رَمَضَانَ، وَحَجُّ البَيْتِ لِمَنِ اسْتَطَاعَ إِلَيْهِ سَبِيلًا.");
+      return true;
+    }
+    if (_hasAny(cmd, ['عندي امتحان', 'امتحان بكرة', 'امتحان بكره', 'امتحان قريب'])) {
+      await _speak("رَبَّنَا يُوَفِّقْكَ $userTitle، $_dontForget تُصَلِّي الفَجْرَ $_sleepWord بَدْرِي، وَ$_studyWord كُوَيِّسْ وَرَبَّنَا $_withYou.");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['سبحان الله', 'استغفر الله', 'الحمد لله', 'الله اكبر', 'لا اله الا الله', 'سبحان الله وبحمده'])) {
+      setState(() => _tasbeehCount++);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('tasbeeh_count', _tasbeehCount);
+      await _speak("جَزَاكَ اللَّهُ خَيْراً $userTitle، تَمَّ تَسْجِيلُ التَّسْبِيحَةِ. عَدَدُ التَّسْبِيحَاتِ: $_tasbeehCount.");
+      return true;
+    }
+    if (_hasAny(cmd, ['شوف العداد', 'العداد كام', 'سبحت كام', 'كام تسبيحة'])) {
+      await _speak("لَقَدْ سَبَّحْتَ $userTitle $_tasbeehCount مَرَّةً.");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['صباح الخير', 'صباح النور', 'صباح الفل', 'صباحو', 'صبح صباح الخير', 'صباح الخيرات', 'صباح الورد', 'صباح العسل'])) {
+      await _speak("صَبَاحُ النُّورِ وَالسُّرُورِ $userTitle ☀️ أَتَمَنَّى لَكَ يَوْمَ سَعِيد! النَّهَارْدَة يَوْمْ جَدِيدْ وَفُرْصَة جَدِيدَة.");
+      return true;
+    }
+    if (_hasAny(cmd, ['صباح الفل والياسمين', 'صباح الحب', 'صباح الجمال'])) {
+      await _speak("صَبَاحُ الفُلِّ وَاليَاسَمِينِ وَالوَرْدِ $userTitle 🌸 يَوْمَكَ يَبْدَأُ بِخَيْرٍ إِنْ شَاءَ اللَّهُ.");
+      return true;
+    }
+    if (_hasAny(cmd, ['مساء الخير', 'مساء النور', 'مساء الفل', 'مسائو', 'مسا الخير', 'مساء الخيرات', 'مساء الورد', 'مساء العسل', 'مساء الحب'])) {
+      await _speak("مَسَاءُ النُّورِ وَالفُلِّ وَاليَاسَمِينِ $userTitle 🌙 أَتَمَنَّى تِكُونْ بِخِير. الوَقْتْ اتْأَخَّرْ، لَازِمْ جِسْمَكْ يِرْتَاحْ.");
+      return true;
+    }
+    if (_hasAny(cmd, ['اهلا', 'أهلاً', 'مرحبا', 'هاي', 'hello', 'hi', 'ازيك', 'ازيك يا', 'عامل ايه', 'عاملة ايه', 'إيه الأخبار', 'ايه الاخبار'])) {
+      await _speak("أَهْلاً بِيكَ $userTitle 🌟 أَنَا $secTitle الشَّخْصِيِّ بِتَاعَكْ، تَحْتْ أَمْرَكْ دَايْمًا.");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['بحبك', 'احبك', 'أحبك', 'بعشقك', 'من عشاقك', 'انتي حبيبتي', 'انت حبيبي'])) {
+      await _speak("وَأَنَا كَمَانْ بِحِبَّكَ $userTitle 💛 دَهْ أَنَا تَحْتْ أَمْرَكْ دَايْمًا.");
+      return true;
+    }
+    if (_hasAny(cmd, ['وحشتني', 'وحشتينى', 'وحشني', 'اشتقتلك', 'اشتقت لك', 'مشتاقلك', 'مشتاقة لك'])) {
+      await _speak("$_pronoun كَمَانْ وَحَشْتِنِي $userTitle، أَنَا $_readyWord لِأَيِّ خِدْمَة 💛.");
+      return true;
+    }
+    if (_hasAny(cmd, ['شاطر', 'شاطرة', 'ذكي', 'ذكية', 'عسل', 'برنس', 'جامد', 'جامدة', 'ممتاز', 'ممتازة', 'تسلم ايدك', 'تسلم إيدك'])) {
+      await _speak("دَهْ مِنْ زُوقَكْ $userTitle، شُكْراً عَلَى المُجَامَلَةِ الحَلْوَةِ دِي 🙏.");
+      return true;
+    }
+    if (_hasAny(cmd, ['ربنا يخليك', 'ربنا يخليكي', 'ربنا يسعدك', 'ربنا يوفقك', 'ربنا يخليك ليا', 'ربنا يكرمك'])) {
+      await _speak("وَرَبَّنَا يِخَلِّيكْ لِيَا $userTitle، أَنَا فِي خِدْمَتِكَ دَايْمًا 💛.");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['تعبان', 'تعبانة', 'مش كويس', 'مش كويسة', 'مضايق', 'مضايقة', 'زعلان', 'زعلانة', 'حزين', 'حزينة', 'مش قادر', 'مش قادرة', 'مخنوق', 'مخنوقة'])) {
+      await _speak("أَلْفْ سَلَامَة عَلِيكْ $userTitle، $_takeCareWord بِالَكْ مِنْ نَفْسَكْ. $_youWant أَفْتَحْلَكْ يَوْمِيَّاتَكْ تِكْتِبْ فِيهَا أَوْ أَحْجِزْلَكْ مَوْعِدْ، أَنَا تَحْتْ أَمْرَكْ 💚.");
+      return true;
+    }
+    if (_hasAny(cmd, ['مبسوط', 'مبسوطة', 'فرحان', 'فرحانة', 'سعيد', 'سعيدة', 'الحمد لله مبسوط'])) {
+      await _speak("وَأَنَا كَمَانْ $_happyWord لِيكْ $userTitle 😊 رَبَّنَا يِدِيمْ الفَرْحَة عَلِيكْ.");
+      return true;
+    }
+    if (_hasAny(cmd, ['زهقان', 'زهقانة', 'مليت', 'حاسس بالوحدة', 'حاسة بالوحدة', 'طفشان', 'طفشانة', 'مخنوق ومش عارف أعمل ايه', 'مخنوقة ومش عارفة أعمل ايه'])) {
+      await _speak("مَا تِزْعَلْشْ $userTitle، أَنَا مَعَاكْ. تِحِبْ أَحْكِيلَكْ نُكْتَة تِضَحِّكَكْ؟ وَلَا أَحْكِيلَكْ لُغْزْ تِشْغَلْ دِمَاغَكْ شُوَيَّةْ؟");
+      return true;
+    }
+    if (_hasAny(cmd, ['خايف', 'خايفة', 'قلقان', 'قلقانة', 'متوتر', 'متوترة'])) {
+      await _speak("هَدِّي نَفْسَكْ $userTitle، كُلِّ حَاجَة هَتْبَقَى تَمَام. أَنَا هِنَا $_youWant $_youTalk.");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['جعان', 'جعانة', 'عايز اكل', 'عايزة اكل', 'مش لاقي اكل', 'مش لاقية اكل'])) {
+      await _speak("خُدْ بِالَكْ مِنْ نَفْسَكْ $userTitle، لَازِمْ تَاكُلْ حَاجَة. تِحِبْ أَفَكِّرَكْ بِمَوْعِدْ الأَكِلْ؟ 💚.");
+      return true;
+    }
+    if (_hasAny(cmd, ['عطشان', 'عطشانة', 'عايز اشرب', 'عايزة اشرب'])) {
+      await _speak("اشْرَبْ مَيَّة وَهَتِرْتَاحْ $userTitle، صِحَّتَكْ تِهِمَّنِي 💧.");
+      return true;
+    }
+    if (_hasAny(cmd, ['قرفان', 'قرفانة'])) {
+      await _speak("رَبَّنَا يُعِينَكْ $userTitle، خُدْ نَفَسْ عَمِيقْ وَغَيِّرْ جَوْ.");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['الساعه كام', 'الساعة كام', 'الوقت ايه', 'الساعة كم', 'الوقت كام', 'الساعه كم'])) {
+      final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
+      final period = now.hour >= 12 ? 'مَسَاءً' : 'صَبَاحاً';
+      final min = now.minute.toString().padLeft(2, '0');
+      await _speak("السَّاعَة $hour:$min $period $userTitle.");
+      return true;
+    }
+    if (_hasAny(cmd, ['التاريخ ايه', 'تاريخ اليوم', 'انهاردة كام', 'تاريخ النهاردة', 'تاريخ النهارده'])) {
+      final date = DateFormat('dd MMMM yyyy', 'ar').format(now);
+      await _speak("تَارِيخْ النَّهَارْدَة هُوَ $date $userTitle.");
+      return true;
+    }
+    if (_hasAny(cmd, ['اليوم ايه', 'يوم ايه النهاردة', 'انهاردة يوم ايه', 'اسم اليوم ايه'])) {
+      final dayName = DateFormat('EEEE', 'ar').format(now);
+      await _speak("النَّهَارْدَة يَوْمْ $dayName $userTitle.");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['نكته', 'نكتة', 'ضحكني', 'قولي نكته', 'اضحكني', 'حاجة تضحك', 'هزار', 'ضحكة', 'فشخرة', 'نكت'])) {
+      final jokes = [
+        "المُدَرِّسْ قَالْ لِلطَّالِبْ: لَوْ مَعَاكْ 10 جِنِيهْ وَخَدِتْ مِنْهُمْ 5 جِنِيهْ، فَاضِلَكْ كَامْ؟ الطَّالِبْ رَدْ وَقَالَهْ: خِنَاقَة كَبِيرَة يَا أُسْتَاذ! 😂",
+        "وَاحِدْ صَاحِبَهْ سَأَلَهْ: إِيهْ الجَدِيدْ فِي المُوبَايِلْ اللي جِبْتَهْ دَهْ؟ قَالَهْ: دَهْ بِيِقْرَا البَصْمَة! صَاحِبَهْ قَالَهْ: يَا رَاجُلْ؟! طِيبْ جَرَّبْتْ تِفْتَحَهْ بِبَصْمَة رِجْلَكْ؟ 😂",
+        "وَاحِدْ رَاحْ لِلصَّيْدَلِي وَقَالَهْ: عِنْدَكْ دَوَا لِلصَّلَعْ؟ الصَّيْدَلِي قَالَهْ: أَيُوهْ، عَايِزَهْ فِي كِيسْ وَلَا فِي إِزَازَةْ؟ 😂",
+        "وَاحِدْ رَكِبْ تَاكْسِي وَقَالْ لِلسَّوَّاقْ: يَا أُسْطَى وَدِّينِي الجَامِعَة. الأُسْطَى بَصَلَهْ وَقَالَهْ: طِيبْ، هَتِقْعُدْ فِينْ؟ 😂"
+      ];
+      final randomJoke = jokes[random.nextInt(jokes.length)];
+      await _speak("$userTitle، خُدْ دِي: $randomJoke");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['لغز', 'الغاز', 'ألغاز', 'حزورة', 'حزازير', 'شغل دماغك', 'اسألني لغز', 'فزورة', 'فزازير', 'شغل مخك'])) {
+      final riddles = [
+        "شَيْءٌ مَوْجُودٌ فِي السَّمَاءِ، إِذَا أَضَفْتَ إِلَيْهِ حَرْفاً وَاحِداً أَصْبَحَ فِي الأَرْضِ. فَمَا هُوَ؟",
+        "مَا هُوَ الشَّيْءُ الَّذِي يَكْتُبُ وَلَا يَقْرَأُ؟",
+        "مَا هُوَ الشَّيْءُ الَّذِي كُلَّمَا زَادَ نَقَصَ؟",
+        "شَيْءٌ لَهُ أَسْنَانٌ وَلَا يَعَضُّ، مَا هُوَ؟",
+      ];
+      final answers = [
+        "نَجْم، لَوْ ضِفْتَلَهْ حَرْفَ المِيمْ بِيِبْقَى مَنْجَمْ.",
+        "القَلَمْ.",
+        "العُمْرْ.",
+        "المِشْطْ.",
+      ];
+      int randomIndex = random.nextInt(riddles.length);
+      await _speak("$userTitle، خُدْ اللُّغْزْ دَهْ: ${riddles[randomIndex]}");
+      await Future.delayed(const Duration(seconds: 10));
+      await _speak("فَكَّرْتْ؟ الإِجَابَة هِيَ: ${answers[randomIndex]}");
+      return true;
+    }
+
+    if (_hasAny(cmd, ['شكرا', 'شكراً', 'متشكر', 'متشكرة', 'مشكور', 'مشكورة', 'ميرسي', 'ميرسى', 'ثانكس', 'تسلم', 'تسلمي', 'تسلم ايدك', 'تسلم إيدك'])) {
+      await _speak("العَفْو $userTitle، دَهْ وَاجِبِي 🙏.");
+      return true;
+    }
+    if (_hasAny(cmd, ['تصبح على خير', 'تصبحى على خير', 'تصبحي على خير', 'تصبحوا على خير', 'ليلتك سعيدة', 'ليلة سعيدة'])) {
+      await _speak("$_pronoun مِنْ أَهْلِهْ $userTitle، تُصْبَحْ عَلَى خَيْرٍ وَأَحْلَامٍ سَعِيدَة 🌙.");
+      return true;
+    }
+    if (_hasAny(cmd, ['اسمك ايه', 'اسمك إيه', 'اسمك ايش', 'انت مين', 'انتي مين', 'مين انت', 'مين انتي'])) {
+      await _speak("اِسْمِي $_secretaryName، $secTitle الشَّخْصِيِّ بِتَاعَكْ، تَحْتْ أَمْرَكْ $userTitle.");
+      return true;
+    }
+    if (_hasAny(cmd, ['بتعمل ايه', 'بتعملي ايه', 'بتعمل إيه', 'بتشتغل ايه', 'بتشغلي ايه', 'مشغول بايه', 'مشغولة بايه'])) {
+      await _speak("بَسْتَ نَى أَوَامِرَكْ $userTitle، جَاهِزْ أَرُدْ عَلَى أَيِّ حَاجَة 👌.");
+      return true;
+    }
+    if (_hasAny(cmd, ['تمام', 'ماشي', 'اوكي', 'أوكي', 'ok', 'طيب', 'حاضر', 'خلاص كده'])) {
+      await _speak("تَمَام $userTitle 👌.");
+      return true;
+    }
+    if (_hasAny(cmd, ['سلام عليكم', 'السلام عليكم', 'باي', 'يلا سلام', 'مع السلامة', 'سلام'])) {
+      await _speak("وَعَلَيْكُمْ السَّلَامُ وَرَحْمَةُ اللَّهِ وَبَرَكَاتُهُ $userTitle، فِي رِعَايَةِ اللَّهِ 🌟.");
+      return true;
+    }
+    if (_hasAny(cmd, ['يلا', 'يالا', 'بسرعة', 'بسرعه', 'حالا', 'حالاً', 'دلوقتي'])) {
+      await _speak("حَاضِرْ $userTitle، أَنَا فِي الخِدْمَة 🏃.");
+      return true;
+    }
+    if (_hasAny(cmd, ['انت موجود', 'انتي موجودة', 'معايا', 'سامعني', 'سامعاني', 'سامعنى'])) {
+      await _speak("أَيُوهْ $userTitle، أَنَا $_listenWord وَأَنَا فِي الخِدْمَة 👂.");
+      return true;
+    }
+    if (_hasAny(cmd, ['صحة', 'أيوة', 'ايوه', 'ايوة', 'نعم', 'اه', 'آه'])) {
+      await _speak("فِي الخِدْمَة $userTitle 👌.");
+      return true;
+    }
+    if (_hasAny(cmd, ['مبروك', 'ألف مبروك', 'الف مبروك'])) {
+      await _speak("اللَّهُ يُبَارِكْ فِيكْ $userTitle، عُقْبَالْ كُلِّ حَاجَة حَلْوَة 🎉.");
+      return true;
+    }
+    if (_hasAny(cmd, ['سلامتك', 'الف سلامة', 'ألف سلامة'])) {
+      await _speak("اللَّهُ يُسَلِّمَكْ $userTitle 💚.");
+      return true;
+    }
+    
+    return false;
   }
 
-  if (targetWeekday != null) {
-    final isLast = _hasAny(cmd, ['اللي فات', 'اللى فات', 'الماضي', 'اللي عدى', 'اللى عدى']);
-    final isNext = _hasAny(cmd, ['الجاي', 'القادم', 'اللي جاي', 'اللى جاي']);
-    if (isLast) {
-      var diff = now.weekday - targetWeekday;
-      if (diff <= 0) diff += 7;
-      return now.subtract(Duration(days: diff));
-    } else if (isNext) {
-      var diff = targetWeekday - now.weekday;
-      if (diff <= 0) diff += 7;
-      return now.add(Duration(days: diff));
+  DateTime? _parseFullDate(String cmd) {
+    final now = DateTime.now();
+    String normCmd = _norm(cmd);
+    
+    if (normCmd.contains('بعد بكره') || normCmd.contains('بعد بكرة') || normCmd.contains('بعد غد')) return now.add(const Duration(days: 2));
+    if (normCmd.contains('بكره') || normCmd.contains('بكرة') || normCmd.contains('غدا') || normCmd.contains('غداً')) return now.add(const Duration(days: 1));
+    if (normCmd.contains('النهاردة') || normCmd.contains('النهارده') || normCmd.contains('اليوم') || normCmd.contains('انهاردة') || normCmd.contains('انهارده')) return now;
+    if (normCmd.contains('امبارح') || normCmd.contains('امس') || normCmd.contains('البارح')) return now.subtract(const Duration(days: 1));
+    if (normCmd.contains('اول امبارح') || normCmd.contains('قبل امبارح')) return now.subtract(const Duration(days: 2));
+
+    final afterDaysMatch = RegExp(r'بعد\s*(\d+)\s*(يوم|ايام|أيام)').firstMatch(normCmd);
+    if (afterDaysMatch != null) return now.add(Duration(days: int.parse(afterDaysMatch.group(1)!)));
+
+    final dayKeywords = {
+      DateTime.saturday: ['السبت', 'سبت'],
+      DateTime.sunday: ['الاحد', 'الأحد', 'الحد', 'حد'],
+      DateTime.monday: ['الاتنين', 'الاثنين', 'اتنين'],
+      DateTime.tuesday: ['التلات', 'الثلاثاء', 'تلات'],
+      DateTime.wednesday: ['الاربع', 'الأربعاء', 'اربع'],
+      DateTime.thursday: ['الخميس', 'خميس'],
+      DateTime.friday: ['الجمعه', 'الجمعة', 'جمعه'],
+    };
+
+    int? targetWeekday;
+    for (final entry in dayKeywords.entries) {
+      if (_hasAny(normCmd, entry.value)) {
+        targetWeekday = entry.key;
+        break;
+      }
+    }
+
+    if (targetWeekday != null) {
+      final isLast = _hasAny(normCmd, ['اللي فات', 'اللى فات', 'الماضي']);
+      final isNext = _hasAny(normCmd, ['الجاي', 'القادم', 'اللي جاي']);
+      if (isLast) {
+        var diff = now.weekday - targetWeekday;
+        if (diff <= 0) diff += 7;
+        return now.subtract(Duration(days: diff));
+      } else if (isNext) {
+        var diff = targetWeekday - now.weekday;
+        if (diff <= 0) diff += 7;
+        return now.add(Duration(days: diff));
+      } else {
+        var diff = targetWeekday - now.weekday;
+        if (diff < 0) diff += 7;
+        return now.add(Duration(days: diff));
+      }
+    }
+
+    int? parsedDay; int? parsedMonth;
+    
+    final dateMatch = RegExp(r'(\d{1,2})\s*[/\-\s]\s*(\d{1,2})').firstMatch(normCmd);
+    if (dateMatch != null) {
+      parsedDay = int.tryParse(dateMatch.group(1)!);
+      parsedMonth = int.tryParse(dateMatch.group(2)!);
     } else {
-      var diff = targetWeekday - now.weekday;
-      if (diff < 0) diff += 7;
-      return now.add(Duration(days: diff));
+      String tempCmd = normCmd;
+      final numWords = {
+        'واحد': '1', 'واحده': '1', 'اتنين': '2', 'اثنين': '2',
+        'تلاته': '3', 'ثلاثه': '3', 'اربعه': '4', 'خمسه': '5',
+        'سته': '6', 'سبعه': '7', 'تمانيه': '8', 'ثمانيه': '8',
+        'تسعه': '9', 'عشره': '10', 'احداشر': '11', 'اتناشر': '12',
+        'عشرين': '20', 'تلاتين': '30'
+      };
+      
+      numWords.forEach((word, digit) {
+        tempCmd = tempCmd.replaceAll(RegExp(r'\b' + word + r'\b'), digit);
+      });
+      
+      final wordDateMatch = RegExp(r'(\d{1,2})\s*[/\-\s]\s*(\d{1,2})').firstMatch(tempCmd);
+      if (wordDateMatch != null) {
+        parsedDay = int.tryParse(wordDateMatch.group(1)!);
+        parsedMonth = int.tryParse(wordDateMatch.group(2)!);
+      }
     }
-  }
-  return null;
-}
 
-List<String> _parseCustomDays(String cmd) {
-  final days = <String>[];
-  _dayKeywords.forEach((dayName, keywords) {
-    if (_hasAny(cmd, keywords)) days.add(dayName);
-  });
-  return days;
-}
+    if (parsedMonth == null) {
+      final monthsMap = {
+        1: ['يناير', '1'], 2: ['فبراير', '2'], 3: ['مارس', '3'], 4: ['ابريل', 'أبريل', '4'],
+        5: ['مايو', '5'], 6: ['يونيو', '6'], 7: ['يوليو', '7'], 8: ['اغسطس', 'أغسطس', '8'],
+        9: ['سبتمبر', '9'], 10: ['اكتوبر', 'أكتوبر', '10'], 11: ['نوفمبر', '11'], 12: ['ديسمبر', '12'],
+      };
 
-String _parseRepeatType(String cmd) {
-  final customDays = _parseCustomDays(cmd);
-  if (customDays.isNotEmpty) return 'مخصص';
-  if (_hasAny(cmd, ['كل يوم', 'يومي', 'يوميا', 'يومياً', 'كل يوم الصبح', 'كل يوم بالليل', 'يوم بيوم', 'يوم بعد يوم', 'كل يومين', 'دائما', 'على طول', 'كل صباح', 'كل مساء', 'كل ليله', 'بشكل يومي'])) return 'يومي';
-  if (_hasAny(cmd, ['كل اسبوع', 'اسبوعي', 'اسبوعيا', 'كل جمعه', 'كل جمعة', 'كل 7 ايام', 'اسبوع ورا اسبوع'])) return 'أسبوعي';
-  if (_hasAny(cmd, ['كل شهر', 'شهري', 'شهريا', 'كل 30 يوم', 'شهر ورا شهر', 'كل اول الشهر'])) return 'شهري';
-  return 'مرة واحدة';
-}
+      for (var entry in monthsMap.entries) {
+        if (_hasAny(normCmd, entry.value)) {
+          parsedMonth = entry.key;
+          break;
+        }
+      }
 
-String _parseIntervalType(String cmd) {
-  if (_hasAny(cmd, ['بدون تنبيه', 'بدون تنبيهات', 'مش محتاج تنبيه', 'مش عايز تنبيه', 'مش عايزة تنبيه', 'من غير تنبيه', 'بلاش تنبيه', 'مش عاوزة تنبيه'])) return 'بدون تنبيه';
-  if (_hasAny(cmd, ['مره واحده بس', 'مرة واحدة بس', 'تنبيه واحد بس', 'مش محتاج يتكرر', 'مش محتاجة يتكرر'])) return 'مرة واحدة';
-  if (_hasAny(cmd, ['كل 10 ثواني', 'كل عشر ثواني', 'كل عشره ثواني'])) return 'كل 10 ثواني';
-  if (_hasAny(cmd, ['كل 20 ثانية', 'كل عشرين ثانيه'])) return 'كل 20 ثانية';
-  if (_hasAny(cmd, ['كل 30 ثانية', 'كل تلاتين ثانيه', 'نص دقيقه', 'نصف دقيقة'])) return 'كل 30 ثانية';
-  if (_hasAny(cmd, ['كل دقيقة', 'كل دقيقه', 'كل 60 ثانيه'])) return 'كل دقيقة';
-  if (_hasAny(cmd, ['كل دقيقتين'])) return 'كل دقيقتين';
-  if (_hasAny(cmd, ['كل 3 دقايق', 'كل تلات دقايق'])) return 'كل 3 دقايق';
-  if (_hasAny(cmd, ['كل 5 دقايق', 'كل خمس دقايق'])) return 'كل 5 دقايق';
-  if (_hasAny(cmd, ['كل 10 دقايق', 'كل عشر دقايق'])) return 'كل 10 دقايق';
-  return 'كل 10 ثواني';
-}
+      if (parsedMonth != null) {
+        final dayWordsMap = {
+          1: ['واحد', 'واحدة'], 2: ['اتنين'], 3: ['تلاتة'], 4: ['اربعة'], 5: ['خمسة'],
+          6: ['ستة'], 7: ['سبعة'], 8: ['تمانية'], 9: ['تسعة'], 10: ['عشرة'],
+          11: ['حداشر'], 12: ['اتناشر'], 13: ['تلتاشر'], 14: ['اربعطاشر'], 15: ['خمستاشر', 'خمسة عشر'],
+          16: ['ستاشر'], 17: ['سبعتاشر'], 18: ['تمنتاشر'], 19: ['تسعتاشر'], 20: ['عشرين'],
+          21: ['واحد وعشرين'], 22: ['اتنين وعشرين'], 23: ['تلاتة وعشرين'], 24: ['اربعة وعشرين'],
+          25: ['خمسة وعشرين'], 26: ['ستة وعشرين'], 27: ['سبعة وعشرين'], 28: ['تمانية وعشرين'],
+          29: ['تسعة وعشرين'], 30: ['تلاتين'], 31: ['واحد وتلاتين']
+        };
 
-List<String> _extractWeeklyDaysFromCmd(String cmd) {
-  final result = <String>[];
-  
-  if (_hasAny(cmd, ['النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم'])) {
-    result.add(_weekDays[(DateTime.now().weekday) % 7]);
-  }
-  if (_hasAny(cmd, ['بكره', 'بكرة', 'غدا', 'غداً'])) {
-    result.add(_weekDays[(DateTime.now().add(const Duration(days: 1)).weekday) % 7]);
-  }
-
-  for (final day in _weekDays) {
-    if (result.contains(day)) continue;
-    final keywords = _dayKeywords[day] ?? [day];
-    if (_hasAny(cmd, keywords)) {
-      result.add(day);
+        final dayDigitMatch = RegExp(r'(\d{1,2})').firstMatch(normCmd);
+        if (dayDigitMatch != null) {
+          parsedDay = int.tryParse(dayDigitMatch.group(1)!);
+        } else {
+          for (var entry in dayWordsMap.entries) {
+            if (_hasAny(normCmd, entry.value)) {
+              parsedDay = entry.key;
+              break;
+            }
+          }
+        }
+      }
     }
-  }
-  return result;
-}
 
-String _extractWeeklyTaskName(String rawCommand) {
-  final stripRaw = <String>{
-    'امسح', 'امسحي', 'احذف', 'احذفي', 'شيل', 'شيلي', 'الغي', 'الغى', 'الغيلي',
-    'مسح', 'حذف', 'امسحلي', 'امسحيلي',
-    'عدل', 'عدلي', 'عدللي', 'عدليلي', 'غير', 'غيري', 'غيرلي', 'غيريلي',
-    'بدل', 'بدلي', 'بدللي', 'بدليلي', 'تعديل', 'تعديلي',
-    'ضيف', 'ضيفي', 'ضيفلي', 'اضف', 'أضف', 'أضفي', 'حط', 'حطي', 'حطلي',
-    'سجل', 'سجلي', 'سجللي', 'اعمل', 'اعملي', 'اعمللي',
-    'الجدول', 'جدول', 'الاسبوعي', 'الأسبوعي', 'اسبوعي', 'أسبوعي',
-    'جدولي', 'جدولى', 'بتاعي', 'بتاعى',
-    'في', 'من', 'على', 'علي', 'بتاع', 'بتاعه', 'بتاعت', 'يوم',
-    'موعد', 'ميعاد', 'الميعاد', 'الموعد', 'و',
-    'الساعة', 'ساعة', 'الساعه', 'صباحا', 'صباحاً', 'مساء', 'مساءً',
-    'الصبح', 'بالليل', 'الليل',
-    'لي', 'لى', 'بكام', 'لحد',
-    'بصوت', 'بنغمة', 'نغمة', 'صوت', 'مرعب', 'ايفون', 'آيفون', 'مشهور', 'صحيان', 'قوي', 'السكرتير', 'السكرتيرة', 'الافتراضي'
-  };
-  for (final day in _weekDays) {
-    stripRaw.add(day);
-    stripRaw.add('يوم $day');
-    stripRaw.add(day.replaceAll('ال', ''));
-    final keywords = _dayKeywords[day] ?? [];
-    for (final k in keywords) {
-      stripRaw.add(k);
+    if (parsedDay != null && parsedMonth != null && parsedMonth >= 1 && parsedMonth <= 12 && parsedDay >= 1 && parsedDay <= 31) {
+       try { return DateTime(now.year, parsedMonth, parsedDay); } catch (_) { return null; }
     }
-  }
-  final strip = stripRaw.map((e) => _norm(e)).toSet();
-  final nameNorm = _norm(_secretaryName);
-  final kept = <String>[];
-  
-  for (final t in rawCommand.split(RegExp(r'\s+'))) {
-    final n = _norm(t);
-    if (n.isEmpty) continue;
-    if (strip.contains(n) || n == nameNorm) continue;
-    
-    String nWithoutWaw = n.startsWith('و') ? n.substring(1) : n;
-    if (strip.contains(nWithoutWaw)) continue;
-    
-    bool isDay = false;
-    for (final day in _weekDays) {
-       if (_hasAny(nWithoutWaw, _dayKeywords[day] ?? [day])) {
-         isDay = true;
-         break;
+
+    if (parsedDay != null && parsedMonth == null) {
+       final dayOnlyMatch = RegExp(r'يوم\s*(\d{1,2})').firstMatch(normCmd);
+       if (dayOnlyMatch != null) {
+          final d = int.tryParse(dayOnlyMatch.group(1)!);
+          if (d != null && d >= 1 && d <= 31) {
+             var result = DateTime(now.year, now.month, d);
+             if (result.isBefore(now)) result = DateTime(now.year, now.month + 1, d);
+             return result;
+          }
        }
     }
-    if (isDay) continue;
 
-    if (RegExp(r'^\d{1,2}(:\d{2})?$').hasMatch(n)) continue;
-    if (_hourWords.containsKey(n) || _hourWords.containsKey(nWithoutWaw)) continue;
-    if (n == 'ونص' || n == 'وربع' || n == 'وثلث') continue;
-    kept.add(t);
+    return null;
   }
-  return kept.join(' ').trim();
-}
-    Future<void> _processSmartVoiceCommand(String rawCommand) async {
+
+  DateTime? _parseDiaryDate(String cmd) {
+    return _parseFullDate(cmd);
+  }
+
+  List<String> _parseCustomDays(String cmd) {
+    final days = <String>[];
+    _dayKeywords.forEach((dayName, keywords) {
+      if (_hasAny(cmd, keywords)) days.add(dayName);
+    });
+    return days;
+  }
+
+  String _parseRepeatType(String cmd) {
+    final customDays = _parseCustomDays(cmd);
+    if (customDays.isNotEmpty) return 'مخصص';
+    if (_hasAny(cmd, ['كل يوم', 'يومي', 'يوميا', 'يومياً', 'كل يوم الصبح', 'كل يوم بالليل', 'يوم بيوم', 'يوم بعد يوم', 'كل يومين', 'دائما', 'على طول', 'كل صباح', 'كل مساء', 'كل ليله', 'بشكل يومي'])) return 'يومي';
+    if (_hasAny(cmd, ['كل اسبوع', 'اسبوعي', 'اسبوعيا', 'كل جمعه', 'كل جمعة', 'كل 7 ايام', 'اسبوع ورا اسبوع'])) return 'أسبوعي';
+    if (_hasAny(cmd, ['كل شهر', 'شهري', 'شهريا', 'كل 30 يوم', 'شهر ورا شهر', 'كل اول الشهر'])) return 'شهري';
+    return 'مرة واحدة';
+  }
+
+  String _parseIntervalType(String cmd) {
+    if (_hasAny(cmd, ['بدون تنبيه', 'بدون تنبيهات', 'مش محتاج تنبيه', 'مش عايز تنبيه', 'مش عايزة تنبيه', 'من غير تنبيه', 'بلاش تنبيه', 'مش عاوزة تنبيه'])) return 'بدون تنبيه';
+    if (_hasAny(cmd, ['مره واحده بس', 'مرة واحدة بس', 'تنبيه واحد بس', 'مش محتاج يتكرر', 'مش محتاجة يتكرر'])) return 'مرة واحدة';
+    if (_hasAny(cmd, ['كل 10 ثواني', 'كل عشر ثواني', 'كل عشره ثواني'])) return 'كل 10 ثواني';
+    if (_hasAny(cmd, ['كل 20 ثانية', 'كل عشرين ثانيه'])) return 'كل 20 ثانية';
+    if (_hasAny(cmd, ['كل 30 ثانية', 'كل تلاتين ثانيه', 'نص دقيقه', 'نصف دقيقة'])) return 'كل 30 ثانية';
+    if (_hasAny(cmd, ['كل دقيقة', 'كل دقيقه', 'كل 60 ثانيه'])) return 'كل دقيقة';
+    if (_hasAny(cmd, ['كل دقيقتين'])) return 'كل دقيقتين';
+    if (_hasAny(cmd, ['كل 3 دقايق', 'كل تلات دقايق'])) return 'كل 3 دقايق';
+    if (_hasAny(cmd, ['كل 5 دقايق', 'كل خمس دقايق'])) return 'كل 5 دقايق';
+    if (_hasAny(cmd, ['كل 10 دقايق', 'كل عشر دقايق'])) return 'كل 10 دقايق';
+    return 'كل 10 ثواني';
+  }
+
+  List<String> _extractWeeklyDaysFromCmd(String cmd) {
+    final result = <String>[];
+    
+    if (_hasAny(cmd, ['النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم'])) {
+      result.add(_weekDays[(DateTime.now().weekday) % 7]);
+    }
+    if (_hasAny(cmd, ['بكره', 'بكرة', 'غدا', 'غداً'])) {
+      result.add(_weekDays[(DateTime.now().add(const Duration(days: 1)).weekday) % 7]);
+    }
+
+    for (final day in _weekDays) {
+      if (result.contains(day)) continue;
+      final keywords = _dayKeywords[day] ?? [day];
+      if (_hasAny(cmd, keywords)) {
+        result.add(day);
+      }
+    }
+    return result;
+  }
+
+  String _extractWeeklyTaskName(String rawCommand) {
+    final stripRaw = <String>{
+      'امسح', 'امسحي', 'احذف', 'احذفي', 'شيل', 'شيلي', 'الغي', 'الغى', 'الغيلي',
+      'مسح', 'حذف', 'امسحلي', 'امسحيلي',
+      'عدل', 'عدلي', 'عدللي', 'عدليلي', 'غير', 'غيري', 'غيرلي', 'غيريلي',
+      'بدل', 'بدلي', 'بدللي', 'بدليلي', 'تعديل', 'تعديلي',
+      'ضيف', 'ضيفي', 'ضيفلي', 'اضف', 'أضف', 'أضفي', 'حط', 'حطي', 'حطلي',
+      'سجل', 'سجلي', 'سجللي', 'اعمل', 'اعملي', 'اعمللي',
+      'الجدول', 'جدول', 'الاسبوعي', 'الأسبوعي', 'اسبوعي', 'أسبوعي',
+      'جدولي', 'جدولى', 'بتاعي', 'بتاعى',
+      'في', 'من', 'على', 'علي', 'بتاع', 'بتاعه', 'بتاعت', 'يوم',
+      'موعد', 'ميعاد', 'الميعاد', 'الموعد', 'و',
+      'الساعة', 'ساعة', 'الساعه', 'صباحا', 'صباحاً', 'مساء', 'مساءً',
+      'الصبح', 'بالليل', 'الليل',
+      'لي', 'لى', 'بكام', 'لحد', 'عشان', 'ورايا', 'وراي',
+      'بصوت', 'بنغمة', 'نغمة', 'صوت', 'مرعب', 'ايفون', 'آيفون', 'مشهور', 'صحيان', 'قوي', 'السكرتير', 'السكرتيرة', 'الافتراضي'
+    };
+    for (final day in _weekDays) {
+      stripRaw.add(day);
+      stripRaw.add('يوم $day');
+      stripRaw.add(day.replaceAll('ال', ''));
+      final keywords = _dayKeywords[day] ?? [];
+      for (final k in keywords) {
+        stripRaw.add(k);
+      }
+    }
+    final strip = stripRaw.map((e) => _norm(e)).toSet();
+    final nameNorm = _norm(_secretaryName);
+    final kept = <String>[];
+    
+    for (final t in rawCommand.split(RegExp(r'\s+'))) {
+      final n = _norm(t);
+      if (n.isEmpty) continue;
+      if (strip.contains(n) || n == nameNorm) continue;
+      
+      String nWithoutWaw = n.startsWith('و') ? n.substring(1) : n;
+      if (strip.contains(nWithoutWaw)) continue;
+      
+      bool isDay = false;
+      for (final day in _weekDays) {
+         if (_hasAny(nWithoutWaw, _dayKeywords[day] ?? [day])) {
+           isDay = true;
+           break;
+         }
+      }
+      if (isDay) continue;
+
+      if (RegExp(r'^\d{1,2}(:\d{2})?$').hasMatch(n)) continue;
+      if (_hourWords.containsKey(n) || _hourWords.containsKey(nWithoutWaw)) continue;
+      if (n == 'ونص' || n == 'وربع' || n == 'وثلث') continue;
+      kept.add(t);
+    }
+    return kept.join(' ').trim();
+  }
+      Future<void> _processSmartVoiceCommand(String rawCommand) async {
     final userTitle = _userTitle;
     final cmd = _norm(rawCommand);
     final nameNorm = _norm(_secretaryName);
     bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('يا سكرتيرة');
+
+    // 0. الحوار الذكي (خطوة بخطوة) للمناسبات
+    if (_pendingVoiceAction != null && _pendingVoiceAction!.startsWith('event_')) {
+      if (_hasAny(cmd, ['إلغاء', 'الغي', 'خلاص', 'كفاية'])) { _pendingVoiceAction = null; _pendingEventData = null; await _speak("تَمَّ إِلْغَاءُ إِضَافَةِ المُنَاسَبَةِ $_userTitle."); return; }
+      if (_pendingVoiceAction == 'event_name') { _pendingEventData!['title'] = rawCommand; _pendingVoiceAction = 'event_date'; await _speak("تَمَام $_userTitle. تَارِيخُ المُنَاسَبَةِ إِيهْ؟"); _listenVoiceCommand(); return; }
+      if (_pendingVoiceAction == 'event_date') {
+        final parsedDate = _parseDiaryDate(cmd);
+        if (parsedDate != null) { _pendingEventData!['eventDate'] = parsedDate.toIso8601String(); } else { await _speak("مَعْلِشْ مَفْهَمْتِشْ التَّارِيخْ $_userTitle."); _listenVoiceCommand(); return; }
+        _pendingVoiceAction = 'event_time'; await _speak("السَّاعَةِ كَامْ $_userTitle؟"); _listenVoiceCommand(); return;
+      }
+      if (_pendingVoiceAction == 'event_time') {
+        final hour = _parseHour(cmd); final minute = _parseMinute(cmd);
+        if (hour != null) { _pendingEventData!['reminderHour'] = hour; _pendingEventData!['reminderMinute'] = minute; _pendingVoiceAction = 'event_advance'; await _speak("التَّذْكِيرُ قَبْلَهَا بِقَدْ إِيهْ؟"); _listenVoiceCommand(); return; } else { await _speak("مَفْهَمْتِشْ السَّاعَة $_userTitle."); _listenVoiceCommand(); return; }
+      }
+      if (_pendingVoiceAction == 'event_advance') {
+        String advance = 'قبلها بيوم';
+        if (_hasAny(cmd, ['نفس اليوم', 'في نفس اليوم'])) advance = 'في نفس اليوم';
+        else if (_hasAny(cmd, ['اسبوع', 'أسبوع'])) advance = 'قبلها بأسبوع';
+        _pendingEventData!['advanceReminder'] = advance; _pendingEventData!['repeatInterval'] = 'مرة واحدة'; _pendingEventData!['repeatType'] = 'سنوي'; _pendingEventData!['sound'] = null;
+        setState(() { _specialEvents.add(_pendingEventData!); }); _saveData(); _scheduleEventReminder(_pendingEventData!);
+        await _speak("تَمَّتْ إِضَافَةُ مُنَاسَبَةِ: ${_pendingEventData!['title']} بِنَجَاح $_userTitle.");
+        _pendingVoiceAction = null; _pendingEventData = null; return;
+      }
+    }
 
     // 1. تأكيد تداخل المواعيد
     if (_pendingVoiceAction == 'confirm_time_conflict') {
@@ -3610,9 +3808,9 @@ String _extractWeeklyTaskName(String rawCommand) {
           _diaries.clear();
         });
         await _saveData();
-        await _speak("تَمَّ مَسْحُ كُلِّ اليَوْمِيَّاتِ بِنَجَاح $userTitle.");
+        await _speak("تَمَّ مَسْحُ كُلِّ اليَوْمِيَّاتِ بِنَجَاح $_userTitle.");
       } else {
-        await _speak("تَمَّ إِلْغَاءُ المَسْح $userTitle.");
+        await _speak("تَمَّ إِلْغَاءُ المَسْح $_userTitle.");
       }
       return;
     }
@@ -3623,7 +3821,7 @@ String _extractWeeklyTaskName(String rawCommand) {
         _pendingVoiceAction = null;
         _pendingRawCommand = null;
         _pendingActionTimer?.cancel();
-        await _speak("تَمَام $userTitle، لَغِيت الأَمْر.");
+        await _speak("تَمَام $_userTitle، لَغِيت الأَمْر.");
         return;
       }
     }
@@ -3651,7 +3849,7 @@ String _extractWeeklyTaskName(String rawCommand) {
         if (_hasAny(cmd, ['ضيف مهمة', 'ضيفي مهمة', 'حط مهمة', 'أضف مهمة', 'ضيفلي مهمة', 'ضيفيلي مهمة'])) {
           final text = rawCommand.replaceAll(RegExp(r'(ضيف|ضيفي|حط|أضف|ضيفلي|ضيفيلي|مهمة|في|يومية|اليوميات|مفكرة|يا سكرتير|يا سكرتيرة)'), '').trim();
           _diaryVoiceStream.add({'action': 'add_todo', 'text': text.isEmpty ? 'مهمة جديدة' : text});
-          await _speak("تَمَام $userTitle، ضِفْتْ المُهِمَّة فِي اليَوْمِيَّة.");
+          await _speak("تَمَام $_userTitle، ضِفْتْ المُهِمَّة فِي اليَوْمِيَّة.");
           return;
         }
         if (_hasAny(cmd, ['خلصت رقم', 'عملت رقم', 'تم رقم', 'done رقم'])) {
@@ -3659,18 +3857,18 @@ String _extractWeeklyTaskName(String rawCommand) {
           if (m != null) {
             final idx = int.parse(m.group(1)!) - 1;
             _diaryVoiceStream.add({'action': 'mark_done', 'index': idx});
-            await _speak("تَمَام $userTitle، عَلَّمْتْ عَلَى المُهِمَّة رَقْم ${idx + 1}.");
+            await _speak("تَمَام $_userTitle، عَلَّمْتْ عَلَى المُهِمَّة رَقْم ${idx + 1}.");
             return;
           }
         }
         if (_hasAny(cmd, ['ضيف صورة', 'ضيفي صورة', 'أضف صورة'])) {
           _diaryVoiceStream.add({'action': 'add_image'});
-          await _speak("اخْتَارْ الصُّورَة يَا $userTitle.");
+          await _speak("اخْتَارْ الصُّورَة يَا $_userTitle.");
           return;
         }
         if (_hasAny(cmd, ['سجل صوت', 'سجلي صوت', 'ابدأ تسجيل'])) {
           _diaryVoiceStream.add({'action': 'record_audio'});
-          await _speak("بَدَأْتْ التَّسْجِيل يَا $userTitle.");
+          await _speak("بَدَأْتْ التَّسْجِيل يَا $_userTitle.");
           return;
         }
         if (_hasAny(cmd, ['وقف تسجيل', 'وقفي تسجيل', 'خلصت تسجيل'])) {
@@ -3680,17 +3878,17 @@ String _extractWeeklyTaskName(String rawCommand) {
         }
         if (_hasAny(cmd, ['امسح اليومية', 'امسح اليوميه', 'افرغ اليومية', 'مسح اليومية', 'امسح كل حاجه في اليومية'])) {
           _diaryVoiceStream.add({'action': 'clear_all'});
-          await _speak("تَمَّ مَسْحُ كُلِّ مَحْتُوِيَّاتِ اليَوْمِيَّةِ $userTitle.");
+          await _speak("تَمَّ مَسْحُ كُلِّ مَحْتُوِيَّاتِ اليَوْمِيَّةِ $_userTitle.");
           return;
         }
         if (_hasAny(cmd, ['اقرا اليوميات', 'قولي اليوميات', 'اللي في اليوميات'])) {
           final readableText = _DiaryPageState.activeInstance!.getReadableText();
-          await _speak(readableText.isEmpty ? "اليَوْمِيَّة فَاضْيَة $userTitle." : readableText);
+          await _speak(readableText.isEmpty ? "اليَوْمِيَّة فَاضْيَة $_userTitle." : readableText);
           return;
         }
         if (_hasAny(cmd, ['امسح اخر مهمة', 'احذف اخر مهمة'])) {
           _diaryVoiceStream.add({'action': 'delete_last_task'});
-          await _speak("تَمَّ مَسْحُ آخِرْ مُهِمَّة $userTitle.");
+          await _speak("تَمَّ مَسْحُ آخِرْ مُهِمَّة $_userTitle.");
           return;
         }
         if (_hasAny(cmd, ['عدل مهمة', 'عدل المهمة'])) {
@@ -3698,14 +3896,14 @@ String _extractWeeklyTaskName(String rawCommand) {
           if (numMatch != null) {
             final taskNum = int.parse(numMatch.group(1)!);
             _diaryVoiceStream.add({'action': 'edit_task', 'index': taskNum});
-            await _speak("اتْفَضَّلْ عَدِّلْ المُهِمَّة رَقْم $taskNum $userTitle.");
+            await _speak("اتْفَضَّلْ عَدِّلْ المُهِمَّة رَقْم $taskNum $_userTitle.");
             return;
           }
         }
       }
 
       if (_hasAny(cmd, ['امسح كل اليوميات', 'امسح اليوميات كلها', 'احذف كل اليوميات', 'افرغ كل اليوميات'])) {
-        await _speak("هَلْ أَنْتَ مُتَأَكِّدٌ أَنَّكَ تُرِيدُ مَسْحَ كُلِّ اليَوْمِيَّاتِ $userTitle؟ قُلْ أَيْوَة لِلتَّأْكِيد.");
+        await _speak("هَلْ أَنْتَ مُتَأَكِّدٌ أَنَّكَ تُرِيدُ مَسْحَ كُلِّ اليَوْمِيَّاتِ $_userTitle؟ قُلْ أَيْوَة لِلتَّأْكِيد.");
         _pendingVoiceAction = 'confirm_delete_all_diaries';
         _listenVoiceCommand();
         return;
@@ -3714,10 +3912,10 @@ String _extractWeeklyTaskName(String rawCommand) {
       final requestedDate = _parseDiaryDate(cmd);
       if (requestedDate != null) {
         _openDiaryPage(requestedDate);
-        await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ ${DateFormat('EEEE، dd MMMM', 'ar').format(requestedDate)} $userTitle.");
+        await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ ${DateFormat('EEEE، dd MMMM', 'ar').format(requestedDate)} $_userTitle.");
       } else {
         setState(() => _currentIndex = 1);
-        await _speak("تَمَّ فَتْحُ قِسْمِ اليَوْمِيَّاتِ $userTitle، اخْتَارْ اليَوْمَ اللي تِحِبَّهْ.");
+        await _speak("تَمَّ فَتْحُ قِسْمِ اليَوْمِيَّاتِ $_userTitle، اخْتَارْ اليَوْمَ اللي تِحِبَّهْ.");
       }
       return;
     }
@@ -3766,7 +3964,7 @@ String _extractWeeklyTaskName(String rawCommand) {
         if (stoppedCtx != null) {
           try { Navigator.of(stoppedCtx).pop(); } catch (_) {}
         }
-        await _speak("تَمَّ إِيقَافُ المُنَبِّه $userTitle");
+        await _speak("تَمَّ إِيقَافُ المُنَبِّه $_userTitle");
         return;
       }
     }
@@ -3831,16 +4029,117 @@ String _extractWeeklyTaskName(String rawCommand) {
       }
     }
 
-    // 8. وضع التركيز
+    // 8. إضافة مناسبة شات (جملة واحدة)
+    if (_hasAny(cmd, ['ضيف مناسبة', 'اضف مناسبة', 'ضيفي مناسبة', 'اضيفي مناسبة', 'عايز اضيف مناسبة', 'عايزة اضيف مناسبة', 'ضيفلي مناسبة', 'ضيفلي مناسبه', 'فكرني بمناسبة', 'فكرني ب مناسبة', 'مناسبة', 'مناسبه'])) {
+      DateTime? parsedEventDate = _parseFullDate(cmd);
+      int? eventDay = parsedEventDate?.day;
+      int? hour = _parseHour(cmd);
+      int minute = _parseMinute(cmd);
+      String advance = 'قبلها بيوم';
+      if (_hasAny(cmd, ['قبلها بأسبوع', 'قبلها اسبوع'])) advance = 'قبلها بأسبوع';
+      
+      String title = rawCommand;
+      final removeWords = ['ضيف', 'مناسبة', 'فكرني', 'ذكرني', 'يوم', 'الساعة', 'الساعه', 'مساء', 'مساءً', 'صباحا', 'صباحاً', 'قبلها', 'بيوم', 'بأسبوع', 'اسبوع', 'أيام', 'ايام', 'في', 'نفس', 'اليوم', 'يا', 'سكرتير', 'سكرتيرة', 'يناير','فبراير','مارس','ابريل','أبريل','مايو','يونيو','يوليو','اغسطس','أغسطس','سبتمبر','اكتوبر','أكتوبر','نوفمبر','ديسمبر'];
+      for (var w in removeWords) { title = title.replaceAll(w, ''); }
+      title = title.replaceAll(RegExp(r'\d+'), '').trim();
+      
+      if (title.isEmpty) title = 'مناسبة';
+
+      if (parsedEventDate == null || hour == null) {
+        _pendingEventData = {'title': title};
+        _pendingVoiceAction = 'event_date';
+        await _speak("حَاضِرْ $_userTitle، التَّارِيخِ أَوِ الوَقْتِ مُشْ وَاضِحْ. تَارِيخُ المُنَاسَبَةِ إِيهْ؟");
+        _listenVoiceCommand();
+        return;
+      }
+      if (hour < 12 && _hasAny(cmd, ['مساء', 'بالليل', 'الليل'])) hour += 12;
+
+      final newEvent = {'title': title, 'detail': 'مناسبة سنوية', 'phone': '', 'advanceReminder': advance, 'eventDate': parsedEventDate.toIso8601String(), 'reminderHour': hour, 'reminderMinute': minute, 'repeatInterval': 'مرة واحدة', 'repeatType': 'سنوي', 'sound': 'default'};
+      setState(() { _specialEvents.add(newEvent); }); _sortByTime(_specialEvents); _saveData(); _scheduleEventReminder(newEvent);
+      final formattedHour = hour % 12 == 0 ? 12 : hour % 12;
+      final period = hour >= 12 ? 'مَسَاءً' : 'صَبَاحاً';
+      await _speak("تَمَّتْ إِضَافَةُ: $title يَوْمْ $eventDay السَّاعَة $formattedHour $period، وَالتَّذْكِيرُ $advance $_userTitle.");
+      return;
+    }
+
+    // 9. تعديل موعد شات (جملة واحدة)
+    if (_hasAny(cmd, ['عدل موعد', 'عدلي موعد', 'تعديل موعد', 'غير موعد', 'غيري موعد'])) {
+      String searchTerm = cmd.replaceAll('عدل', '').replaceAll('موعد', '').replaceAll('غير', '').trim();
+      searchTerm = searchTerm.split('وخليه').first.trim(); searchTerm = searchTerm.split('الساعة').first.trim();
+      if (searchTerm.isEmpty) { await _speak("قُولِّي أَعَدِّلْ أَنَّهِي مَوْعِدْ $_userTitle؟"); return; }
+      final matches = _tasks.where((t) { final taskName = _norm(t['task'].toString()); return taskName.contains(_norm(searchTerm)) || _norm(searchTerm).contains(taskName); }).toList();
+      if (matches.isEmpty) { await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ $_userTitle."); return; }
+      
+      final task = matches.first; final index = _tasks.indexOf(task);
+      final newHour = _parseHour(cmd);
+      if (newHour == null) { await _speak("مَفْهَمْتِشْ الوَقْتْ الجَدِيدْ $_userTitle."); return; }
+      
+      final newMinute = _parseMinute(cmd);
+      DateTime newDate = DateTime.parse(task['scheduled']);
+      if (cmd.contains('بكره') || cmd.contains('بكرة')) { newDate = newDate.add(const Duration(days: 1)); }
+      final scheduled = DateTime(newDate.year, newDate.month, newDate.day, newHour, newMinute);
+      
+      setState(() { _tasks[index] = {...task, 'scheduled': scheduled.toIso8601String(), 'time': DateFormat('hh:mm a', 'ar').format(scheduled)}; });
+      _saveData(); await _cancelNativeAlarm(task['task'].toString());
+      if (task['repeatInterval'] != 'بدون تنبيه') { _scheduleContinuousAlarm(task['task'].toString(), scheduled, task['repeat'] ?? 'مرة واحدة', task['repeatInterval'] ?? 'بدون تنبيه', List<String>.from(task['customDays'] ?? []), soundUri: task['sound']); }
+      await _speak("تَمَّ تَعْدِيلُ مَوْعِدْ ${task['task']} إِلَى السَّاعَة ${newHour}:${newMinute.toString().padLeft(2, '0')} $_userTitle.");
+      return;
+    }
+
+    // 10. قراءة اليوميات
+    if (_hasAny(cmd, ['اقرا يومية', 'اقرا يوميات', 'قولي يومية', 'اللي في يومية', 'اقرالي يومية', 'اقرا اليومية', 'قولي اليومية'])) {
+      final targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
+      final key = DateFormat('yyyy-MM-dd').format(targetDate);
+      if (_diaries.containsKey(key)) {
+        final data = _diaries[key]; String readable = "";
+        if (data['text'] != null && data['text'].toString().isNotEmpty) readable += "النَّصْ: ${data['text']}. ";
+        if (data['entries'] != null) {
+          final entries = List<Map<String, dynamic>>.from(data['entries']);
+          if (entries.isNotEmpty) {
+            readable += "وَالمُحْتَوَيَاتْ: ";
+            for (var e in entries) { if (e['type'] == 'todo') readable += "مُهِمَّة: ${e['content']} ${e['done'] == true ? '(تَمَّتْ)' : '(لَمْ تَتِمَّ)'}. "; if (e['type'] == 'image') readable += "صُورَة. "; if (e['type'] == 'audio') readable += "تَسْجِيلٌ صَوْتِيٌّ. "; }
+          }
+        }
+        await _speak(readable.trim().isNotEmpty ? readable : "اليَوْمِيَّةُ فَاضْيَة يَا $_userTitle.");
+      } else { await _speak("مَفِيشْ يَوْمِيَّة مَكْتُوبَة فِي اليَوْمَ دَه يَا $_userTitle."); }
+      return;
+    }
+
+    // 11. كتابة اليوميات
+    if (_hasAny(cmd, ['اكتب في اليوميات', 'اكتب في يومياتي', 'سجل في اليوميات', 'سجل في يومياتي', 'اكتب يومية', 'سجل يومية', 'سجل عندك في يومية'])) {
+      DateTime targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
+      final key = DateFormat('yyyy-MM-dd').format(targetDate);
+      String textToWrite = rawCommand;
+      final removeWords = ['اكتب', 'سجل', 'في', 'اليوميات', 'يومياتي', 'يومية', 'النهاردة', 'النهارده', 'بكرة', 'امبارح', 'يا', 'سكرتير', 'سكرتيرة', 'عندك'];
+      for (var w in removeWords) { textToWrite = textToWrite.replaceAll(w, ''); }
+      final dateParts = ['يناير','فبراير','مارس','ابريل','مايو','يونيو','يوليو','اغسطس','سبتمبر','اكتوبر','نوفمبر','ديسمبر'];
+      for (var p in dateParts) { textToWrite = textToWrite.replaceAll(p, ''); }
+      textToWrite = textToWrite.replaceAll(RegExp(r'\d+'), '').trim();
+      
+      if (textToWrite.isNotEmpty) {
+         final existing = _diaries[key] ?? {'text': '', 'entries': []};
+         existing['text'] = (existing['text'] ?? '') + '\n' + textToWrite;
+         setState(() => _diaries[key] = existing); _saveData();
+         await _speak("تَمَّ كِتَابَةُ اليَوْمِيَّةِ بِنَجَاح $_userTitle.");
+      } else { if (mounted) _openDiaryPage(targetDate); await _speak("اتْفَضَّلْ $_userTitle، اكْتُبْ يَوْمِيَّاتَك."); }
+      return;
+    }
+
+    // 12. أوامر الإعدادات والوضع الليلي
+    if (_hasAny(cmd, ['افتح الإعدادات', 'افتحي الإعدادات', 'الإعدادات', 'اعدادات', 'الاعدادات', 'افتح الاعدادات'])) { _openSettingsScreen(); await _speak("تَمَّ فَتْحُ الإِعْدَادَاتِ $_userTitle."); return; }
+    if (_hasAny(cmd, ['شغل الوضع الليلي', 'الوضع الليلي', 'الوضع الداكن', 'شغلي الوضع الليلي'])) { setState(() => _settings.isDarkMode = true); await _saveSettings(); widget.onThemeChanged(true); await _speak("تَمَّ تَشْغِيلُ الوَضْعِ اللَّيْلِيِّ $_userTitle."); return; }
+    if (_hasAny(cmd, ['شغل الوضع النهاري', 'الوضع النهاري', 'الوضع الفاتح', 'اقفل الوضع الليلي', 'اقفلي الوضع الليلي'])) { setState(() => _settings.isDarkMode = false); await _saveSettings(); widget.onThemeChanged(false); await _speak("تَمَّ تَشْغِيلُ الوَضْعِ النَّهَارِيِّ $_userTitle."); return; }
+
+    // 13. وضع التركيز
     if (_hasAny(cmd, ['وضع التركيز', 'فوكس', 'ركز معايا'])) {
       setState(() => _settings.wakeWordMode = 'off');
       await _saveSettings();
       try { await _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
-      await _speak("تَمَّ تَفْعِيلُ وَضْعِ التَّرْكِيز $userTitle، هَلْتَزِمْ الصَّمْت.");
+      await _speak("تَمَّ تَفْعِيلُ وَضْعِ التَّرْكِيز $_userTitle، هَلْتَزِمْ الصَّمْت.");
       return;
     }
 
-    // 9. وضع التسبيح
+    // 14. وضع التسبيح
     if (_hasAny(cmd, ['وضع التسبيح', 'افتحي التسبيح', 'افتح التسبيح', 'ابدأ التسبيح'])) {
       setState(() {
         _currentIndex = 2;
@@ -3848,14 +4147,14 @@ String _extractWeeklyTaskName(String rawCommand) {
         _isTasbeehMode = true;
         _isAdhkarMode = false;
       });
-      await _speak("تَمَّ فَتْحُ وَضْعِ التَّسْبِيح $userTitle.");
+      await _speak("تَمَّ فَتْحُ وَضْعِ التَّسْبِيح $_userTitle.");
       _listenVoiceCommand();
       return;
     }
 
     if (_hasAny(cmd, ['اقفلي التسبيح', 'اقفل التسبيح', 'قفلي التسبيح', 'قفل التسبيح', 'خلص تسبيح'])) {
       setState(() => _isTasbeehMode = false);
-      await _speak("تَمَّ إِغْلَاقُ وَضْعِ التَّسْبِيح $userTitle.");
+      await _speak("تَمَّ إِغْلَاقُ وَضْعِ التَّسْبِيح $_userTitle.");
       return;
     }
 
@@ -3869,7 +4168,7 @@ String _extractWeeklyTaskName(String rawCommand) {
       for (var item in _tasbeehItems) {
         await prefs.setInt('tasbeeh_${item['key']}', 0);
       }
-      await _speak("تَمَّ تَصْفِيرُ كُلِّ العَدَّادَات $userTitle.");
+      await _speak("تَمَّ تَصْفِيرُ كُلِّ العَدَّادَات $_userTitle.");
       return;
     }
 
@@ -3880,7 +4179,7 @@ String _extractWeeklyTaskName(String rawCommand) {
       }
     }
 
-    // 10. وضع الأذكار
+    // 15. وضع الأذكار
     if (_hasAny(cmd, ['وضع الأذكار', 'افتح الأذكار', 'ابدأ الأذكار', 'تشغيل وضع الأذكار'])) {
       setState(() {
         _currentIndex = 2;
@@ -3888,14 +4187,14 @@ String _extractWeeklyTaskName(String rawCommand) {
         _isAdhkarMode = true;
         _isTasbeehMode = false;
       });
-      await _speak("تَمَّ فَتْحُ وَضْعِ الأَذْكَارِ $userTitle.");
+      await _speak("تَمَّ فَتْحُ وَضْعِ الأَذْكَارِ $_userTitle.");
       _listenVoiceCommand();
       return;
     }
 
     if (_hasAny(cmd, ['اقفلي الأذكار', 'اقفل الأذكار', 'قفلي الأذكار', 'قفل الأذكار', 'خلص أذكار'])) {
       setState(() => _isAdhkarMode = false);
-      await _speak("تَمَّ إِغْلَاقُ وَضْعِ الأذْكَارِ $userTitle.");
+      await _speak("تَمَّ إِغْلَاقُ وَضْعِ الأذْكَارِ $_userTitle.");
       return;
     }
 
@@ -3903,7 +4202,7 @@ String _extractWeeklyTaskName(String rawCommand) {
 
     if (cmd.contains('اكتب') && cmd.contains('يوميات')) {
       if (mounted) _openDiaryPage(DateTime.now());
-      await _speak("اتْفَضَّلْ $userTitle، اكْتُبْ يَوْمِيَّاتَك.");
+      await _speak("اتْفَضَّلْ $_userTitle، اكْتُبْ يَوْمِيَّاتَك.");
       return;
     }
     if (cmd.contains('امسح') && cmd.contains('يوميات')) {
@@ -3911,9 +4210,9 @@ String _extractWeeklyTaskName(String rawCommand) {
       if (_diaries.containsKey(key)) {
         setState(() => _diaries.remove(key));
         _saveData();
-        await _speak("تَمَّ مَسْحُ يَوْمِيَّةِ النَّهَارْدَة $userTitle.");
+        await _speak("تَمَّ مَسْحُ يَوْمِيَّةِ النَّهَارْدَة $_userTitle.");
       } else {
-        await _speak("مَفِيشْ يَوْمِيَّةِ النَّهَارْدَة $userTitle.");
+        await _speak("مَفِيشْ يَوْمِيَّةِ النَّهَارْدَة $_userTitle.");
       }
       return;
     }
@@ -3922,7 +4221,7 @@ String _extractWeeklyTaskName(String rawCommand) {
       if (keyword.isNotEmpty) {
         final results = _diaries.entries.where((e) => e.value['text'] != null && e.value['text'].toString().contains(keyword)).toList();
         if (results.isEmpty) {
-          await _speak("مَفِيشْ يَوْمِيَّات فِيهَا كَلِمَة $keyword $userTitle.");
+          await _speak("مَفِيشْ يَوْمِيَّات فِيهَا كَلِمَة $keyword $_userTitle.");
         } else {
           await _speak("لَقِيتْ $keyword فِي ${results.length} يَوْمِيَّات. أَوَّلْ وَاحْدَة كَانَتْ يَوْم ${DateFormat('dd MMMM', 'ar').format(DateTime.parse(results.first.key))}.");
         }
@@ -4220,7 +4519,7 @@ String _extractWeeklyTaskName(String rawCommand) {
         _currentIndex = 2;
         _prayerSubView = 'times';
       });
-      await _speak("تَمَّ الاِنْتِقَالُ لِمَوَاقِيتِ الصَّلَاة $userTitle.");
+      await _speak("تَمَّ الاِنْتِقَالُ لِمَوَاقِيتِ الصَّلَاة $_userTitle.");
       return;
     } else if (_hasAny(cmd, diaryKeywords)) {
       setState(() => _currentIndex = 1);
@@ -4229,22 +4528,22 @@ String _extractWeeklyTaskName(String rawCommand) {
       if (requestedDate != null) {
         if (mounted) _openDiaryPage(requestedDate);
         final dayName = DateFormat('EEEE، dd MMMM yyyy', 'ar').format(requestedDate);
-        await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ $dayName $userTitle");
+        await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ $dayName $_userTitle");
       } else {
         if (mounted) _openDiaryPage(DateTime.now());
-        await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ النَّهَارْدَة $userTitle");
+        await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ النَّهَارْدَة $_userTitle");
       }
       return;
     } else if (_hasAny(cmd, eventKeywords)) {
       setState(() => _currentIndex = 3);
-      await _speak("تَمَّ الاِنْتِقَالُ لِلْمُنَاسَبَاتِ السَّنَوِيَّة $userTitle.");
+      await _speak("تَمَّ الاِنْتِقَالُ لِلْمُنَاسَبَاتِ السَّنَوِيَّة $_userTitle.");
       return;
     } else if (_hasAny(cmd, stopRecordKeywords)) {
       if (_isRecording) {
         await _stopRecording();
-        await _speak("تَمَّ إِيقَافُ التَّسْجِيل $userTitle.");
+        await _speak("تَمَّ إِيقَافُ التَّسْجِيل $_userTitle.");
       } else {
-        await _speak("مَفِيشْ تَسْجِيل شَغَّال دِلْوَقْتِي $userTitle.");
+        await _speak("مَفِيشْ تَسْجِيل شَغَّال دِلْوَقْتِي $_userTitle.");
       }
       return;
     } else if (_hasAny(cmd, startRecordKeywords)) {
@@ -4252,21 +4551,21 @@ String _extractWeeklyTaskName(String rawCommand) {
       await Future.delayed(const Duration(milliseconds: 500));
       if (!_isRecording) {
         await _startRecording();
-        await _speak("بَدَأْتْ التَّسْجِيل $userTitle.");
+        await _speak("بَدَأْتْ التَّسْجِيل $_userTitle.");
       } else {
-        await _speak("التَّسْجِيل شَغَّال بِالفِعْل $userTitle.");
+        await _speak("التَّسْجِيل شَغَّال بِالفِعْل $_userTitle.");
       }
       return;
     } else if (_hasAny(cmd, openRecorderKeywords)) {
       setState(() => _currentIndex = 4);
-      await _speak("تَمَّ فَتْحُ قِسْمِ المُسَجِّل $userTitle.");
+      await _speak("تَمَّ فَتْحُ قِسْمِ المُسَجِّل $_userTitle.");
       return;
     }
 
     if (isCalledByName) {
-      await _speak("نَعَمْ $userTitle! أَنَا أَسْمَعُكَ.");
+      await _speak("نَعَمْ $_userTitle! أَنَا أَسْمَعُكَ.");
     } else {
-      await _speak("عُذْراً $userTitle، لَمْ أَفْهَمِ الأَمْرَ.");
+      await _speak("عُذْراً $_userTitle، لَمْ أَفْهَمِ الأَمْرَ.");
     }
   }
 
@@ -4283,7 +4582,7 @@ String _extractWeeklyTaskName(String rawCommand) {
 
     if (todayTasks.isEmpty && weeklyToday.isEmpty) {
       final dayWord = targetDate == null ? 'النَّهَارْدَة' : 'اليَوْمَ دَهْ';
-      await _speak("مَفِيشْ عِنْدَكْ مَهَامْ $dayWord $userTitle.");
+      await _speak("مَفِيشْ عِنْدَكْ مَهَامْ $dayWord $_userTitle.");
       return;
     }
 
@@ -4316,7 +4615,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     });
 
     if (_weeklySchedule.isEmpty) {
-      await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي $userTitle.");
+      await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي $_userTitle.");
       return;
     }
 
@@ -4356,7 +4655,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     _sortByTime(normalTasks);
 
     if (weeklyTasks.isEmpty && normalTasks.isEmpty) {
-      await _speak("مَفِيشْ عِنْدَكْ مَوَاعِيد يَوْمْ $day $userTitle.");
+      await _speak("مَفِيشْ عِنْدَكْ مَوَاعِيد يَوْمْ $day $_userTitle.");
       return;
     }
 
@@ -4390,7 +4689,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     if (searchTerm.isEmpty && days.isNotEmpty) {
       final matches = _weeklySchedule.where((t) => days.contains(t['day'].toString())).toList();
       if (matches.isEmpty) {
-        await _speak("مَفِيشْ مَوَاعِيد فِي الأَيَّامْ دِي $userTitle.");
+        await _speak("مَفِيشْ مَوَاعِيد فِي الأَيَّامْ دِي $_userTitle.");
         return;
       }
       final count = matches.length;
@@ -4403,12 +4702,12 @@ String _extractWeeklyTaskName(String rawCommand) {
         }
       });
       _saveWeeklySchedule();
-      await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنْ أَيَّامْ: ${days.join('، ')} $userTitle.");
+      await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنْ أَيَّامْ: ${days.join('، ')} $_userTitle.");
       return;
     }
 
     if (searchTerm.isEmpty) {
-      await _speak("قُولِّي أَمْسَحْ أَنَّهِي مَوْعِدْ مِنَ الجَدْوَلْ $userTitle.");
+      await _speak("قُولِّي أَمْسَحْ أَنَّهِي مَوْعِدْ مِنَ الجَدْوَلْ $_userTitle.");
       return;
     }
 
@@ -4422,7 +4721,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     }
 
     if (matches.isEmpty) {
-      await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ فِي الجَدْوَلْ $userTitle.");
+      await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ فِي الجَدْوَلْ $_userTitle.");
       return;
     }
 
@@ -4434,7 +4733,7 @@ String _extractWeeklyTaskName(String rawCommand) {
       setState(() => _weeklySchedule.removeAt(idx));
       _saveWeeklySchedule();
       await _cancelNativeAlarm('جدول_${day}_$taskTitle');
-      await _speak("تَمَّ مَسْحُ مَوْعِدْ $taskTitle مِنْ يَوْمْ $day $userTitle.");
+      await _speak("تَمَّ مَسْحُ مَوْعِدْ $taskTitle مِنْ يَوْمْ $day $_userTitle.");
     } else {
       final count = matches.length;
       for (final task in matches) {
@@ -4446,7 +4745,7 @@ String _extractWeeklyTaskName(String rawCommand) {
         }
       });
       _saveWeeklySchedule();
-      await _speak("تَمَّ مَسْحُ $count مَوَاعِيدْ مِنْ أَيَّامْ: ${days.join('، ')} $userTitle.");
+      await _speak("تَمَّ مَسْحُ $count مَوَاعِيدْ مِنْ أَيَّامْ: ${days.join('، ')} $_userTitle.");
     }
   }
 
@@ -4457,7 +4756,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     final searchTerm = _norm(taskNameRaw);
 
     if (searchTerm.isEmpty) {
-      await _speak("قُولِّي أَعَدِّلْ أَنَّهِي مَوْعِدْ فِي الجَدْوَلْ $userTitle.");
+      await _speak("قُولِّي أَعَدِّلْ أَنَّهِي مَوْعِدْ فِي الجَدْوَلْ $_userTitle.");
       return;
     }
 
@@ -4471,7 +4770,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     }
 
     if (matches.isEmpty) {
-      await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ فِي الجَدْوَلْ $userTitle.");
+      await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ فِي الجَدْوَلْ $_userTitle.");
       return;
     }
 
@@ -4480,7 +4779,7 @@ String _extractWeeklyTaskName(String rawCommand) {
       final idx = _weeklySchedule.indexOf(task);
       if (mounted) {
         await _editWeeklyTaskDialog(idx);
-        await _speak("هَيِظْهَرْلَكْ المَوْعِدْ $userTitle، عَدِّلْ زَيِّ مَا تُحِبْ.");
+        await _speak("هَيِظْهَرْلَكْ المَوْعِدْ $_userTitle، عَدِّلْ زَيِّ مَا تُحِبْ.");
       }
     } else {
       final List<String> daysFound = [];
@@ -4488,7 +4787,7 @@ String _extractWeeklyTaskName(String rawCommand) {
         final d = t['day'].toString();
         if (!daysFound.contains(d)) daysFound.add(d);
       }
-      await _speak("لَقِيتْ $taskNameRaw فِي أَكْتَرْ مِنْ يَوْمْ: ${daysFound.join("، ")}. قُولِّي أَنَّهِي يَوْمْ $userTitle.");
+      await _speak("لَقِيتْ $taskNameRaw فِي أَكْتَرْ مِنْ يَوْمْ: ${daysFound.join("، ")}. قُولِّي أَنَّهِي يَوْمْ $_userTitle.");
     }
   }
 
@@ -4499,8 +4798,8 @@ String _extractWeeklyTaskName(String rawCommand) {
     if (_hasAny(cmd, ['ايفون', 'آيفون', 'iphone'])) return 'raw://alarm_iphone';
     if (_hasAny(cmd, ['مشهور 1', 'مشهور واحد'])) return 'raw://alarm_famous1';
     if (_hasAny(cmd, ['مشهور 2', 'مشهور اتنين'])) return 'raw://alarm_famous2';
-    if (_hasAny(cmd, ['صحيان قوي 1', 'صحيان قوي واحد', 'قوي 1'])) return 'raw://alarm_loud1';
-    if (_hasAny(cmd, ['صحيان قوي 2', 'صحيان قوي اتنين', 'قوي 2'])) return 'raw://alarm_loud2';
+    if (_hasAny(cmd, ['صحيان قوي 1', 'صحيان قوي واحد', 'قوي 1', 'الصحيان القوي 1', 'الصحيان القوي واحد'])) return 'raw://alarm_loud1';
+    if (_hasAny(cmd, ['صحيان قوي 2', 'صحيان قوي اتنين', 'قوي 2', 'الصحيان القوي 2', 'الصحيان القوي اتنين'])) return 'raw://alarm_loud2';
     return 'use_default';
   }
 
@@ -4527,7 +4826,7 @@ String _extractWeeklyTaskName(String rawCommand) {
         _pendingVoiceAction = null;
         _pendingRawCommand = null;
       });
-      await _speak("قُولِّي أَنَّهِي يَوْمْ فِي الأُسْبُوعْ $userTitle؟");
+      await _speak("قُولِّي أَنَّهِي يَوْمْ فِي الأُسْبُوعْ $_userTitle؟");
       _listenVoiceCommand();
       return;
     }
@@ -4541,7 +4840,7 @@ String _extractWeeklyTaskName(String rawCommand) {
         _pendingVoiceAction = null;
         _pendingRawCommand = null;
       });
-      await _speak("فِي أَيِّ سَاعَة $userTitle؟");
+      await _speak("فِي أَيِّ سَاعَة $_userTitle؟");
       _listenVoiceCommand();
       return;
     }
@@ -4559,6 +4858,19 @@ String _extractWeeklyTaskName(String rawCommand) {
     } else if (selectedSound == 'secretary') {
       selectedSound = null;
     }
+
+    String advanceReminder = 'في الموعد';
+    if (_hasAny(cmd, ['قبلها بـ 5 دقائق', 'قبلها بـ 5 دقايق'])) advanceReminder = 'قبلها بـ 5 دقائق';
+    else if (_hasAny(cmd, ['قبلها بـ 10 دقائق', 'قبلها بـ 10 دقايق', 'قبلها بعشر دقايق'])) advanceReminder = 'قبلها بـ 10 دقائق';
+    else if (_hasAny(cmd, ['قبلها بـ 15 دقيقة', 'قبلها بربع ساعة'])) advanceReminder = 'قبلها بـ 15 دقيقة';
+    else if (_hasAny(cmd, ['قبلها بـ 20 دقيقة', 'قبلها بتلت ساعة'])) advanceReminder = 'قبلها بـ 20 دقيقة';
+    else if (_hasAny(cmd, ['قبلها بـ 30 دقيقة', 'قبلها بنص ساعة'])) advanceReminder = 'قبلها بـ 30 دقيقة';
+    else if (_hasAny(cmd, ['قبلها بـ 45 دقيقة'])) advanceReminder = 'قبلها بـ 45 دقيقة';
+    else if (_hasAny(cmd, ['قبلها بساعة'])) advanceReminder = 'قبلها بساعة';
+    else if (_hasAny(cmd, ['قبلها بساعتين'])) advanceReminder = 'قبلها بساعتين';
+    else if (_hasAny(cmd, ['قبلها ب 6 ساعات'])) advanceReminder = 'قبلها ب 6 ساعات';
+    else if (_hasAny(cmd, ['قبلها ب 12 ساعة'])) advanceReminder = 'قبلها ب 12 ساعة';
+    else if (_hasAny(cmd, ['قبلها بـ 24 ساعة', 'قبلها بيوم'])) advanceReminder = 'قبلها بـ 24 ساعة';
 
     String taskName = _extractWeeklyTaskName(rawCommand);
     if (taskName.isEmpty) taskName = 'موعد أسبوعي';
@@ -4584,13 +4896,13 @@ String _extractWeeklyTaskName(String rawCommand) {
           'time': DateFormat('hh:mm a', 'ar').format(scheduledDateTime),
           'scheduled': scheduledDateTime.toIso8601String(),
           'repeatInterval': intervalType,
-          'advanceReminder': 'في الموعد',
+          'advanceReminder': advanceReminder,
           'sound': selectedSound,
         });
       });
 
       if (intervalType != 'بدون تنبيه') {
-        _scheduleWeeklyAlarm(taskName, day, scheduledDateTime, intervalType, 'في الموعد', soundUri: selectedSound);
+        _scheduleWeeklyAlarm(taskName, day, scheduledDateTime, intervalType, advanceReminder, soundUri: selectedSound);
       }
       successDays.add(day);
     }
@@ -4604,7 +4916,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     
     final soundText = selectedSound == null ? "بِصَوْتِ السِّكْرِتِير" : "عَلَى ${_getSoundName(selectedSound)}";
 
-    await _speak("تَمَّتِ الإِضَافَة $userTitle! $taskName فِي أَيَّامْ: $daysText السَّاعَة $h12 $periodText، $soundText.");
+    await _speak("تَمَّتِ الإِضَافَة $_userTitle! $taskName فِي أَيَّامْ: $daysText السَّاعَة $h12 $periodText، $soundText.");
   }
 
   Future<void> _deleteTaskByVoice(String cmd) async {
@@ -4633,7 +4945,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     if (targetDate != null) {
       final matches = _tasks.where((t) => t['date'] == targetDate).toList();
       if (matches.isEmpty) {
-        await _speak("مَفِيشْ مَوَاعِيد فِي اليَوْمَ دَهْ $userTitle.");
+        await _speak("مَفِيشْ مَوَاعِيد فِي اليَوْمَ دَهْ $_userTitle.");
         return;
       }
       final count = matches.length;
@@ -4646,7 +4958,7 @@ String _extractWeeklyTaskName(String rawCommand) {
         }
       });
       _saveData();
-      await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} $userTitle.");
+      await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} $_userTitle.");
       return;
     }
 
@@ -4659,7 +4971,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     searchTerm = searchTerm.replaceAll(nameNorm, '').trim();
 
     if (searchTerm.isEmpty) {
-      await _speak("قُولِّي أَمْسَحْ أَنَّهِي مَوْعِدْ $userTitle");
+      await _speak("قُولِّي أَمْسَحْ أَنَّهِي مَوْعِدْ $_userTitle");
       return;
     }
 
@@ -4669,7 +4981,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     }).toList();
 
     if (matches.isEmpty) {
-      await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ $userTitle");
+      await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ $_userTitle");
       return;
     }
 
@@ -4679,9 +4991,9 @@ String _extractWeeklyTaskName(String rawCommand) {
       setState(() => _tasks.remove(task));
       _saveData();
       await _cancelNativeAlarm(taskTitle);
-      await _speak("تَمَّ مَسْحُ مَوْعِدْ $taskTitle $userTitle");
+      await _speak("تَمَّ مَسْحُ مَوْعِدْ $taskTitle $_userTitle");
     } else {
-      await _speak("لَقِيتْ ${matches.length} مَوَاعِيدْ بِالاِسْمْ دَهْ $userTitle، حَدِّدْ أَكْتَرْ");
+      await _speak("لَقِيتْ ${matches.length} مَوَاعِيدْ بِالاِسْمْ دَهْ $_userTitle، حَدِّدْ أَكْتَرْ");
     }
   }
 
@@ -4696,7 +5008,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     searchTerm = searchTerm.replaceAll(nameNorm, '').trim();
 
     if (searchTerm.isEmpty) {
-      await _speak("قُولِّي أَعَدِّلْ أَنَّهِي مَوْعِدْ $userTitle");
+      await _speak("قُولِّي أَعَدِّلْ أَنَّهِي مَوْعِدْ $_userTitle");
       return;
     }
 
@@ -4706,7 +5018,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     }).toList();
 
     if (matches.isEmpty) {
-      await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ $userTitle");
+      await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ $_userTitle");
       return;
     }
 
@@ -4714,10 +5026,10 @@ String _extractWeeklyTaskName(String rawCommand) {
       final index = _tasks.indexOf(matches.first);
       if (mounted) {
         _editTaskDialog(index);
-        await _speak("هَيِظْهَرْلَكْ المَوْعِدْ $userTitle، عَدِّلْ زَيِّ مَا تُحِبْ");
+        await _speak("هَيِظْهَرْلَكْ المَوْعِدْ $_userTitle، عَدِّلْ زَيِّ مَا تُحِبْ");
       }
     } else {
-      await _speak("لَقِيتْ ${matches.length} مَوَاعِيدْ $userTitle، حَدِّدْ أَكْتَرْ");
+      await _speak("لَقِيتْ ${matches.length} مَوَاعِيدْ $_userTitle، حَدِّدْ أَكْتَرْ");
     }
   }
 
@@ -4744,7 +5056,7 @@ String _extractWeeklyTaskName(String rawCommand) {
         _pendingVoiceAction = null;
         _pendingRawCommand = null;
       });
-      await _speak("فِي أَيِّ سَاعَة $userTitle؟");
+      await _speak("فِي أَيِّ سَاعَة $_userTitle؟");
       _listenVoiceCommand();
       return;
     }
@@ -4841,7 +5153,6 @@ String _extractWeeklyTaskName(String rawCommand) {
     final formattedDate = DateFormat('yyyy-MM-dd').format(scheduled);
     final formattedTime = DateFormat('hh:mm a', 'ar').format(scheduled);
 
-    // 👈 فحص تداخل المواعيد بالصوت
     final existingConflict = _tasks.any((t) =>
         t['date'] == formattedDate &&
         t['time'] == formattedTime);
@@ -4884,11 +5195,11 @@ String _extractWeeklyTaskName(String rawCommand) {
       _pendingActionTimer = Timer(const Duration(seconds: 15), () {
         if (_pendingVoiceAction == 'confirm_time_conflict') {
           _handleConflictResolution(false);
-          _speak("مَعْلِشْ يَا $_userTitle، تَمَّ إِلْغَاءُ الحِفْظِ عَشَانْ مَكَتَبْتِشْ رَدْ.");
+          _speak("مَعْلِشْ $_userTitle، تَمَّ إِلْغَاءُ الحِفْظِ عَشَانْ مَكَتَبْتِشْ رَدْ.");
         }
       });
 
-      await _speak("فِيهْ مَوْعِدْ تَانِي فِي نَفْسْ الوَقْتْ يَا $_userTitle، تِحِبْ أَحْفَظْ الاتنين ولا أَلْغِي؟");
+      await _speak("فِيهْ مَوْعِدْ تَانِي فِي نَفْسْ الوَقْتْ $_userTitle، تِحِبْ أَحْفَظْ الاتنين ولا أَلْغِي؟");
       _listenVoiceCommand();
       return;
     }
@@ -4922,7 +5233,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     }
     final soundText = selectedSound == null ? "بِصَوْتِ السِّكْرِتِير" : "عَلَى ${_getSoundName(selectedSound)}";
 
-    await _speak("تَمَّ التَّنْفِيذ $userTitle! تَمَّ تَسْجِيل: $cleanTitle، السَّاعَة $h12$minuteText $periodText$repeatText$intervalText، $soundText.");
+    await _speak("تَمَّ التَّنْفِيذ $_userTitle! تَمَّ تَسْجِيل: $cleanTitle، السَّاعَة $h12$minuteText $periodText$repeatText$intervalText، $soundText.");
   }
 
   int _getIntervalSeconds(String interval) {
@@ -5114,7 +5425,6 @@ String _extractWeeklyTaskName(String rawCommand) {
       if (!hasCustomSound) {
         _speak("حَانَ الآنَ مَوْعِدُ: $taskTitle");
       }
-      // 👈 شيلنا أمر previewSound عشان الصوت بيتشغل من AlarmService مباشرة
       HapticFeedback.vibrate();
     }
 
@@ -5269,6 +5579,12 @@ String _extractWeeklyTaskName(String rawCommand) {
         );
       },
     ).then((_) { _isAlarmDialogOpen = false; _alarmDialogContext = null; });
+
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _isAlarmDialogOpen && !_isListening && !_isRecording) {
+        _listenVoiceCommand();
+      }
+    });
   }
 
   Future<Map<String, String>> _calculatePrayerTimes() async {
@@ -5500,7 +5816,7 @@ String _extractWeeklyTaskName(String rawCommand) {
   Future<void> _deleteAllWeeklyTasks() async {
     final userTitle = _userTitle;
     if (_weeklySchedule.isEmpty) {
-      await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي أَصْلًا $userTitle.");
+      await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي أَصْلًا $_userTitle.");
       return;
     }
     final count = _weeklySchedule.length;
@@ -5509,7 +5825,7 @@ String _extractWeeklyTaskName(String rawCommand) {
     }
     setState(() => _weeklySchedule.clear());
     _saveWeeklySchedule();
-    await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنَ الجَدْوَلِ الأُسْبُوعِيِّ $userTitle.");
+    await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنَ الجَدْوَلِ الأُسْبُوعِيِّ $_userTitle.");
   }
 
   void _openSettingsScreen() {
@@ -5547,9 +5863,11 @@ String _extractWeeklyTaskName(String rawCommand) {
             
             await _saveSettings();
             final prefs = await SharedPreferences.getInstance();
-_settings.salatAlaNabiEnabled = prefs.getBool('salat_ala_nabi_enabled') ?? false;
-_settings.salatAlaNabiInterval = prefs.getString('salat_ala_nabi_interval') ?? 'كل ساعة';
-await _scheduleSalatAlaNabi();
+            _settings.salatAlaNabiEnabled = prefs.getBool('salat_ala_nabi_enabled') ?? false;
+            _settings.salatAlaNabiInterval = prefs.getString('salat_ala_nabi_interval') ?? 'كل ساعة';
+            _settings.customUserTitle = prefs.getString('custom_user_title') ?? '';
+            _settings.customSecTitle = prefs.getString('custom_sec_title') ?? '';
+            _scheduleSalatAlaNabi();
             widget.onThemeChanged(isDarkMode);
             
             Future.delayed(const Duration(milliseconds: 100), () async {
@@ -5797,11 +6115,11 @@ await _scheduleSalatAlaNabi();
                     _pendingActionTimer = Timer(const Duration(seconds: 15), () {
                       if (_pendingVoiceAction == 'confirm_time_conflict') {
                         _handleConflictResolution(false);
-                        _speak("مَعْلِشْ يَا $_userTitle، تَمَّ إِلْغَاءُ الحِفْظِ عَشَانْ مَكَتَبْتِشْ رَدْ.");
+                        _speak("مَعْلِشْ $_userTitle، تَمَّ إِلْغَاءُ الحِفْظِ عَشَانْ مَكَتَبْتِشْ رَدْ.");
                       }
                     });
                     
-                    _speak("فِيهْ مَوْعِدْ تَانِي فِي نَفْسْ الوَقْتْ يَا $_userTitle، تِحِبْ أَحْفَظْ الاتنين ولا أَلْغِي؟");
+                    _speak("فِيهْ مَوْعِدْ تَانِي فِي نَفْسْ الوَقْتْ $_userTitle، تِحِبْ أَحْفَظْ الاتنين ولا أَلْغِي؟");
                     _listenVoiceCommand();
                     return;
                   }
@@ -6193,7 +6511,8 @@ await _scheduleSalatAlaNabi();
       ),
     );
   }
-   @override
+
+  @override
   Widget build(BuildContext context) {
     final List<Widget> screens = [
       _buildCalendarTab(),
@@ -6275,7 +6594,7 @@ await _scheduleSalatAlaNabi();
         onTap: (index) {
           setState(() {
             _currentIndex = index;
-            _isHijriView = false; // 👈 التعديل هنا: عشان يرجع ميلادي لما نغير التاب
+            _isHijriView = false;
           });
         },
         selectedItemColor: const Color(0xFF1B2A4A),
@@ -6562,7 +6881,6 @@ await _scheduleSalatAlaNabi();
             ),
           ]),
         ),
-        // 👈 زرار التاريخ التفاعلي (ميلادي / هجري)
         GestureDetector(
           onTap: () {
             setState(() {
@@ -6934,7 +7252,6 @@ await _scheduleSalatAlaNabi();
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)
                   )
                 ),
-                // 👈 دايره التصفير الحمراء
                 Container(
                   margin: const EdgeInsets.only(left: 8),
                   decoration: const BoxDecoration(
@@ -7036,9 +7353,9 @@ await _scheduleSalatAlaNabi();
           Expanded(
             child: TabBarView(
               children: [
-                _buildAdhkarSectionList(_morningAdhkarList),
-                _buildAdhkarSectionList(_eveningAdhkarList),
-                _buildAdhkarSectionList(_sleepAdhkarList),
+                _buildAdhkarSectionList(_morningAdhkarList, 'الصباح'),
+                _buildAdhkarSectionList(_eveningAdhkarList, 'المساء'),
+                _buildAdhkarSectionList(_sleepAdhkarList, 'النوم'),
               ],
             ),
           ),
@@ -7069,26 +7386,49 @@ await _scheduleSalatAlaNabi();
     );
   }
 
-  Widget _buildAdhkarSectionList(List<Map<String, dynamic>> adhkarList) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: adhkarList.length,
-      itemBuilder: (ctx, i) {
-        final text = adhkarList[i]['text'];
-        _adhkarCounts.putIfAbsent(text, () => adhkarList[i]['count']);
-        
-        return _AdhkarCard(
-          text: text,
-          count: _adhkarCounts[text] ?? 0,
-          onDecrement: () {
-            setState(() {
-              if ((_adhkarCounts[text] ?? 0) > 0) {
-                _adhkarCounts[text] = (_adhkarCounts[text] ?? 0) - 1;
-              }
-            });
-          },
-        );
-      },
+  Widget _buildAdhkarSectionList(List<Map<String, dynamic>> adhkarList, String title) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('أذكار $title', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1B2A4A))),
+              TextButton.icon(
+                onPressed: () {
+                  setState(() { for (var item in adhkarList) { _adhkarCounts.remove(item['text']); } });
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم إعادة أذكار $title'), backgroundColor: Colors.green, duration: const Duration(seconds: 2)));
+                },
+                icon: const Icon(Icons.refresh, color: Colors.redAccent, size: 20),
+                label: const Text('إعادة', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: adhkarList.length,
+            itemBuilder: (ctx, i) {
+              final text = adhkarList[i]['text'];
+              _adhkarCounts.putIfAbsent(text, () => adhkarList[i]['count']);
+              
+              return _AdhkarCard(
+                text: text,
+                count: _adhkarCounts[text] ?? 0,
+                onDecrement: () {
+                  setState(() {
+                    if ((_adhkarCounts[text] ?? 0) > 0) {
+                      _adhkarCounts[text] = (_adhkarCounts[text] ?? 0) - 1;
+                    }
+                  });
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -7401,9 +7741,9 @@ await _scheduleSalatAlaNabi();
           List<String>.from(taskData['customDays'] ?? []), soundUri: taskData['sound'],
         );
       }
-      _speak("تَمَّ حِفْظُ المَوْعِدَيْنِ يَا $_userTitle.");
+      _speak("تَمَّ حِفْظُ المَوْعِدَيْنِ $_userTitle.");
     } else {
-      _speak("تَمَام يَا $_userTitle، تَمَّ إِلْغَاءُ الحِفْظِ.");
+      _speak("تَمَام $_userTitle، تَمَّ إِلْغَاءُ الحِفْظِ.");
     }
   }
 
@@ -7451,49 +7791,40 @@ await _scheduleSalatAlaNabi();
 
   void _handleAdhkarResult(String rawText) {
     final norm = _norm(rawText);
-    String remaining = norm;
+    if (norm.trim().isEmpty) return;
     bool anyFound = false;
-
     final allLists = [_morningAdhkarList, _eveningAdhkarList, _sleepAdhkarList];
     
     for (var list in allLists) {
       for (var item in list) {
         final itemText = _norm(item['text']);
+        final words = itemText.split(' ').where((w) => w.length > 2).toList();
+        if (words.isEmpty) continue;
+        String fingerprint = words.take(3).join(' ');
         
-        String searchPhrase = itemText;
-        if (itemText.length > 30) {
-          searchPhrase = itemText.split(' ').take(5).join(' ');
-        }
-
-        int count = 0;
-        int idx = 0;
-        
-        while ((idx = remaining.indexOf(searchPhrase, idx)) != -1) {
-          count++;
-          remaining = remaining.replaceRange(idx, idx + searchPhrase.length, ' ' * searchPhrase.length);
-          idx += searchPhrase.length;
-        }
-
-        if (count > 0) {
+        if (norm.contains(fingerprint)) {
           int currentCount = _adhkarCounts[item['text']] ?? 0;
           
           if (currentCount > 0) {
-            int newCount = currentCount - count;
-            if (newCount < 0) newCount = 0;
-            
             setState(() {
-              _adhkarCounts[item['text']] = newCount;
+              _adhkarCounts[item['text']] = currentCount - 1;
             });
-            _speak("تَمَّ تَسْجِيلُ الذِّكْرِ. البَاقِي: $newCount");
+            _speak("تَمَّ تَسْجِيلُ الذِّكْرِ. البَاقِي: ${currentCount - 1}");
           } else {
             _speak("لَقَدْ أَكْمَلْتَ هَذَا الذِّكْرَ $_userTitle.");
           }
           anyFound = true;
+          break;
         }
       }
+      if (anyFound) break;
+    }
+
+    if (!anyFound) {
+      _speak("لَمْ أَتَعَرَّفْ عَلَى الذِّكْرِ، يُرْجَى الإِعَادَة.");
     }
   }
-} // 👈 قوس إغلاق كلاس _MainDashboardState
+}
 
 class _AdhkarCard extends StatelessWidget {
   final String text;
@@ -7640,6 +7971,11 @@ class _DiaryPageState extends State<_DiaryPage> {
   double _playbackVolume = 1.0;
   double _playbackSpeed = 1.0;
 
+  final FocusNode _diaryFocusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
+  final stt.SpeechToText _diarySpeech = stt.SpeechToText();
+  bool _isDictating = false;
+
   @override
   void initState() {
     super.initState();
@@ -7653,6 +7989,9 @@ class _DiaryPageState extends State<_DiaryPage> {
     final data = widget.initialData;
     if (data['entries'] != null) {
       _entries = List<Map<String, dynamic>>.from(data['entries']);
+      for (var e in _entries) {
+        if (e['time'] is String) { e['time'] = DateTime.parse(e['time']); }
+      }
     } else {
       if (data['text'] != null && data['text'].toString().isNotEmpty) {
         _entries.add({'type': 'text', 'content': data['text'], 'time': widget.date});
@@ -7741,10 +8080,12 @@ class _DiaryPageState extends State<_DiaryPage> {
   }
 
   Future<void> _save() async {
-    final newData = {
-      'text': diaryCtrl.text,
-      'entries': _entries,
-    };
+    final safeEntries = _entries.map((e) {
+      final map = Map<String, dynamic>.from(e);
+      if (map['time'] is DateTime) { map['time'] = (map['time'] as DateTime).toIso8601String(); }
+      return map;
+    }).toList();
+    final newData = {'text': diaryCtrl.text, 'entries': safeEntries};
     await widget.onSave(widget.date, newData);
     if (mounted) Navigator.pop(context);
   }
@@ -7759,11 +8100,14 @@ class _DiaryPageState extends State<_DiaryPage> {
             ListTile(
               leading: const Icon(Icons.text_fields, color: Color(0xFF1B2A4A)),
               title: const Text('كتابة نص', style: TextStyle(fontWeight: FontWeight.bold)),
-              onTap: () { Navigator.pop(ctx); _addText(); },
+              onTap: () {
+                Navigator.pop(ctx); _diaryFocusNode.requestFocus();
+                _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.check_box, color: Color(0xFF1B2A4A)),
-              title: const Text('إضافة مهام (كل سطر مهمة)', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text('إضافة مهام', style: TextStyle(fontWeight: FontWeight.bold)),
               onTap: () { Navigator.pop(ctx); _addTasks(); },
             ),
             ListTile(
@@ -7887,24 +8231,25 @@ class _DiaryPageState extends State<_DiaryPage> {
       setState(() => _isRecordingNow = true);
     }
   }
+
   Future<void> _toggleRecording() async {
-  if (_isRecordingNow) {
-    final p = await _recorder.stop();
-    setState(() { 
-      _isRecordingNow = false; 
-      if (p != null) {
-        _entries.add({'type': 'audio', 'content': p, 'time': DateTime.now()});
-        _sortEntries();
+    if (_isRecordingNow) {
+      final p = await _recorder.stop();
+      setState(() { 
+        _isRecordingNow = false; 
+        if (p != null) {
+          _entries.add({'type': 'audio', 'content': p, 'time': DateTime.now()});
+          _sortEntries();
+        }
+      });
+    } else {
+      if (await _recorder.hasPermission()) {
+        final dir = await getApplicationDocumentsDirectory();
+        final path = '${dir.path}/diary_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        await _recorder.start(const RecordConfig(), path: path);
+        setState(() => _isRecordingNow = true);
       }
-    });
-  } else {
-    if (await _recorder.hasPermission()) {
-      final dir = await getApplicationDocumentsDirectory();
-      final path = '${dir.path}/diary_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      await _recorder.start(const RecordConfig(), path: path);
-      setState(() => _isRecordingNow = true);
     }
-  }
   }
 
   Future<void> _stopRecording() async {
@@ -7966,6 +8311,22 @@ class _DiaryPageState extends State<_DiaryPage> {
     } catch (_) {}
   }
 
+  Future<void> _toggleDictation() async {
+    if (_isDictating) {
+      await _diarySpeech.stop(); setState(() => _isDictating = false); return;
+    }
+    bool available = await _diarySpeech.initialize(
+      onStatus: (status) { if (status == 'done' || status == 'notListening') { if (mounted) setState(() => _isDictating = false); } },
+    );
+    if (available) {
+      setState(() => _isDictating = true);
+      await _diarySpeech.listen(
+        localeId: "ar-EG",
+        onResult: (val) { if (val.finalResult) { setState(() { diaryCtrl.text += ' ${val.recognizedWords}'; }); } },
+      );
+    }
+  }
+
   @override
   void dispose() {
     if (activeInstance == this) activeInstance = null;
@@ -7975,6 +8336,9 @@ class _DiaryPageState extends State<_DiaryPage> {
     diaryCtrl.dispose();
     _recorder.dispose();
     _audioPlayer.dispose();
+    _diaryFocusNode.dispose();
+    _scrollController.dispose();
+    _diarySpeech.cancel();
     super.dispose();
   }
 
@@ -8058,17 +8422,25 @@ class _DiaryPageState extends State<_DiaryPage> {
               const SizedBox(height: 15),
               Expanded(
                 child: ListView(
+                  controller: _scrollController,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
                       child: TextField(
                         controller: diaryCtrl, maxLines: null, minLines: 5, style: const TextStyle(fontSize: 16, height: 1.6),
-                        decoration: const InputDecoration(hintText: 'اكتب يومياتك هنا...', border: InputBorder.none)
+                        focusNode: _diaryFocusNode,
+                        decoration: InputDecoration(
+                          hintText: 'اكتب يومياتك هنا...', border: InputBorder.none,
+                          suffixIcon: IconButton(
+                            icon: Icon(_isDictating ? Icons.mic : Icons.mic_none, color: _isDictating ? Colors.red : const Color(0xFFC5A059)),
+                            onPressed: _toggleDictation,
+                            tooltip: 'التحدث بالصوت لكتابة اليومية',
+                          ),
+                        )
                       ),
                     ),
                     const SizedBox(height: 20),
-                    
                     ..._entries.map((entry) {
                       final timeStr = DateFormat('hh:mm a', 'ar').format(entry['time']);
 
@@ -8235,6 +8607,7 @@ class _DiaryPageState extends State<_DiaryPage> {
           ),
         ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       floatingActionButton: _isRecordingNow
           ? FloatingActionButton.extended(
               onPressed: _stopRecording,
@@ -8269,13 +8642,81 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
   }
 
   void _changeMonth(int offset) {
-  setState(() {
-    final newHijri = HijriCalendar();
-    newHijri.hYear = _currentHijriDate.hYear;
-    newHijri.hMonth = _currentHijriDate.hMonth + offset;
-    newHijri.hDay = 1;
-    _currentHijriDate = newHijri;
-  });
+    setState(() {
+      int newMonth = _currentHijriDate.hMonth + offset;
+      int newYear = _currentHijriDate.hYear;
+      if (newMonth < 1) { newMonth = 12; newYear--; } 
+      else if (newMonth > 12) { newMonth = 1; newYear++; }
+      final newHijri = HijriCalendar();
+      newHijri.hYear = newYear; newHijri.hMonth = newMonth; newHijri.hDay = 1;
+      _currentHijriDate = newHijri;
+    });
+  }
+
+  void _showMonthYearPicker() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        int tempYear = _currentHijriDate.hYear;
+        int tempMonth = _currentHijriDate.hMonth;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('اختر الشهر والسنة', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+              content: SizedBox(
+                width: double.maxFinite, height: 400,
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(icon: const Icon(Icons.chevron_left, color: Color(0xFFC5A059)), onPressed: () => setDialogState(() => tempYear--)),
+                        Text('$tempYear هـ', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        IconButton(icon: const Icon(Icons.chevron_right, color: Color(0xFFC5A059)), onPressed: () => setDialogState(() => tempYear++)),
+                      ],
+                    ),
+                    const Divider(),
+                    Expanded(
+                      child: GridView.builder(
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 2.5),
+                        itemCount: 12,
+                        itemBuilder: (context, index) {
+                          final h = HijriCalendar();
+                          h.hYear = tempYear; h.hMonth = index + 1; h.hDay = 1;
+                          final isSelected = (index + 1) == tempMonth;
+                          return InkWell(
+                            onTap: () { setDialogState(() { tempMonth = index + 1; }); },
+                            child: Container(
+                              margin: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(color: isSelected ? const Color(0xFFC5A059) : Colors.transparent, borderRadius: BorderRadius.circular(8), border: Border.all(color: isSelected ? const Color(0xFFC5A059) : Colors.grey.shade300)),
+                              alignment: Alignment.center,
+                              child: Text(h.getLongMonthName(), style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.white : Colors.black87)),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+                  onPressed: () {
+                    final newHijri = HijriCalendar();
+                    newHijri.hYear = tempYear; newHijri.hMonth = tempMonth; newHijri.hDay = 1;
+                    setState(() { _currentHijriDate = newHijri; });
+                    Navigator.pop(context);
+                  },
+                  child: const Text('موافق', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -8287,66 +8728,62 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
 
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.chevron_left, color: Color(0xFFC5A059)),
-              onPressed: () => _changeMonth(-1),
-            ),
-            Text(
-              '${_currentHijriDate.getLongMonthName()} ${_currentHijriDate.hYear} هـ',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFC5A059)),
-            ),
-            IconButton(
-              icon: const Icon(Icons.chevron_right, color: Color(0xFFC5A059)),
-              onPressed: () => _changeMonth(1),
-            ),
-          ],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(icon: const Icon(Icons.chevron_left, color: Color(0xFF1B2A4A)), onPressed: () => _changeMonth(-1)),
+              InkWell(
+                onTap: _showMonthYearPicker, borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(children: [
+                    Text('${_currentHijriDate.getLongMonthName()} ${_currentHijriDate.hYear} هـ', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.arrow_drop_down, color: Color(0xFF1B2A4A)),
+                  ]),
+                ),
+              ),
+              IconButton(icon: const Icon(Icons.chevron_right, color: Color(0xFF1B2A4A)), onPressed: () => _changeMonth(1)),
+            ],
+          ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Row(
-          children: ['س', 'ح', 'ن', 'ث', 'ر', 'خ', 'ج']
-              .map((d) => Expanded(child: Center(child: Text(d, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)))))
-              .toList(),
+          children: ['س', 'ح', 'ن', 'ث', 'ر', 'خ', 'ج'].map((d) => Expanded(child: Center(child: Text(d, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 13))))).toList(),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 7,
             childAspectRatio: 1.0,
+            crossAxisSpacing: 4,
+            mainAxisSpacing: 4,
           ),
           itemCount: startOffset + daysInMonth,
           itemBuilder: (context, index) {
             if (index < startOffset) return const SizedBox.shrink();
             int day = index - startOffset + 1;
             HijriCalendar hDay = HijriCalendar();
-hDay.hYear = _currentHijriDate.hYear;
-hDay.hMonth = _currentHijriDate.hMonth;
-hDay.hDay = day;
-DateTime gDate = hDay.hijriToGregorian(hDay.hYear, hDay.hMonth, hDay.hDay);
+            hDay.hYear = _currentHijriDate.hYear;
+            hDay.hMonth = _currentHijriDate.hMonth;
+            hDay.hDay = day;
+            DateTime gDate = hDay.hijriToGregorian(hDay.hYear, hDay.hMonth, hDay.hDay);
             bool isSelected = gDate.year == widget.selectedDate.year && gDate.month == widget.selectedDate.month && gDate.day == widget.selectedDate.day;
-
             return InkWell(
               onTap: () => widget.onDateChanged(gDate),
               customBorder: const CircleBorder(),
               child: Container(
-                margin: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isSelected ? const Color(0xFF1B2A4A) : null,
                 ),
-                child: Center(
-                  child: Text(
-                    '$day',
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : null,
-                      fontWeight: isSelected ? FontWeight.bold : null,
-                    ),
-                  ),
-                ),
+                alignment: Alignment.center,
+                child: Text('$day', style: TextStyle(fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.white : null)),
               ),
             );
           },
