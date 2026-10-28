@@ -7851,35 +7851,87 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         int currentCount = _adhkarCounts[matchedText] ?? 0;
 
         if (currentCount > 0) {
-          int newCount = currentCount - count;
-          if (newCount < 0) newCount = 0;
+  void _handleAdhkarResult(String rawText) {
+    String norm = _norm(rawText);
+    if (norm.trim().isEmpty) return;
 
-          _adhkarCounts[matchedText] = newCount; // 👈 بدون setState هنا
+    final adhkarPriorityList = [
+      {'text': _morningAdhkarList[0]['text'] as String, 'keywords': ['اصبحنا واصبح الملك لله', 'اصبحنا واصبح الملك']},
+      {'text': _morningAdhkarList[1]['text'] as String, 'keywords': ['اللهم بك اصبحنا وبك امسينا', 'اللهم بك اصبحنا']},
+      {'text': _morningAdhkarList[2]['text'] as String, 'keywords': ['انت ربي لا اله الا انت خلقتني', 'انت ربي لا اله الا انت']},
+      {'text': _morningAdhkarList[3]['text'] as String, 'keywords': ['سبحان الله وبحمده']},
+      {'text': _eveningAdhkarList[0]['text'] as String, 'keywords': ['امسينا وامسى الملك لله', 'امسينا وامسى الملك']},
+      {'text': _eveningAdhkarList[1]['text'] as String, 'keywords': ['اللهم بك امسينا وبك اصبحنا', 'اللهم بك امسينا']},
+      {'text': _eveningAdhkarList[2]['text'] as String, 'keywords': ['اعوذ بكلمات الله التامات', 'اعوذ بكلمات الله']},
+      {'text': _eveningAdhkarList[3]['text'] as String, 'keywords': ['بسم الله الذي لا يضر', 'الذي لا يضر مع اسمه']},
+      {'text': _sleepAdhkarList[0]['text'] as String, 'keywords': ['باسمك اللهم اموت واحيا']},
+      {'text': _sleepAdhkarList[1]['text'] as String, 'keywords': ['قني عذابك يوم تبعث']},
+      {'text': _sleepAdhkarList[2]['text'] as String, 'keywords': ['سبحان الله']},
+      {'text': _sleepAdhkarList[3]['text'] as String, 'keywords': ['الحمد لله']},
+      {'text': _sleepAdhkarList[4]['text'] as String, 'keywords': ['الله اكبر']},
+    ];
 
-          // 👈 رسالة الإكمال لما العداد يوصل صفر
-          if (newCount > 0) {
-            messages.add("تَمَّ تَسْجِيلُ الذِّكْرِ $count مَرَّات. البَاقِي: $newCount");
-          } else {
-            messages.add("أَكْمَلْتَ الذِّكْرَ $_userTitle، بَارَكَ اللهُ فِيك.");
+    bool anyFound = false;
+    final List<String> messages = []; 
+
+    while (norm.trim().isNotEmpty) {
+      String? matchedText;
+      String? matchedKeyword;
+
+      for (var adhkar in adhkarPriorityList) {
+        for (var keyword in adhkar['keywords'] as List<String>) {
+          final normKeyword = _norm(keyword);
+          if (normKeyword.isEmpty) continue; 
+          if (norm.contains(normKeyword)) {
+            matchedText = adhkar['text'] as String;
+            matchedKeyword = normKeyword;
+            break;
           }
-        } else {
-          messages.add("لَقَدْ أَكْمَلْتَ هَذَا الذِّكْرَ $_userTitle.");
         }
-        anyFound = true;
+        if (matchedText != null) break;
       }
+
+      if (matchedText != null && matchedKeyword != null) {
+        int count = 0;
+        int index = 0;
+        while ((index = norm.indexOf(matchedKeyword, index)) != -1) {
+          count++;
+          norm = norm.replaceRange(index, index + matchedKeyword.length, ' ' * matchedKeyword.length);
+        }
+
+        if (count > 0) {
+          int currentCount = _adhkarCounts[matchedText] ?? 0;
+
+          if (currentCount > 0) {
+            int newCount = currentCount - count;
+            if (newCount < 0) newCount = 0;
+
+            _adhkarCounts[matchedText] = newCount; 
+
+            if (newCount > 0) {
+              messages.add("تَمَّ تَسْجِيلُ الذِّكْرِ $count مَرَّات. البَاقِي: $newCount");
+            } else {
+              messages.add("أَكْمَلْتَ الذِّكْرَ $_userTitle، بَارَكَ اللهُ فِيك.");
+            }
+          } else {
+            messages.add("لَقَدْ أَكْمَلْتَ هَذَا الذِّكْرَ $_userTitle.");
+          }
+          anyFound = true;
+        }
+      } else {
+        break;
+      }
+    }
+
+    if (anyFound) {
+      if (mounted) setState(() {});
+      if (messages.isNotEmpty) _speak(messages.join(' '));
     } else {
-      break;
+      _speak("لَمْ أَتَعَرَّفْ عَلَى الذِّكْرِ، يُرْجَى الإِعَادَة.");
     }
   }
-
-  // 👈 setState واحدة + نطق واحد في الآخر
-  if (anyFound) {
-    if (mounted) setState(() {});
-    if (messages.isNotEmpty) _speak(messages.join(' '));
-  } else {
-    _speak("لَمْ أَتَعَرَّفْ عَلَى الذِّكْرِ، يُرْجَى الإِعَادَة.");
-  }
-  }
+} // 👈 القوس ده مهم جداً عشان يقفل كلاس _MainDashboardState
+        
 
 class _AdhkarCard extends StatelessWidget {
   final String text;
