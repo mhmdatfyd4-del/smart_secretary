@@ -8631,7 +8631,7 @@ class _HijriCalendarWidget extends StatefulWidget {
   @override
   State<_HijriCalendarWidget> createState() => _HijriCalendarWidgetState();
 }
-
+                        
 class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
   late HijriCalendar _currentHijriDate;
 
@@ -8641,16 +8641,26 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
     _currentHijriDate = HijriCalendar.fromDate(widget.selectedDate);
   }
 
+  // 👈 الحل السحري: بنغير الشهر باستخدام fromDate عشان نمنع الكراش
   void _changeMonth(int offset) {
-    setState(() {
-      int newMonth = _currentHijriDate.hMonth + offset;
-      int newYear = _currentHijriDate.hYear;
-      if (newMonth < 1) { newMonth = 12; newYear--; } 
-      else if (newMonth > 12) { newMonth = 1; newYear++; }
-      final newHijri = HijriCalendar();
-      newHijri.hYear = newYear; newHijri.hMonth = newMonth; newHijri.hDay = 1;
-      _currentHijriDate = newHijri;
-    });
+    try {
+      setState(() {
+        // 1. بنجيب التاريخ الميلادي لأول يوم في الشهر الهجري الحالي
+        DateTime currentFirstGregorian = _currentHijriDate.hijriToGregorian(_currentHijriDate.hYear, _currentHijriDate.hMonth, 1);
+        
+        // 2. بنزود أو بنقلل 30 يوم عشان نضمن إننا دخلنا الشهر اللي بعده أو اللي قبله
+        DateTime newGregorian = currentFirstGregorian.add(Duration(days: offset * 30));
+        
+        // 3. بنحول التاريخ الميلادي الجديد لهجري
+        HijriCalendar intermediateHijri = HijriCalendar.fromDate(newGregorian);
+        
+        // 4. بنجيب أول يوم في الشهر الهجري الجديد ونحوله لميلادي
+        DateTime exactFirstGregorian = intermediateHijri.hijriToGregorian(intermediateHijri.hYear, intermediateHijri.hMonth, 1);
+        
+        // 5. بنحول أول يوم للتقويم الهجري ونخزنه
+        _currentHijriDate = HijriCalendar.fromDate(exactFirstGregorian);
+      });
+    } catch (_) {}
   }
 
   void _showMonthYearPicker() {
@@ -8682,13 +8692,19 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
                         itemCount: 12,
                         itemBuilder: (context, index) {
                           final h = HijriCalendar();
-                          h.hYear = tempYear; h.hMonth = index + 1; h.hDay = 1;
+                          h.hDay = 1;
+                          h.hYear = tempYear; 
+                          h.hMonth = index + 1;
                           final isSelected = (index + 1) == tempMonth;
                           return InkWell(
                             onTap: () { setDialogState(() { tempMonth = index + 1; }); },
                             child: Container(
                               margin: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(color: isSelected ? const Color(0xFFC5A059) : Colors.transparent, borderRadius: BorderRadius.circular(8), border: Border.all(color: isSelected ? const Color(0xFFC5A059) : Colors.grey.shade300)),
+                              decoration: BoxDecoration(
+                                color: isSelected ? const Color(0xFFC5A059) : Colors.transparent, 
+                                borderRadius: BorderRadius.circular(8), 
+                                border: Border.all(color: isSelected ? const Color(0xFFC5A059) : Colors.grey.shade300)
+                              ),
                               alignment: Alignment.center,
                               child: Text(h.getLongMonthName(), style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.white : Colors.black87)),
                             ),
@@ -8704,10 +8720,14 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
                   onPressed: () {
-                    final newHijri = HijriCalendar();
-                    newHijri.hYear = tempYear; newHijri.hMonth = tempMonth; newHijri.hDay = 1;
-                    setState(() { _currentHijriDate = newHijri; });
-                    Navigator.pop(context);
+                    try {
+                      // 👈 الحل السحري هنا كمان: بنستخدم fromDate عشان نمنع الكراش
+                      DateTime firstOfTarget = HijriCalendar().hijriToGregorian(tempYear, tempMonth, 1);
+                      setState(() { 
+                        _currentHijriDate = HijriCalendar.fromDate(firstOfTarget); 
+                      });
+                      Navigator.pop(context);
+                    } catch (_) {}
                   },
                   child: const Text('موافق', style: TextStyle(color: Colors.white)),
                 ),
@@ -8728,18 +8748,20 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
 
     return Column(
       children: [
+        // الترويسة (الشهر والسنة)
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(icon: const Icon(Icons.chevron_left, color: Color(0xFF1B2A4A)), onPressed: () => _changeMonth(-1)),
               InkWell(
-                onTap: _showMonthYearPicker, borderRadius: BorderRadius.circular(8),
+                onTap: _showMonthYearPicker, 
+                borderRadius: BorderRadius.circular(8),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(children: [
-                    Text('${_currentHijriDate.getLongMonthName()} ${_currentHijriDate.hYear} هـ', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+                    Text('${_currentHijriDate.getLongMonthName()} ${_currentHijriDate.hYear} هـ', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
                     const SizedBox(width: 4),
                     const Icon(Icons.arrow_drop_down, color: Color(0xFF1B2A4A)),
                   ]),
@@ -8749,41 +8771,72 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        
+        // 👈 أسماء الأيام (س ح ث) - أسود واضح وعريض زي الميلادي
         Row(
-          children: ['س', 'ح', 'ن', 'ث', 'ر', 'خ', 'ج'].map((d) => Expanded(child: Center(child: Text(d, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 13))))).toList(),
+          children: ['س', 'ح', 'ن', 'ث', 'ر', 'خ', 'ج']
+              .map((d) => Expanded(
+                    child: Center(
+                      child: Text(
+                        d, 
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold, // عريض
+                          color: Colors.black87,       // أسود واضح
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ))
+              .toList(),
         ),
         const SizedBox(height: 8),
+        
+        // 👈 الأرقام نفسها
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 8),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 7,
-            childAspectRatio: 1.0,
-            crossAxisSpacing: 4,
-            mainAxisSpacing: 4,
+            childAspectRatio: 1.0, 
+            crossAxisSpacing: 0, 
+            mainAxisSpacing: 0,
           ),
           itemCount: startOffset + daysInMonth,
           itemBuilder: (context, index) {
             if (index < startOffset) return const SizedBox.shrink();
             int day = index - startOffset + 1;
+            
             HijriCalendar hDay = HijriCalendar();
+            hDay.hDay = 1; 
             hDay.hYear = _currentHijriDate.hYear;
             hDay.hMonth = _currentHijriDate.hMonth;
             hDay.hDay = day;
+            
             DateTime gDate = hDay.hijriToGregorian(hDay.hYear, hDay.hMonth, hDay.hDay);
             bool isSelected = gDate.year == widget.selectedDate.year && gDate.month == widget.selectedDate.month && gDate.day == widget.selectedDate.day;
+
             return InkWell(
               onTap: () => widget.onDateChanged(gDate),
               customBorder: const CircleBorder(),
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isSelected ? const Color(0xFF1B2A4A) : null,
+              child: Center(
+                child: Container(
+                  width: 36, // مساحة الدايرة
+                  height: 36,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isSelected ? const Color(0xFF1B2A4A) : null,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$day', 
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500, 
+                      color: isSelected ? Colors.white : Colors.black, // 👈 لون أسود صريح
+                    ),
+                  ),
                 ),
-                alignment: Alignment.center,
-                child: Text('$day', style: TextStyle(fontSize: 14, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.white : null)),
               ),
             );
           },
