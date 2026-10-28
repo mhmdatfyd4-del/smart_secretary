@@ -232,6 +232,8 @@ class AppSettings {
   bool tahajjudAlertEnabled;
   bool isDarkMode;
   String? customImagePath;
+  bool salatAlaNabiEnabled;
+String salatAlaNabiInterval;
 
   AppSettings({
     this.defaultReminderHour = 18,
@@ -253,6 +255,8 @@ class AppSettings {
     this.tahajjudAlertEnabled = false,
     this.isDarkMode = false,
     this.customImagePath,
+    this.salatAlaNabiEnabled = false,
+this.salatAlaNabiInterval = 'كل ساعة',
   });
 
   double get speechRate {
@@ -322,6 +326,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _tahajjudAlertEnabled;
   late bool _isDarkMode;
   String? _customImagePath;
+  late bool _salatAlaNabiEnabled;
+late String _salatAlaNabiInterval;
+late bool _origSalatAlaNabiEnabled;
+late String _origSalatAlaNabiInterval;
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _wakeWordController = TextEditingController();
@@ -381,6 +389,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _isDarkMode = widget.settings.isDarkMode;
     _customGreetingController.text = widget.settings.customGreeting;
     _customImagePath = widget.settings.customImagePath;
+    _salatAlaNabiEnabled = widget.settings.salatAlaNabiEnabled;
+_salatAlaNabiInterval = widget.settings.salatAlaNabiInterval;
+_origSalatAlaNabiEnabled = _salatAlaNabiEnabled;
+_origSalatAlaNabiInterval = _salatAlaNabiInterval;
 
     _origDefaultReminderHour = _defaultReminderHour;
     _origDefaultReminderMinute = _defaultReminderMinute;
@@ -499,6 +511,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _defaultAlarmSound != _origDefaultAlarmSound ||
         _defaultWeeklySound != _origDefaultWeeklySound ||
         _defaultEventSound != _origDefaultEventSound ||
+      _salatAlaNabiEnabled != _origSalatAlaNabiEnabled ||
+_salatAlaNabiInterval != _origSalatAlaNabiInterval ||
         _customImagePath != _origCustomImagePath;
   }
 
@@ -507,6 +521,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_defaultAlarmSound == null) await prefs.remove('default_alarm_sound'); else await prefs.setString('default_alarm_sound', _defaultAlarmSound!);
     if (_defaultWeeklySound == null) await prefs.remove('default_weekly_sound'); else await prefs.setString('default_weekly_sound', _defaultWeeklySound!);
     if (_defaultEventSound == null) await prefs.remove('default_event_sound'); else await prefs.setString('default_event_sound', _defaultEventSound!);
+    await prefs.setBool('salat_ala_nabi_enabled', _salatAlaNabiEnabled);
+await prefs.setString('salat_ala_nabi_interval', _salatAlaNabiInterval);
 
     final newName = _nameController.text.trim().isEmpty
         ? (_voiceGender == 'ذكر' ? 'محمد' : 'سارة')
@@ -909,6 +925,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          const SizedBox(height: 12),
+Card(
+  elevation: 2,
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  child: Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(children: [
+          Icon(Icons.favorite, color: Color(0xFFC5A059), size: 26),
+          SizedBox(width: 10),
+          Text('تذكير الصلاة على النبي ﷺ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        ]),
+        const SizedBox(height: 12),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('تشغيل التذكير الصوتي', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          subtitle: const Text('هيشتغل في الخلفية بصوت مخصص', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          value: _salatAlaNabiEnabled,
+          activeColor: const Color(0xFF1B2A4A),
+          onChanged: (v) => setState(() => _salatAlaNabiEnabled = v),
+        ),
+        if (_salatAlaNabiEnabled) ...[
+          const Divider(),
+          const Text('التكرار:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: _salatAlaNabiInterval,
+            decoration: const InputDecoration(border: OutlineInputBorder()),
+            items: ['كل ساعة', 'كل ساعتين', 'كل 3 ساعات', 'كل 4 ساعات', 'كل 6 ساعات'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+            onChanged: (val) => setState(() => _salatAlaNabiInterval = val ?? 'كل ساعة'),
+          ),
+        ],
+      ],
+    ),
+  ),
+),
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(
@@ -2383,6 +2437,60 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     } catch (_) {}
   }
+  Future<void> _scheduleSalatAlaNabi() async {
+  for (int i = 8000; i <= 8500; i++) {
+    try { await _notifications.cancel(i); } catch (_) {}
+  }
+  
+  if (!_settings.salatAlaNabiEnabled) return;
+
+  int intervalHours = 1;
+  if (_settings.salatAlaNabiInterval == 'كل ساعتين') intervalHours = 2;
+  if (_settings.salatAlaNabiInterval == 'كل 3 ساعات') intervalHours = 3;
+  if (_settings.salatAlaNabiInterval == 'كل 4 ساعات') intervalHours = 4;
+  if (_settings.salatAlaNabiInterval == 'كل 6 ساعات') intervalHours = 6;
+
+  final now = DateTime.now();
+  int notificationId = 8000;
+  int count = 0;
+  
+  const int maxNotifications = 480; 
+  const int totalHoursToSchedule = 30 * 24; 
+
+  for (int i = 1; i <= totalHoursToSchedule; i++) {
+     if (i % intervalHours != 0) continue; 
+     
+     final scheduledTime = now.add(Duration(hours: i));
+     
+     final androidDetails = AndroidNotificationDetails(
+      'salat_ala_nabi_channel_v1',
+      'تذكير الصلاة على النبي',
+      channelDescription: 'تنبيهات تذكير الصلاة على النبي',
+      importance: Importance.max,
+      priority: Priority.max,
+      playSound: true,
+      sound: const RawResourceAndroidNotificationSound('salat_ala_nabi'),
+      enableVibration: true,
+      category: AndroidNotificationCategory.reminder,
+    );
+
+    try {
+      await _notifications.zonedSchedule(
+        notificationId,
+        'تذكير الصلاة على النبي',
+        'قال رسول الله ﷺ: من صلى عليَّ صلاةً صلى الله عليه بها عشرًا',
+        tz.TZDateTime.from(scheduledTime, tz.local),
+        NotificationDetails(android: androidDetails),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      notificationId++;
+      count++;
+    } catch (_) {}
+
+    if (count >= maxNotifications) break;
+  }
+  }
 
   Future<void> _initSpeech() async {
     try {
@@ -2617,6 +2725,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _settings.tahajjudAlertEnabled = prefs.getBool('tahajjud_alert_enabled') ?? false;
     _settings.isDarkMode = prefs.getBool('is_dark_mode') ?? false;
     _settings.customImagePath = prefs.getString('custom_secretary_image');
+    _settings.salatAlaNabiEnabled = prefs.getBool('salat_ala_nabi_enabled') ?? false;
+_settings.salatAlaNabiInterval = prefs.getString('salat_ala_nabi_interval') ?? 'كل ساعة';
+
+Future.delayed(const Duration(seconds: 2), () {
+  _scheduleSalatAlaNabi();
+});
     _tasbeehCount = prefs.getInt('tasbeeh_count') ?? 0;
     _playbackVolume = prefs.getDouble('playback_volume') ?? 1.0;
     _playbackSpeed = prefs.getDouble('playback_speed') ?? 1.0;
@@ -5447,6 +5561,10 @@ String _extractWeeklyTaskName(String rawCommand) {
             });
             
             await _saveSettings();
+            final prefs = await SharedPreferences.getInstance();
+_settings.salatAlaNabiEnabled = prefs.getBool('salat_ala_nabi_enabled') ?? false;
+_settings.salatAlaNabiInterval = prefs.getString('salat_ala_nabi_interval') ?? 'كل ساعة';
+await _scheduleSalatAlaNabi();
             widget.onThemeChanged(isDarkMode);
             
             Future.delayed(const Duration(milliseconds: 100), () async {
