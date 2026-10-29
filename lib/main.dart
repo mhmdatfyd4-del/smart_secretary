@@ -7789,47 +7789,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     });
   }
 
-  void _handleTasbeehResult(String rawText) {
-    final norm = _norm(rawText);
-    final matches = [
-      {'key': 'subhan_adada', 'text': _norm('سبحان الله وبحمده عدد خلقه ورضا نفسه وزنة عرشه ومداد كلماته')},
-      {'key': 'subhan_bihamdih_azim', 'text': _norm('سبحان الله وبحمده سبحان الله العظيم')},
-      {'key': 'subhan_azim', 'text': _norm('سبحان الله العظيم')},
-      {'key': 'subhan_bihamdih', 'text': _norm('سبحان الله وبحمده')},
-      {'key': 'subhan', 'text': _norm('سبحان الله')},
-      {'key': 'astaghfirullah', 'text': _norm('استغفر الله')},
-      {'key': 'salah_ala_nabi', 'text': _norm('اللهم صل على سيدنا محمد')},
-    ];
-    
-    String remaining = norm;
-    final counts = <String, int>{};
-    
-    for (var m in matches) {
-      final text = m['text']!;
-      final key = m['key']!;
-      int idx = 0, cnt = 0;
-      while ((idx = remaining.indexOf(text, idx)) != -1) {
-        cnt++;
-        remaining = remaining.replaceRange(idx, idx + text.length, ' ' * text.length);
-        idx += text.length;
-      }
-      if (cnt > 0) counts[key] = (counts[key] ?? 0) + cnt;
-    }
-    
-    if (counts.isEmpty) return;
-    setState(() {
-      for (var entry in counts.entries) {
-        _tasbeehSubCounts[entry.key] = (_tasbeehSubCounts[entry.key] ?? 0) + entry.value;
-        _tasbeehCount += entry.value;
-      }
-    });
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setInt('tasbeeh_count', _tasbeehCount);
-      for (var entry in counts.entries) {
-        prefs.setInt('tasbeeh_${entry.key}', _tasbeehSubCounts[entry.key] ?? 0);
-      }
-    });
-  }
 
   void _handleAdhkarResult(String rawText) {
     String norm = _norm(rawText);
