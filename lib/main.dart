@@ -2750,6 +2750,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         _diaries = Map<String, dynamic>.from(json.decode(diariesString));
       });
     }
+    String? adhkarString = prefs.getString('saved_adhkar_counts');
+if (adhkarString != null) {
+  try {
+    final decoded = json.decode(adhkarString) as Map<String, dynamic>;
+    _adhkarCounts = decoded.map((k, v) => MapEntry(k, v as int));
+  } catch (_) {}
+}
 
     String? weeklyString = prefs.getString('saved_weekly_schedule');
     if (weeklyString != null) {
@@ -2854,6 +2861,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   Future<void> _saveWeeklySchedule() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('saved_weekly_schedule', json.encode(_weeklySchedule));
+  }
+  Future<void> _saveAdhkarCounts() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('saved_adhkar_counts', json.encode(_adhkarCounts));
   }
 
   int _getAdvanceMinutes(String reminder) {
@@ -3979,14 +3990,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       if (_isAlarmDialogOpen || _activeAlarmTitle != null) {
         int minutes = 5; 
         
-        if (cmd.contains('نص ساعة') || cmd.contains('نصف ساعة') || cmd.contains('نصايه')) minutes = 30;
-        else if (cmd.contains('تلت ساعة') || cmd.contains('ثلث ساعة')) minutes = 20;
-        else if (cmd.contains('ربع ساعة')) minutes = 15;
-        else if (cmd.contains('ساعة')) minutes = 60;
-        else if (cmd.contains('عشرين') || cmd.contains('20')) minutes = 20;
-        else if (cmd.contains('عشر') || cmd.contains('10')) minutes = 10;
-        else if (cmd.contains('خمس') || cmd.contains('5')) minutes = 5;
-        else if (cmd.contains('دقيقتين')) minutes = 2;
+        if (cmd.contains('نص ساعه') || cmd.contains('نصف ساعه') || cmd.contains('نصايه')) minutes = 30;
+else if (cmd.contains('ربع ساعه')) minutes = 15;
+else if (cmd.contains('تلت ساعه') || cmd.contains('ثلث ساعه')) minutes = 20;
+else if (cmd.contains('ساعه')) minutes = 60;
+else if (cmd.contains('خمستاشر') || cmd.contains('خمسه عشر') || cmd.contains('15')) minutes = 15;
+else if (cmd.contains('تلاتين') || cmd.contains('30')) minutes = 30;
+else if (cmd.contains('عشرين') || cmd.contains('20')) minutes = 20;
+else if (cmd.contains('عشر') || cmd.contains('10')) minutes = 10;
+else if (cmd.contains('خمسه') || cmd.contains('خمس') || cmd.contains('5')) minutes = 5;
+else if (cmd.contains('دقيقتين')) minutes = 2;
         
         final originalTitle = _activeAlarmTitle ?? 'المنبه';
         final snoozeTime = DateTime.now().add(Duration(minutes: minutes));
@@ -4567,7 +4580,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     } else {
       await _speak("عُذْراً $_userTitle، لَمْ أَفْهَمِ الأَمْرَ.");
     }
+  if (_isAlarmDialogOpen && !_isListening && !_isRecording) {
+  Future.delayed(const Duration(seconds: 2), () {
+    if (mounted && _isAlarmDialogOpen && !_isListening && !_isRecording) _listenVoiceCommand();
+  });
   }
+ }
 
   Future<void> _listTodayTasks({DateTime? targetDate}) async {
     final userTitle = _userTitle;
@@ -7398,6 +7416,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               TextButton.icon(
                 onPressed: () {
                   setState(() { for (var item in adhkarList) { _adhkarCounts.remove(item['text']); } });
+                  _saveAdhkarCounts();
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم إعادة أذكار $title'), backgroundColor: Colors.green, duration: const Duration(seconds: 2)));
                 },
                 icon: const Icon(Icons.refresh, color: Colors.redAccent, size: 20),
@@ -7423,6 +7442,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                       _adhkarCounts[text] = (_adhkarCounts[text] ?? 0) - 1;
                     }
                   });
+                  _saveAdhkarCounts();
                 },
               );
             },
@@ -7863,8 +7883,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
 
     if (anyFound) {
-      if (mounted) setState(() {});
-      if (messages.isNotEmpty) _speak(messages.join(' '));
+  if (mounted) setState(() {});
+  // 👈 ضيف السطر ده هنا:
+  _saveAdhkarCounts();
+  if (messages.isNotEmpty) _speak(messages.join(' '));
     } else {
       _speak("لَمْ أَتَعَرَّفْ عَلَى الذِّكْرِ، يُرْجَى الإِعَادَة.");
     }
