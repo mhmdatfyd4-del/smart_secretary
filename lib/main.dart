@@ -7789,68 +7789,48 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     });
   }
 
-  void _handleAdhkarResult(String rawText) {
-  void _handleAdhkarResult(String rawText) {
-  String norm = _norm(rawText);
-  if (norm.trim().isEmpty) return;
-
-  // 👈 قائمة الأذكار مرتبة من الأكثر تحديداً (الأطول) للأقل
-  final adhkarPriorityList = [
-    // ========= أذكار الصباح =========
-    {'text': _morningAdhkarList[0]['text'] as String, 'keywords': ['اصبحنا واصبح الملك لله', 'اصبحنا واصبح الملك']},
-    {'text': _morningAdhkarList[1]['text'] as String, 'keywords': ['اللهم بك اصبحنا وبك امسينا', 'اللهم بك اصبحنا']},
-    {'text': _morningAdhkarList[2]['text'] as String, 'keywords': ['انت ربي لا اله الا انت خلقتني', 'انت ربي لا اله الا انت']},
-    {'text': _morningAdhkarList[3]['text'] as String, 'keywords': ['سبحان الله وبحمده']},
-
-    // ========= أذكار المساء =========
-    {'text': _eveningAdhkarList[0]['text'] as String, 'keywords': ['امسينا وامسى الملك لله', 'امسينا وامسى الملك']},
-    {'text': _eveningAdhkarList[1]['text'] as String, 'keywords': ['اللهم بك امسينا وبك اصبحنا', 'اللهم بك امسينا']},
-    {'text': _eveningAdhkarList[2]['text'] as String, 'keywords': ['اعوذ بكلمات الله التامات', 'اعوذ بكلمات الله']},
-    {'text': _eveningAdhkarList[3]['text'] as String, 'keywords': ['بسم الله الذي لا يضر', 'الذي لا يضر مع اسمه']},
-
-    // ========= أذكار النوم =========
-    {'text': _sleepAdhkarList[0]['text'] as String, 'keywords': ['باسمك اللهم اموت واحيا']},
-    {'text': _sleepAdhkarList[1]['text'] as String, 'keywords': ['قني عذابك يوم تبعث']},
-    {'text': _sleepAdhkarList[2]['text'] as String, 'keywords': ['سبحان الله']},
-    {'text': _sleepAdhkarList[3]['text'] as String, 'keywords': ['الحمد لله']},
-    {'text': _sleepAdhkarList[4]['text'] as String, 'keywords': ['الله اكبر']},
-  ];
-
-  bool anyFound = false;
-  final List<String> messages = []; // 👈 تجميع الرسائل قبل النطق
-
-  // 👈 الحلقة الذكية: نفضل ندور لحد ما النص يخلص
-  while (norm.trim().isNotEmpty) {
-    String? matchedText;
-    String? matchedKeyword;
-
-    // البحث بأولويات الترتيب
-    for (var adhkar in adhkarPriorityList) {
-      for (var keyword in adhkar['keywords'] as List<String>) {
-        final normKeyword = _norm(keyword);
-        if (normKeyword.isEmpty) continue; // 👈 حماية من الكلمة الفاضية
-        if (norm.contains(normKeyword)) {
-          matchedText = adhkar['text'] as String;
-          matchedKeyword = normKeyword;
-          break;
-        }
+  void _handleTasbeehResult(String rawText) {
+    final norm = _norm(rawText);
+    final matches = [
+      {'key': 'subhan_adada', 'text': _norm('سبحان الله وبحمده عدد خلقه ورضا نفسه وزنة عرشه ومداد كلماته')},
+      {'key': 'subhan_bihamdih_azim', 'text': _norm('سبحان الله وبحمده سبحان الله العظيم')},
+      {'key': 'subhan_azim', 'text': _norm('سبحان الله العظيم')},
+      {'key': 'subhan_bihamdih', 'text': _norm('سبحان الله وبحمده')},
+      {'key': 'subhan', 'text': _norm('سبحان الله')},
+      {'key': 'astaghfirullah', 'text': _norm('استغفر الله')},
+      {'key': 'salah_ala_nabi', 'text': _norm('اللهم صل على سيدنا محمد')},
+    ];
+    
+    String remaining = norm;
+    final counts = <String, int>{};
+    
+    for (var m in matches) {
+      final text = m['text']!;
+      final key = m['key']!;
+      int idx = 0, cnt = 0;
+      while ((idx = remaining.indexOf(text, idx)) != -1) {
+        cnt++;
+        remaining = remaining.replaceRange(idx, idx + text.length, ' ' * text.length);
+        idx += text.length;
       }
-      if (matchedText != null) break;
+      if (cnt > 0) counts[key] = (counts[key] ?? 0) + cnt;
     }
-
-    if (matchedText != null && matchedKeyword != null) {
-      // 👈 عدّ كل التكرارات في نفس الجملة
-      int count = 0;
-      int index = 0;
-      while ((index = norm.indexOf(matchedKeyword, index)) != -1) {
-        count++;
-        norm = norm.replaceRange(index, index + matchedKeyword.length, ' ' * matchedKeyword.length);
+    
+    if (counts.isEmpty) return;
+    setState(() {
+      for (var entry in counts.entries) {
+        _tasbeehSubCounts[entry.key] = (_tasbeehSubCounts[entry.key] ?? 0) + entry.value;
+        _tasbeehCount += entry.value;
       }
+    });
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setInt('tasbeeh_count', _tasbeehCount);
+      for (var entry in counts.entries) {
+        prefs.setInt('tasbeeh_${entry.key}', _tasbeehSubCounts[entry.key] ?? 0);
+      }
+    });
+  }
 
-      if (count > 0) {
-        int currentCount = _adhkarCounts[matchedText] ?? 0;
-
-        if (currentCount > 0) {
   void _handleAdhkarResult(String rawText) {
     String norm = _norm(rawText);
     if (norm.trim().isEmpty) return;
@@ -7872,45 +7852,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     ];
 
     bool anyFound = false;
-  void _handleAdhkarResult(String rawText) {
-    String norm = _norm(rawText);
-    if (norm.trim().isEmpty) return;
+    final List<String> messages = []; 
 
-    // 👈 قائمة الأذكار مرتبة من الأكثر تحديداً (الأطول) للأقل
-    final adhkarPriorityList = [
-      // ========= أذكار الصباح =========
-      {'text': _morningAdhkarList[0]['text'] as String, 'keywords': ['اصبحنا واصبح الملك لله', 'اصبحنا واصبح الملك']},
-      {'text': _morningAdhkarList[1]['text'] as String, 'keywords': ['اللهم بك اصبحنا وبك امسينا', 'اللهم بك اصبحنا']},
-      {'text': _morningAdhkarList[2]['text'] as String, 'keywords': ['انت ربي لا اله الا انت خلقتني', 'انت ربي لا اله الا انت']},
-      {'text': _morningAdhkarList[3]['text'] as String, 'keywords': ['سبحان الله وبحمده']},
-
-      // ========= أذكار المساء =========
-      {'text': _eveningAdhkarList[0]['text'] as String, 'keywords': ['امسينا وامسى الملك لله', 'امسينا وامسى الملك']},
-      {'text': _eveningAdhkarList[1]['text'] as String, 'keywords': ['اللهم بك امسينا وبك اصبحنا', 'اللهم بك امسينا']},
-      {'text': _eveningAdhkarList[2]['text'] as String, 'keywords': ['اعوذ بكلمات الله التامات', 'اعوذ بكلمات الله']},
-      {'text': _eveningAdhkarList[3]['text'] as String, 'keywords': ['بسم الله الذي لا يضر', 'الذي لا يضر مع اسمه']},
-
-      // ========= أذكار النوم =========
-      {'text': _sleepAdhkarList[0]['text'] as String, 'keywords': ['باسمك اللهم اموت واحيا']},
-      {'text': _sleepAdhkarList[1]['text'] as String, 'keywords': ['قني عذابك يوم تبعث']},
-      {'text': _sleepAdhkarList[2]['text'] as String, 'keywords': ['سبحان الله']},
-      {'text': _sleepAdhkarList[3]['text'] as String, 'keywords': ['الحمد لله']},
-      {'text': _sleepAdhkarList[4]['text'] as String, 'keywords': ['الله اكبر']},
-    ];
-
-    bool anyFound = false;
-    final List<String> messages = []; // 👈 تجميع الرسائل قبل النطق
-
-    // 👈 الحلقة الذكية: نفضل ندور لحد ما النص يخلص
     while (norm.trim().isNotEmpty) {
       String? matchedText;
       String? matchedKeyword;
 
-      // البحث بأولويات الترتيب
       for (var adhkar in adhkarPriorityList) {
         for (var keyword in adhkar['keywords'] as List<String>) {
           final normKeyword = _norm(keyword);
-          if (normKeyword.isEmpty) continue; // 👈 حماية من الكلمة الفاضية
+          if (normKeyword.isEmpty) continue; 
           if (norm.contains(normKeyword)) {
             matchedText = adhkar['text'] as String;
             matchedKeyword = normKeyword;
@@ -7921,7 +7872,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
 
       if (matchedText != null && matchedKeyword != null) {
-        // 👈 عدّ كل التكرارات في نفس الجملة
         int count = 0;
         int index = 0;
         while ((index = norm.indexOf(matchedKeyword, index)) != -1) {
@@ -7936,9 +7886,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             int newCount = currentCount - count;
             if (newCount < 0) newCount = 0;
 
-            _adhkarCounts[matchedText] = newCount; // 👈 بدون setState هنا
+            _adhkarCounts[matchedText] = newCount; 
 
-            // 👈 رسالة الإكمال لما العداد يوصل صفر
             if (newCount > 0) {
               messages.add("تَمَّ تَسْجِيلُ الذِّكْرِ $count مَرَّات. البَاقِي: $newCount");
             } else {
@@ -7954,7 +7903,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     }
 
-    // 👈 setState واحدة + نطق واحد في الآخر
     if (anyFound) {
       if (mounted) setState(() {});
       if (messages.isNotEmpty) _speak(messages.join(' '));
@@ -7962,7 +7910,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       _speak("لَمْ أَتَعَرَّفْ عَلَى الذِّكْرِ، يُرْجَى الإِعَادَة.");
     }
   }
-} // 👈❗️ القوس ده هو اللي كان ناقص (بيقفل كلاس _MainDashboardState)
+}
 
 class _AdhkarCard extends StatelessWidget {
   final String text;
