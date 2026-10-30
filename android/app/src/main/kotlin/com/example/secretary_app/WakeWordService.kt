@@ -94,7 +94,6 @@ class WakeWordService : Service() {
             startListening()
         }
         
-        // لو الوضع مش "دائماً"، خلي النظام ميعملش إعادة تشغيل للخدمة لو اتقتلت
         return if (listenMode == "always") START_STICKY else START_NOT_STICKY
     }
 
@@ -105,10 +104,8 @@ class WakeWordService : Service() {
         val mode = prefs.getString("flutter.wake_word_mode", "off") ?: "off"
         
         if (mode != "always") {
-            // الوضع "مفتوح" أو "خلفية": أوقف الخدمة نهائياً لما التطبيق يتقفل
             stopSelf()
         } else {
-            // الوضع "دائماً": أعد تشغيل الخدمة
             val restartIntent = Intent(applicationContext, WakeWordService::class.java)
             restartIntent.setPackage(packageName)
             val pendingIntent = PendingIntent.getService(
@@ -166,6 +163,12 @@ class WakeWordService : Service() {
 
     fun startListening() {
         if (listenMode == "off" || isPaused) return
+        
+        // 👈 تجديد الـ WakeLock عشان المايك ميفصلش
+        if (wakeLock?.isHeld == false) {
+            wakeLock?.acquire(10 * 60 * 1000L)
+        }
+
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         if (prefs.getBoolean("flutter.mute_beep", true)) {
             setSystemSoundMute(true)
@@ -195,6 +198,8 @@ class WakeWordService : Service() {
     private fun setSystemSoundMute(mute: Boolean) {
         try {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            
             if (mute) {
                 if (mutedStreams.isNotEmpty()) return
                 val streams = intArrayOf(
@@ -202,18 +207,30 @@ class WakeWordService : Service() {
                     AudioManager.STREAM_NOTIFICATION,
                     AudioManager.STREAM_DTMF
                 )
+                val editor = prefs.edit()
+                
                 for (stream in streams) {
                     try {
                         val original = audioManager.getStreamVolume(stream)
                         mutedStreams[stream] = original
+                        
+                        // 👈 شبكة الأمان: حفظ الصوت الأصلي في الذاكرة
+                        when (stream) {
+                            AudioManager.STREAM_SYSTEM -> editor.putInt("flutter.muted_sys_vol", original)
+                            AudioManager.STREAM_NOTIFICATION -> editor.putInt("flutter.muted_notif_vol", original)
+                            AudioManager.STREAM_DTMF -> editor.putInt("flutter.muted_dtmf_vol", original)
+                        }
                         audioManager.setStreamVolume(stream, 0, 0)
                     } catch (_: Exception) {}
                 }
+                editor.putBoolean("flutter.is_system_muted", true)
+                editor.apply()
             } else {
                 for ((stream, original) in mutedStreams) {
                     try { audioManager.setStreamVolume(stream, original, 0) } catch (_: Exception) {}
                 }
                 mutedStreams.clear()
+                prefs.edit().putBoolean("flutter.is_system_muted", false).apply()
             }
         } catch (_: Exception) {}
     }
@@ -266,7 +283,6 @@ class WakeWordService : Service() {
                     .setCategory(NotificationCompat.CATEGORY_CALL)
                     .setFullScreenIntent(pendingIntent, true)
                     .setAutoCancel(true)
-                    .setTimeoutAfter(2000)
                     .build()
 
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -276,7 +292,7 @@ class WakeWordService : Service() {
 
                 try {
                     startActivity(fullScreenIntent)
-                    handler.postDelayed({ notificationManager.cancel(888) }, 500)
+                    handler.postDelayed({ notificationManager.cancel(888) }, 1000)
                 } catch (e: Exception) {
                     Log.e("WakeWord", "فشل فتح التطبيق: ${e.message}")
                     isPaused = false
