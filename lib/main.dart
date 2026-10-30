@@ -2152,6 +2152,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     {'key': 'subhan_azim', 'text': 'سبحان الله العظيم'},
     {'key': 'astaghfirullah', 'text': 'أستغفر الله'},
     {'key': 'salah_ala_nabi', 'text': 'اللهم صل على سيدنا محمد'},
+    {'key': 'alhamdulillah', 'text': 'الحمد لله'},
+{'key': 'allahu_akbar', 'text': 'الله أكبر'},
+{'key': 'la_ilaha_illallah', 'text': 'لا إله إلا الله'},
   ];
 
   static const List<Map<String, dynamic>> _morningAdhkarList = [
@@ -2886,7 +2889,7 @@ if (adhkarString != null) {
   void _scheduleWeeklyAlarm(String taskTitle, String day, DateTime scheduledDateTime, String interval, String advanceReminder, {String? soundUri}) {
     int advanceMins = _getAdvanceMinutes(advanceReminder);
     DateTime alarmTime = scheduledDateTime.subtract(Duration(minutes: advanceMins));
-    _scheduleContinuousAlarm('جدول_${day}_$taskTitle', alarmTime, 'أسبوعي', interval, [day], soundUri: soundUri);
+    _scheduleContinuousAlarm('جدول_${day}_${DateFormat('HHmm').format(scheduledDateTime)}_$taskTitle', alarmTime, 'أسبوعي', interval, [day], soundUri: soundUri);
   }
 
   Future<void> _loadRecordings() async {
@@ -3353,9 +3356,7 @@ if (adhkarString != null) {
     }
 
     if (_hasAny(cmd, ['سبحان الله', 'استغفر الله', 'الحمد لله', 'الله اكبر', 'لا اله الا الله', 'سبحان الله وبحمده'])) {
-      setState(() => _tasbeehCount++);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('tasbeeh_count', _tasbeehCount);
+      _handleTasbeehResult(cmd);
       await _speak("جَزَاكَ اللَّهُ خَيْراً $userTitle، تَمَّ تَسْجِيلُ التَّسْبِيحَةِ. عَدَدُ التَّسْبِيحَاتِ: $_tasbeehCount.");
       return true;
     }
@@ -5693,7 +5694,7 @@ else if (cmd.contains('دقيقتين')) minutes = 2;
 
   Future<void> _scheduleEventNotification(Map<String, dynamic> event, DateTime fireTime, String interval, String repeatType) async {
     try {
-      final eventId = event['title'].toString().hashCode + event['eventDate'].toString().hashCode;
+      final eventId = ('${event['title']}_${event['eventDate']}_${event['reminderHour']}_${event['reminderMinute']}').hashCode & 0x7FFFFFFF;
       final tzTime = tz.TZDateTime.from(fireTime, tz.local);
 
       final prefs = await SharedPreferences.getInstance();
@@ -7777,6 +7778,9 @@ else if (cmd.contains('دقيقتين')) minutes = 2;
       {'key': 'subhan', 'text': _norm('سبحان الله')},
       {'key': 'astaghfirullah', 'text': _norm('استغفر الله')},
       {'key': 'salah_ala_nabi', 'text': _norm('اللهم صل على سيدنا محمد')},
+      {'key': 'alhamdulillah', 'text': _norm('الحمد لله')},
+{'key': 'allahu_akbar', 'text': _norm('الله اكبر')},
+{'key': 'la_ilaha_illallah', 'text': _norm('لا اله الا الله')},
     ];
     
     String remaining = norm;
