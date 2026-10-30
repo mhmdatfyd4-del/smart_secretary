@@ -38,6 +38,11 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     
     private val repeatRunnable = object : Runnable {
         override fun run() {
+            // 👈 تجديد الـ WakeLock عشان المنبه ميفصلش
+            if (wakeLock?.isHeld == false) {
+                wakeLock?.acquire(60 * 1000L)
+            }
+
             val hasCustomSound = !customSoundUri.isNullOrEmpty() && customSoundUri != "default" && customSoundUri != "null"
             if (hasCustomSound) {
                 playCustomSound(customSoundUri!!) 
