@@ -3533,6 +3533,16 @@ if (adhkarString != null) {
     
     if (normCmd.contains('بعد بكره') || normCmd.contains('بعد بكرة') || normCmd.contains('بعد غد')) return now.add(const Duration(days: 2));
     if (normCmd.contains('بكره') || normCmd.contains('بكرة') || normCmd.contains('غدا') || normCmd.contains('غداً')) return now.add(const Duration(days: 1));
+    // 👈 التعديل الجديد: الاسبوع والشهر والسنة
+if (normCmd.contains('الاسبوع الجاي') || normCmd.contains('الاسبوع القادم') || normCmd.contains('اسبوع جاي') || normCmd.contains('الاسبوع اللي جاي')) {
+  return now.add(const Duration(days: 7));
+}
+if (normCmd.contains('الشهر الجاي') || normCmd.contains('الشهر القادم') || normCmd.contains('شهر جاي') || normCmd.contains('الشهر اللي جاي')) {
+  return DateTime(now.year, now.month + 1, now.day);
+}
+if (normCmd.contains('السنة الجاية') || normCmd.contains('السنة القادمة') || normCmd.contains('سنة جاية') || normCmd.contains('العام الجاي') || normCmd.contains('السنة اللي جاية')) {
+  return DateTime(now.year + 1, now.month, now.day);
+}
     if (normCmd.contains('النهاردة') || normCmd.contains('النهارده') || normCmd.contains('اليوم') || normCmd.contains('انهاردة') || normCmd.contains('انهارده')) return now;
     if (normCmd.contains('امبارح') || normCmd.contains('امس') || normCmd.contains('البارح')) return now.subtract(const Duration(days: 1));
     if (normCmd.contains('اول امبارح') || normCmd.contains('قبل امبارح')) return now.subtract(const Duration(days: 2));
@@ -3659,6 +3669,47 @@ if (adhkarString != null) {
     }
 
     return null;
+  }
+  String _cleanDateWordsFromText(String text) {
+  String cleaned = text;
+  
+  final monthsList = ['يناير','فبراير','مارس','ابريل','أبريل','مايو','يونيو','يوليو','اغسطس','أغسطس','سبتمبر','اكتوبر','أكتوبر','نوفمبر','ديسمبر'];
+  final dayWords = ['واحد', 'واحدة', 'اتنين', 'اثنين', 'تلاتة', 'ثلاثة', 'اربعة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'تمانية', 'ثمانية', 'تسعة', 'عشرة', 'حداشر', 'اتناشر', 'تلتاشر', 'اربعطاشر', 'خمستاشر', 'خمسة عشر', 'ستاشر', 'سبعتاشر', 'تمنتاشر', 'تسعتاشر', 'عشرين', 'تلاتين', 'ثلاثين'];
+  
+  for (var m in monthsList) {
+    cleaned = cleaned.replaceAll(RegExp(r'\d+\s*' + m), '');
+    for (var w in dayWords) {
+      cleaned = cleaned.replaceAll(RegExp(r'\b' + w + r'\s*' + m), '');
+    }
+    cleaned = cleaned.replaceAll(RegExp(r'\b' + m + r'\b'), '');
+  }
+
+  final relativeDays = [
+    'النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم',
+    'بكرة', 'بكره', 'غدا', 'غداً',
+    'امبارح', 'امس', 'البارح', 'اول امبارح', 'قبل امبارح',
+    'بعد بكرة', 'بعد بكره', 'بعد غد',
+    'الاسبوع الجاي', 'الاسبوع القادم', 'اسبوع جاي', 'الاسبوع اللي جاي',
+    'الشهر الجاي', 'الشهر القادم', 'شهر جاي', 'الشهر اللي جاي',
+    'السنة الجاية', 'السنة القادمة', 'سنة جاية', 'العام الجاي', 'السنة اللي جاية'
+  ];
+  relativeDays.sort((a, b) => b.length.compareTo(a.length));
+  for (var d in relativeDays) {
+    cleaned = cleaned.replaceAll(RegExp(r'\b' + d + r'\b'), '');
+  }
+
+  final days = ['السبت', 'سبت', 'الاحد', 'الأحد', 'الحد', 'حد', 'الاتنين', 'الاثنين', 'التلات', 'الثلاثاء', 'الاربع', 'الأربعاء', 'الخميس', 'خميس', 'الجمعه', 'الجمعة', 'جمعه'];
+  for (var d in days) {
+    cleaned = cleaned.replaceAll(RegExp(r'\bيوم\s+' + d + r'\b'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\b' + d + r'\b'), '');
+  }
+  cleaned = cleaned.replaceAll(RegExp(r'\bيوم\b'), '');
+
+  cleaned = cleaned.replaceAll(RegExp(r'بعد\s*\d+\s*(يوم|ايام|أيام)'), '');
+  cleaned = cleaned.replaceAll(RegExp(r'\bيوم\s*\d{1,2}\b'), '');
+  cleaned = cleaned.replaceAll(RegExp(r'\b\d{1,2}\s*[/\-]\s*\d{1,2}\b'), '');
+
+  return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   DateTime? _parseDiaryDate(String cmd) {
@@ -3856,7 +3907,10 @@ if (adhkarString != null) {
     }
 
     // 5. أوامر اليوميات
-    if (_hasAny(cmd, ['يوميات', 'يوميه', 'يومية', 'مفكره', 'مفكرة'])) {
+final isWritingToDiary = _hasAny(cmd, ['اكتب في اليوميات', 'اكتب في يومياتي', 'سجل في اليوميات', 'سجل في يومياتي', 'اكتب يومية', 'سجل يومية', 'سجل عندك في يومية']);
+
+if (!isWritingToDiary && _hasAny(cmd, ['يوميات', 'يوميه', 'يومية', 'مفكره', 'مفكرة'])) {
+  if (_DiaryPageState.activeInstance != null) {
       if (_DiaryPageState.activeInstance != null) {
         if (_hasAny(cmd, ['ضيف مهمة', 'ضيفي مهمة', 'حط مهمة', 'أضف مهمة', 'ضيفلي مهمة', 'ضيفيلي مهمة'])) {
   String text = rawCommand.trim();
@@ -3867,6 +3921,17 @@ if (adhkarString != null) {
   _diaryVoiceStream.add({'action': 'add_todo', 'text': text.isEmpty ? 'مهمة جديدة' : text});
   await _speak("تَمَام $_userTitle، ضِفْتْ المُهِمَّة فِي اليَوْمِيَّة.");
   return;
+        }
+        if (_hasAny(cmd, ['اكتب', 'سجل نص', 'ضيف ملاحظة', 'اكتبلي'])) {
+  String text = rawCommand.replaceFirst(RegExp(r'^(?:(?:يا\s+)?(?:سكرتير|سكرتيرة)\s+)?(?:اكتب|سجل|ضيف|اكتبلي|سجلي)\s+(?:ملاحظة\s+)?'), '');
+  text = text.replaceAll(RegExp(r'\s+(?:في|على)\s+(?:اليوميات|يومياتي|يوميتي|يومية|مفكرة|المفكرة)\s*'), ' ');
+  text = _cleanDateWordsFromText(text);
+  
+  if (text.isNotEmpty) {
+    _diaryVoiceStream.add({'action': 'add_text_note', 'text': text});
+    await _speak("تَمَام $_userTitle، كَتَبْتْ النَّصْ.");
+    return;
+  }
         }
         if (_hasAny(cmd, ['خلصت رقم', 'عملت رقم', 'تم رقم', 'done رقم'])) {
           final m = RegExp(r'رقم\s*(\d+)').firstMatch(rawCommand);
@@ -4194,14 +4259,12 @@ if (minutes == 30) {
 
     // 11. كتابة اليوميات
     if (_hasAny(cmd, ['اكتب في اليوميات', 'اكتب في يومياتي', 'سجل في اليوميات', 'سجل في يومياتي', 'اكتب يومية', 'سجل يومية', 'سجل عندك في يومية'])) {
-      DateTime targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
-      final key = DateFormat('yyyy-MM-dd').format(targetDate);
-      String textToWrite = rawCommand;
-      final removeWords = ['اكتب', 'سجل', 'في', 'اليوميات', 'يومياتي', 'يومية', 'النهاردة', 'النهارده', 'بكرة', 'امبارح', 'يا', 'سكرتير', 'سكرتيرة', 'عندك'];
-      for (var w in removeWords) { textToWrite = textToWrite.replaceAll(w, ''); }
-      final dateParts = ['يناير','فبراير','مارس','ابريل','مايو','يونيو','يوليو','اغسطس','سبتمبر','اكتوبر','نوفمبر','ديسمبر'];
-      for (var p in dateParts) { textToWrite = textToWrite.replaceAll(p, ''); }
-      textToWrite = textToWrite.replaceAll(RegExp(r'\d+'), '').trim();
+  DateTime targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
+  final key = DateFormat('yyyy-MM-dd').format(targetDate);
+  String textToWrite = rawCommand;
+  final removeWords = ['اكتب', 'سجل', 'في', 'اليوميات', 'يومياتي', 'يومية', 'يا', 'سكرتير', 'سكرتيرة', 'عندك'];
+  for (var w in removeWords) { textToWrite = textToWrite.replaceAll(w, ''); }
+  textToWrite = _cleanDateWordsFromText(textToWrite);
       
       if (textToWrite.isNotEmpty) {
          final existing = _diaries[key] ?? {'text': '', 'entries': []};
