@@ -9143,56 +9143,62 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
         ),
         const SizedBox(height: 8),
         
-        // 👈 الأرقام نفسها
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 7,
-            childAspectRatio: 1.0, 
-            crossAxisSpacing: 0, 
-            mainAxisSpacing: 0,
-          ),
-          itemCount: startOffset + daysInMonth,
-          itemBuilder: (context, index) {
-            if (index < startOffset) return const SizedBox.shrink();
-            int day = index - startOffset + 1;
-            
-            HijriCalendar hDay = HijriCalendar();
-            hDay.hDay = 1; 
-            hDay.hYear = _currentHijriDate.hYear;
-            hDay.hMonth = _currentHijriDate.hMonth;
-            hDay.hDay = day;
-            
-            DateTime gDate = hDay.hijriToGregorian(hDay.hYear, hDay.hMonth, hDay.hDay);
-            bool isSelected = gDate.year == widget.selectedDate.year && gDate.month == widget.selectedDate.month && gDate.day == widget.selectedDate.day;
+        // 👈 الأرقام نفسها (حل التابلت)
+LayoutBuilder(
+  builder: (context, constraints) {
+    final double cellWidth = constraints.maxWidth / 7;
+    const double cellHeight = 45.0; 
 
-            return InkWell(
+    return Wrap(
+      children: List.generate(startOffset + daysInMonth, (index) {
+        if (index < startOffset) {
+          return SizedBox(width: cellWidth, height: cellHeight);
+        }
+        
+        int day = index - startOffset + 1;
+        
+        HijriCalendar hDay = HijriCalendar();
+        hDay.hDay = 1; 
+        hDay.hYear = _currentHijriDate.hYear;
+        hDay.hMonth = _currentHijriDate.hMonth;
+        hDay.hDay = day;
+        
+        DateTime gDate = hDay.hijriToGregorian(hDay.hYear, hDay.hMonth, hDay.hDay);
+        bool isSelected = gDate.year == widget.selectedDate.year && 
+                          gDate.month == widget.selectedDate.month && 
+                          gDate.day == widget.selectedDate.day;
+
+        return SizedBox(
+          width: cellWidth, 
+          height: cellHeight, 
+          child: Center(
+            child: InkWell(
               onTap: () => widget.onDateChanged(gDate),
               customBorder: const CircleBorder(),
-              child: Center(
-                child: Container(
-                  width: 36, // مساحة الدايرة
-                  height: 36,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isSelected ? const Color(0xFF1B2A4A) : null,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '$day', 
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500, 
-                      color: isSelected ? Colors.white : Colors.black, // 👈 لون أسود صريح
-                    ),
+              child: Container(
+                width: 38, 
+                height: 38, 
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSelected ? const Color(0xFF1B2A4A) : null,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '$day', 
+                  style: TextStyle(
+                    fontSize: 16, 
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600, 
+                    color: isSelected ? Colors.white : Colors.black, 
                   ),
                 ),
               ),
-            );
-          },
-        ),
+            ),
+          ),
+        );
+      }),
+    );
+  },
+),
       ],
     );
   }
