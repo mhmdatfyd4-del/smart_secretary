@@ -8583,19 +8583,56 @@ int deleteTaskByName(String name) {
         title: const Text('تدوين اليوميات'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share, color: Color(0xFFC5A059)),
-            onPressed: () {
-              String text = 'يوميات ${DateFormat('dd/MM/yyyy', 'ar').format(widget.date)}\n\n';
-              if (diaryCtrl.text.isNotEmpty) text += '${diaryCtrl.text}\n\n';
-              for (var e in _entries) {
-                if (e['type'] == 'text') text += '${e['content']}\n';
-                if (e['type'] == 'todo') text += '${e['done'] ? '✅' : '⏳'} ${e['content']}\n';
-                if (e['type'] == 'image') text += '📷 صورة مرفقة\n';
-                if (e['type'] == 'audio') text += '🎤 تسجيل صوتي\n';
-              }
-              Share.share(text);
-            },
-          ),
+  icon: const Icon(Icons.share, color: Color(0xFFC5A059)),
+  onPressed: () async {
+    // 1. تجهيز النص
+    String text = 'يوميات ${DateFormat('dd/MM/yyyy', 'ar').format(widget.date)}\n\n';
+    if (diaryCtrl.text.isNotEmpty) text += '${diaryCtrl.text}\n\n';
+    
+    // 2. تجهيز قائمة الملفات
+    List<XFile> filesToShare = [];
+
+    for (var e in _entries) {
+      if (e['type'] == 'text') {
+        text += '${e['content']}\n';
+      }
+      if (e['type'] == 'todo') {
+        text += '${e['done'] ? '✅' : '⏳'} ${e['content']}\n';
+      }
+      if (e['type'] == 'image') {
+        final path = e['content'].toString();
+        if (File(path).existsSync()) {
+          filesToShare.add(XFile(path));
+          text += '📷 صورة مرفقة\n'; // بنسيب النص برضه عشان يبان
+        }
+      }
+      if (e['type'] == 'audio') {
+        final path = e['content'].toString();
+        if (File(path).existsSync()) {
+          filesToShare.add(XFile(path));
+          text += '🎤 تسجيل صوتي\n'; // بنسيب النص برضه
+        }
+      }
+    }
+
+    // 3. المشاركة
+    try {
+      if (filesToShare.isNotEmpty) {
+        // لو فيه صور أو صوت، هنشاركهم مع النص
+        await Share.shareXFiles(filesToShare, text: text);
+      } else {
+        // لو مفيش غير نص، هنشارك النص بس
+        await Share.share(text);
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ أثناء المشاركة: $err'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  },
+),
           IconButton(
             icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
             tooltip: 'مسح اليومية الحالية',
