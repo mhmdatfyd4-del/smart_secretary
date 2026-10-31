@@ -3910,7 +3910,6 @@ if (normCmd.contains('السنة الجاية') || normCmd.contains('السنة 
 final isWritingToDiary = _hasAny(cmd, ['اكتب في اليوميات', 'اكتب في يومياتي', 'سجل في اليوميات', 'سجل في يومياتي', 'اكتب يومية', 'سجل يومية', 'سجل عندك في يومية']);
 
 if (!isWritingToDiary && _hasAny(cmd, ['يوميات', 'يوميه', 'يومية', 'مفكره', 'مفكرة'])) {
-  if (_DiaryPageState.activeInstance != null) {
       if (_DiaryPageState.activeInstance != null) {
         if (_hasAny(cmd, ['ضيف مهمة', 'ضيفي مهمة', 'حط مهمة', 'أضف مهمة', 'ضيفلي مهمة', 'ضيفيلي مهمة'])) {
   String text = rawCommand.trim();
@@ -4020,7 +4019,6 @@ if (_hasAny(cmd, ['ضيف ملاحظة', 'أضف ملاحظة', 'اضف ملاح
   }
   return;
 }
-      }
 
       if (_hasAny(cmd, ['امسح كل اليوميات', 'امسح اليوميات كلها', 'احذف كل اليوميات', 'افرغ كل اليوميات'])) {
         await _speak("هَلْ أَنْتَ مُتَأَكِّدٌ أَنَّكَ تُرِيدُ مَسْحَ كُلِّ اليَوْمِيَّاتِ $_userTitle؟ قُلْ أَيْوَة لِلتَّأْكِيد.");
@@ -4033,12 +4031,13 @@ if (_hasAny(cmd, ['ضيف ملاحظة', 'أضف ملاحظة', 'اضف ملاح
       if (requestedDate != null) {
         _openDiaryPage(requestedDate);
         await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ ${DateFormat('EEEE، dd MMMM', 'ar').format(requestedDate)} $_userTitle.");
-      } else {
-        setState(() => _currentIndex = 1);
-        await _speak("تَمَّ فَتْحُ قِسْمِ اليَوْمِيَّاتِ $_userTitle، اخْتَارْ اليَوْمَ اللي تِحِبَّهْ.");
-      }
-      return;
+          } else {
+      setState(() => _currentIndex = 1);
+      await _speak("تَمَّ فَتْحُ قِسْمِ اليَوْمِيَّاتِ $_userTitle، اخْتَارْ اليَوْمَ اللي تِحِبَّهْ.");
     }
+    return;
+  }
+}
 
     // 6. إيقاف المنبه
     if (_hasAny(cmd, ['خلاص', 'صحيت', 'صحيتي', 'قومت', 'قومتي', 'فوقت', 'فوقتي', 'اقفل', 'اقفلي', 'كفاية', 'كفايه', 'إيقاف', 'ايقاف', 'إلغاء', 'الغي', 'بس'])) {
