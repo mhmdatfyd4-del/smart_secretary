@@ -3994,9 +3994,23 @@ if (adhkarString != null) {
         if (cmd.contains('نص ساعه') || cmd.contains('نصف ساعه') || cmd.contains('نصايه')) minutes = 30;
 else if (cmd.contains('ربع ساعه')) minutes = 15;
 else if (cmd.contains('تلت ساعه') || cmd.contains('ثلث ساعه')) minutes = 20;
+else if (cmd.contains('ساعه ونص') || cmd.contains('ساعة ونص') || cmd.contains('ساعه ونصف')) minutes = 90;
+else if (cmd.contains('ساعه وربع') || cmd.contains('ساعة وربع')) minutes = 75;
+else if (cmd.contains('ساعه وتلت') || cmd.contains('ساعة وتلت') || cmd.contains('ساعه وثلث')) minutes = 80;
+else if (cmd.contains('ساعه وخمس') || cmd.contains('ساعة وخمس')) minutes = 65;
+else if (cmd.contains('ساعه وعشر') || cmd.contains('ساعة وعشر')) minutes = 70;
+else if (cmd.contains('ساعه الا خمس') || cmd.contains('ساعة الا خمس')) minutes = 55;
+else if (cmd.contains('ساعه الا عشر') || cmd.contains('ساعة الا عشر')) minutes = 50;
+else if (cmd.contains('ساعه الا ربع') || cmd.contains('ساعة الا ربع')) minutes = 45;
+else if (cmd.contains('ساعه الا تلت') || cmd.contains('ساعة الا تلت')) minutes = 40;
+else if (cmd.contains('ساعه الا نص') || cmd.contains('ساعة الا نص')) minutes = 30;
+else if (cmd.contains('ساعتين') || cmd.contains('ساعتان')) minutes = 120;
+else if (cmd.contains('تلات ساعات') || cmd.contains('ثلاث ساعات') || cmd.contains('3 ساعات')) minutes = 180;
+else if (cmd.contains('اربع ساعات') || cmd.contains('أربع ساعات') || cmd.contains('4 ساعات')) minutes = 240;
 else if (cmd.contains('ساعه')) minutes = 60;
-else if (cmd.contains('خمستاشر') || cmd.contains('خمسه عشر') || cmd.contains('15')) minutes = 15;
-else if (cmd.contains('تلاتين') || cmd.contains('30')) minutes = 30;
+else if (cmd.contains('خمستاشر') || cmd.contains('خمسه عشر') || cmd.contains('خمسة عشر') || cmd.contains('15')) minutes = 15;
+else if (cmd.contains('تلاتين') || cmd.contains('ثلاثين') || cmd.contains('30')) minutes = 30;
+else if (cmd.contains('خمسه واربعين') || cmd.contains('خمسة وأربعين') || cmd.contains('45')) minutes = 45;
 else if (cmd.contains('عشرين') || cmd.contains('20')) minutes = 20;
 else if (cmd.contains('عشر') || cmd.contains('10')) minutes = 10;
 else if (cmd.contains('خمسه') || cmd.contains('خمس') || cmd.contains('5')) minutes = 5;
@@ -4007,14 +4021,15 @@ else if (cmd.contains('دقيقتين')) minutes = 2;
         final snoozeTimestamp = DateTime.now().millisecondsSinceEpoch;
 
         _scheduleContinuousAlarm(
-          originalTitle,
-          snoozeTime,
-          'مرة واحدة',
-          'كل 10 ثواني',
-          [],
-          customId: snoozeTimestamp,
-          customNotificationId: snoozeTimestamp + 1000000,
-        );
+  originalTitle,
+  snoozeTime,
+  'مرة واحدة',
+  'كل 10 ثواني',
+  [],
+  customId: snoozeTimestamp,
+  customNotificationId: snoozeTimestamp + 1000000,
+  soundUri: _activeAlarmSoundUri, // 👈 التعديل هنا
+);
 
         if (_activeAlarmRepeat != null && _activeAlarmRepeat != 'مرة واحدة' && _activeAlarmScheduledTime != null) {
           _rescheduleRepeating(
@@ -4037,7 +4052,22 @@ else if (cmd.contains('دقيقتين')) minutes = 2;
            _alarmDialogContext = null;
         }
         
-        String timeText = minutes == 30 ? 'نص ساعة' : minutes == 60 ? 'ساعة' : minutes == 20 ? 'تلت ساعة' : '$minutes دقيقة';
+        String timeText;
+if (minutes == 30) {
+  timeText = 'نص ساعة';
+} else if (minutes == 60) {
+  timeText = 'ساعة';
+} else if (minutes == 20) {
+  timeText = 'تلت ساعة';
+} else if (minutes == 1) {
+  timeText = 'دقيقة واحدة';
+} else if (minutes == 2) {
+  timeText = 'دقيقتين';
+} else if (minutes >= 3 && minutes <= 10) {
+  timeText = '$minutes دقائق'; // 👈 عشان 3 لـ 10 بنقول دقائق
+} else {
+  timeText = '$minutes دقيقة'; // 👈 من 11 وفوق بنقول دقيقة
+}
         await _speak("حَاضِرْ $_userTitle، هَفَكَّرَكْ تَانِي عَلَى $originalTitle بَعْد $timeText.");
         return;
       }
@@ -5284,8 +5314,7 @@ else if (cmd.contains('دقيقتين')) minutes = 2;
     if (difference.isNegative) return;
 
     int intervalSecs = _getIntervalSeconds(interval);
-    _scheduleNativeAlarm(taskTitle, scheduledDateTime, interval: intervalSecs, customId: customId);
-
+    _scheduleNativeAlarm(taskTitle, scheduledDateTime, interval: intervalSecs, customId: customId, soundUri: soundUri);
     _scheduleBackgroundNotification(
       taskTitle,
       scheduledDateTime,
@@ -5305,21 +5334,23 @@ else if (cmd.contains('دقيقتين')) minutes = 2;
   }
 
   Future<void> _scheduleNativeAlarm(
-    String taskTitle,
-    DateTime scheduledDateTime, {
-    String prefix = 'حان الآن موعد: ',
-    int interval = 0,
-    int? customId,
-  }) async {
-    try {
-      await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
-        'id': customId ?? (taskTitle.hashCode + 5000),
-        'title': taskTitle,
-        'timestamp': scheduledDateTime.millisecondsSinceEpoch,
-        'prefix': prefix,
-        'interval': interval,
-      });
-    } catch (_) {}
+  String taskTitle,
+  DateTime scheduledDateTime, {
+  String prefix = 'حان الآن موعد: ',
+  int interval = 0,
+  int? customId,
+  String? soundUri,
+}) async {
+  try {
+    await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
+      'id': customId ?? (taskTitle.hashCode + 5000),
+      'title': taskTitle,
+      'timestamp': scheduledDateTime.millisecondsSinceEpoch,
+      'prefix': prefix,
+      'interval': interval,
+      'soundUri': soundUri, // 👈 التعديل هنا (بعتنا النغمة)
+    });
+  } catch (_) {}
   }
 
   Future<void> _cancelNativeAlarm(String taskTitle) async {
@@ -5420,6 +5451,8 @@ else if (cmd.contains('دقيقتين')) minutes = 2;
     DateTime scheduled,
     String? soundUri,
   ) {
+    // 👈 الحماية: لو الشاشة مفتوحة بالفعل، متعملش حاجة
+if (_isAlarmDialogOpen) return;
     try { _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
     try { _nativeAlarmChannel.invokeMethod('cancelAlarm', {'id': taskTitle.hashCode + 5000}); } catch (_) {}
     try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
@@ -5484,9 +5517,9 @@ else if (cmd.contains('دقيقتين')) minutes = 2;
                     animation: _activeAlarmLoopTimer != null ? const AlwaysStoppedAnimation(1) : const AlwaysStoppedAnimation(0),
                     builder: (context, child) {
                       return _TalkingImage(
-                        imagePath: _getSecretaryImage(_secretaryName, _settings.voiceGender, customImagePath: _settings.customImagePath),
-                        isTalking: !hasCustomSound, 
-                      );
+  imagePath: _getSecretaryImage(_secretaryName, _settings.voiceGender, customImagePath: _settings.customImagePath),
+  isTalking: true, // 👈 التعديل هنا
+);
                     },
                   ),
                 ),
@@ -5539,14 +5572,15 @@ else if (cmd.contains('دقيقتين')) minutes = 2;
                                 final snoozeTimestamp = DateTime.now().millisecondsSinceEpoch;
                                 
                                 _scheduleContinuousAlarm(
-                                  taskTitle,
-                                  snoozeTime,
-                                  'مرة واحدة',
-                                  'كل 10 ثواني',
-                                  [],
-                                  customId: snoozeTimestamp,
-                                  customNotificationId: snoozeTimestamp + 1000000,
-                                );
+  taskTitle,
+  snoozeTime,
+  'مرة واحدة',
+  'كل 10 ثواني',
+  [],
+  customId: snoozeTimestamp,
+  customNotificationId: snoozeTimestamp + 1000000,
+  soundUri: soundUri, // 👈 التعديل هنا
+);
 
                                 if (repeat != 'مرة واحدة') {
                                   _rescheduleRepeating(taskTitle, repeat, interval, customDays, scheduled, soundUri);
