@@ -3859,10 +3859,14 @@ if (adhkarString != null) {
     if (_hasAny(cmd, ['يوميات', 'يوميه', 'يومية', 'مفكره', 'مفكرة'])) {
       if (_DiaryPageState.activeInstance != null) {
         if (_hasAny(cmd, ['ضيف مهمة', 'ضيفي مهمة', 'حط مهمة', 'أضف مهمة', 'ضيفلي مهمة', 'ضيفيلي مهمة'])) {
-          final text = rawCommand.replaceAll(RegExp(r'(ضيف|ضيفي|حط|أضف|ضيفلي|ضيفيلي|مهمة|في|يومية|اليوميات|مفكرة|يا سكرتير|يا سكرتيرة)'), '').trim();
-          _diaryVoiceStream.add({'action': 'add_todo', 'text': text.isEmpty ? 'مهمة جديدة' : text});
-          await _speak("تَمَام $_userTitle، ضِفْتْ المُهِمَّة فِي اليَوْمِيَّة.");
-          return;
+  String text = rawCommand.trim();
+  text = text.replaceFirst(RegExp(r'^(?:(?:يا\s+)?(?:سكرتير|سكرتيرة)\s+)?(?:ضيف|ضيفي|حط|أضف|اضف|ضيفلي|ضيفيلي)\s+(?:مهمة\s+)?'), '');
+  text = text.replaceFirst(RegExp(r'^(?:في\s+)?(?:اليوميات|يومياتي|يوميتي|يومية|مفكرة|المفكرة)\s+'), '');
+  text = text.replaceAll(RegExp(r'\s+(?:يا\s+)?(?:سكرتير|سكرتيرة)\s*$'), '');
+  text = text.trim();
+  _diaryVoiceStream.add({'action': 'add_todo', 'text': text.isEmpty ? 'مهمة جديدة' : text});
+  await _speak("تَمَام $_userTitle، ضِفْتْ المُهِمَّة فِي اليَوْمِيَّة.");
+  return;
         }
         if (_hasAny(cmd, ['خلصت رقم', 'عملت رقم', 'تم رقم', 'done رقم'])) {
           final m = RegExp(r'رقم\s*(\d+)').firstMatch(rawCommand);
@@ -3878,16 +3882,16 @@ if (adhkarString != null) {
           await _speak("اخْتَارْ الصُّورَة يَا $_userTitle.");
           return;
         }
-        if (_hasAny(cmd, ['سجل صوت', 'سجلي صوت', 'ابدأ تسجيل'])) {
-          _diaryVoiceStream.add({'action': 'record_audio'});
-          await _speak("بَدَأْتْ التَّسْجِيل يَا $_userTitle.");
-          return;
-        }
-        if (_hasAny(cmd, ['وقف تسجيل', 'وقفي تسجيل', 'خلصت تسجيل'])) {
-          _diaryVoiceStream.add({'action': 'record_audio'});
-          await _speak("تَمَّ إِيقَافُ التَّسْجِيل.");
-          return;
-        }
+        if (_hasAny(cmd, ['وقف تسجيل', 'وقفي تسجيل', 'خلصت تسجيل', 'انهي تسجيل', 'انهي التسجيل'])) {
+  _diaryVoiceStream.add({'action': 'stop_recording'});
+  await _speak("تَمَّ إِيقَافُ التَّسْجِيل.");
+  return;
+}
+if (_hasAny(cmd, ['سجل صوت', 'سجلي صوت', 'ابدأ تسجيل', 'ابدأ التسجيل'])) {
+  _diaryVoiceStream.add({'action': 'start_recording'});
+  await _speak("بَدَأْتْ التَّسْجِيل يَا $_userTitle.");
+  return;
+}
         if (_hasAny(cmd, ['امسح اليومية', 'امسح اليوميه', 'افرغ اليومية', 'مسح اليومية', 'امسح كل حاجه في اليومية'])) {
           _diaryVoiceStream.add({'action': 'clear_all'});
           await _speak("تَمَّ مَسْحُ كُلِّ مَحْتُوِيَّاتِ اليَوْمِيَّةِ $_userTitle.");
@@ -3903,15 +3907,54 @@ if (adhkarString != null) {
           await _speak("تَمَّ مَسْحُ آخِرْ مُهِمَّة $_userTitle.");
           return;
         }
-        if (_hasAny(cmd, ['عدل مهمة', 'عدل المهمة'])) {
-          final numMatch = RegExp(r'رقم\s*(\d+)').firstMatch(rawCommand);
-          if (numMatch != null) {
-            final taskNum = int.parse(numMatch.group(1)!);
-            _diaryVoiceStream.add({'action': 'edit_task', 'index': taskNum});
-            await _speak("اتْفَضَّلْ عَدِّلْ المُهِمَّة رَقْم $taskNum $_userTitle.");
-            return;
-          }
-        }
+        if (_hasAny(cmd, ['عدل مهمة', 'عدل المهمة', 'عدلي مهمة', 'تعديل مهمة'])) {
+  final numMatch = RegExp(r'رقم\s*(\d+)').firstMatch(rawCommand);
+  if (numMatch != null) {
+    final taskNum = int.parse(numMatch.group(1)!);
+    _diaryVoiceStream.add({'action': 'edit_task', 'index': taskNum - 1});
+    await _speak("اتْفَضَّلْ عَدِّلْ المُهِمَّة رَقْم $taskNum $_userTitle.");
+    return;
+  }
+}
+// 👈 أمر جديد: رجع المهمة (شيل علامة الصح)
+if (_hasAny(cmd, ['رجع مهمة', 'ارجع مهمة', 'رجع المهمة', 'ارجع المهمة', 'شيل علامة', 'شيل الصح', 'لسه مخلصتش'])) {
+  final numMatch = RegExp(r'رقم\s*(\d+)').firstMatch(rawCommand);
+  if (numMatch != null) {
+    final taskNum = int.parse(numMatch.group(1)!);
+    _diaryVoiceStream.add({'action': 'unmark_done', 'index': taskNum - 1});
+    await _speak("تَمَام $_userTitle، رَجَّعْتْ المُهِمَّة رَقْم $taskNum.");
+    return;
+  }
+}
+// 👈 أمر جديد: امسح مهمة بالاسم
+if (_hasAny(cmd, ['امسح مهمة', 'احذف مهمة', 'شيل مهمة', 'امسحي مهمة', 'احذفي مهمة'])) {
+  String taskName = rawCommand
+      .replaceFirst(RegExp(r'^(?:(?:يا\s+)?(?:سكرتير|سكرتيرة)\s+)?(?:امسح|احذف|شيل|امسحي|احذفي)\s+(?:مهمة\s+)?'), '')
+      .replaceAll(RegExp(r'\s+(?:من|في)\s+(?:اليوميات|يومياتي|يوميتي|يومية|مفكرة|المفكرة)\s*'), ' ')
+      .trim();
+  if (taskName.isNotEmpty && _DiaryPageState.activeInstance != null) {
+    final deleted = _DiaryPageState.activeInstance!.deleteTaskByName(taskName);
+    if (deleted > 0) {
+      await _speak("تَمَام $_userTitle، اتْمَسَحْ $deleted مُهِمَّة.");
+    } else {
+      await _speak("مَفِيشْ مُهِمَّة بِالاِسْمْ دَهْ $_userTitle.");
+    }
+    return;
+  }
+}
+// 👈 أمر جديد: ضيف ملاحظة نصية
+if (_hasAny(cmd, ['ضيف ملاحظة', 'أضف ملاحظة', 'اضف ملاحظة', 'سجل ملاحظة', 'اكتب ملاحظة', 'ضيف نوتة', 'ضيف ملحوظة'])) {
+  String noteText = rawCommand
+      .replaceFirst(RegExp(r'^(?:(?:يا\s+)?(?:سكرتير|سكرتيرة)\s+)?(?:ضيف|أضف|اضف|سجل|اكتب|ضيفي|سجلي)\s+(?:ملاحظة|ملحوظة|نوتة)\s+'), '')
+      .trim();
+  if (noteText.isNotEmpty) {
+    _diaryVoiceStream.add({'action': 'add_text_note', 'text': noteText});
+    await _speak("تَمَام $_userTitle، ضِفْتْ المَلَاحْظَة.");
+  } else {
+    await _speak("قُولِّي المَلَاحْظَة اللي عَايِزْهَا $_userTitle.");
+  }
+  return;
+}
       }
 
       if (_hasAny(cmd, ['امسح كل اليوميات', 'امسح اليوميات كلها', 'احذف كل اليوميات', 'افرغ كل اليوميات'])) {
@@ -8176,12 +8219,50 @@ class _DiaryPageState extends State<_DiaryPage> {
         diaryCtrl.clear();
         _entries.clear();
       });
-    } else if (action == 'delete_last_task') {
-      setState(() {
-        final lastTaskIndex = _entries.lastIndexWhere((e) => e['type'] == 'todo');
-        if (lastTaskIndex != -1) _entries.removeAt(lastTaskIndex);
-      });
+      } else if (action == 'delete_last_task') {
+    setState(() {
+      final lastTaskIndex = _entries.lastIndexWhere((e) => e['type'] == 'todo');
+      if (lastTaskIndex != -1) _entries.removeAt(lastTaskIndex);
+    });
+  } else if (action == 'edit_task') {
+    final idx = (cmd['index'] as int?) ?? 0;
+    int todoCount = 0;
+    for (int i = 0; i < _entries.length; i++) {
+      if (_entries[i]['type'] == 'todo') {
+        if (todoCount == idx) {
+          _editTodoDialog(i);
+          break;
+        }
+        todoCount++;
+      }
     }
+  } else if (action == 'unmark_done') {
+    final idx = (cmd['index'] as int?) ?? 0;
+    int todoCount = 0;
+    for (int i = 0; i < _entries.length; i++) {
+      if (_entries[i]['type'] == 'todo') {
+        if (todoCount == idx) {
+          setState(() {
+            _entries[i]['done'] = false;
+            _sortEntries();
+          });
+          break;
+        }
+        todoCount++;
+      }
+    }
+  } else if (action == 'add_text_note') {
+    final text = (cmd['text'] as String?) ?? '';
+    if (text.isEmpty) return;
+    setState(() {
+      _entries.add({'type': 'text', 'content': text, 'time': DateTime.now()});
+      _sortEntries();
+    });
+  } else if (action == 'start_recording') {
+    if (!_isRecordingNow) _startRecording();
+  } else if (action == 'stop_recording') {
+    if (_isRecordingNow) _stopRecording();
+  }
   }
 
   Future<void> _save() async {
@@ -8431,6 +8512,51 @@ class _DiaryPageState extends State<_DiaryPage> {
       );
     }
   }
+  void _editTodoDialog(int entryIndex) {
+  if (entryIndex < 0 || entryIndex >= _entries.length) return;
+  if (_entries[entryIndex]['type'] != 'todo') return;
+  
+  TextEditingController ctrl = TextEditingController(text: _entries[entryIndex]['content'].toString());
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      title: const Text('تعديل المهمة', style: TextStyle(fontWeight: FontWeight.bold)),
+      content: TextField(
+        controller: ctrl,
+        maxLines: null,
+        decoration: const InputDecoration(hintText: 'نص المهمة'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+          onPressed: () {
+            if (ctrl.text.trim().isNotEmpty) {
+              setState(() {
+                _entries[entryIndex]['content'] = ctrl.text.trim();
+              });
+            }
+            Navigator.pop(ctx);
+          },
+          child: const Text('حفظ', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
+}
+
+int deleteTaskByName(String name) {
+  final nameLower = name.trim().toLowerCase();
+  if (nameLower.isEmpty) return 0;
+  final before = _entries.length;
+  setState(() {
+    _entries.removeWhere((e) =>
+        e['type'] == 'todo' &&
+        e['content'].toString().toLowerCase().contains(nameLower));
+  });
+  return before - _entries.length;
+}
 
   @override
   void dispose() {
@@ -8546,8 +8672,14 @@ class _DiaryPageState extends State<_DiaryPage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    ..._entries.map((entry) {
-                      final timeStr = DateFormat('hh:mm a', 'ar').format(entry['time']);
+                    ..._entries.asMap().entries.map((mapEntry) {
+  final int originalIndex = mapEntry.key;
+  final entry = mapEntry.value;
+  int todoNumber = 0;
+  for (int j = 0; j <= originalIndex; j++) {
+    if (_entries[j]['type'] == 'todo') todoNumber++;
+  }
+  final timeStr = DateFormat('hh:mm a', 'ar').format(entry['time']);
 
                       if (entry['type'] == 'text') {
                         return Card(
@@ -8560,26 +8692,42 @@ class _DiaryPageState extends State<_DiaryPage> {
                       }
                       
                       if (entry['type'] == 'todo') {
-                        return Card(
-                          color: entry['done'] ? Colors.green.withOpacity(0.1) : Theme.of(context).cardColor,
-                          child: ListTile(
-                            leading: Checkbox(
-                              value: entry['done'],
-                              activeColor: Colors.green,
-                              onChanged: (v) {
-                                setState(() {
-                                  entry['done'] = v;
-                                  _sortEntries();
-                                });
-                              },
-                            ),
-                            title: Text(entry['content'], style: TextStyle(decoration: entry['done'] ? TextDecoration.lineThrough : null)),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                              onPressed: () => setState(() { _entries.remove(entry); }),
-                            ),
-                          ),
-                        );
+  return Card(
+    color: entry['done'] ? Colors.green.withOpacity(0.1) : Theme.of(context).cardColor,
+    child: ListTile(
+      leading: Checkbox(
+        value: entry['done'],
+        activeColor: Colors.green,
+        onChanged: (v) {
+          setState(() {
+            entry['done'] = v;
+            _sortEntries();
+          });
+        },
+      ),
+      // 👈 هنا التغيير: حولنا الـ title من Text عادي لـ Row فيه رقم
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFFC5A059),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text('#$todoNumber', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(entry['content'], style: TextStyle(decoration: entry['done'] ? TextDecoration.lineThrough : null)),
+          ),
+        ],
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+        onPressed: () => setState(() { _entries.remove(entry); }),
+      ),
+    ),
+  );
                       }
 
                       if (entry['type'] == 'image') {
