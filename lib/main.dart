@@ -8196,31 +8196,33 @@ class _DiaryPageState extends State<_DiaryPage> {
   }
 
   void _loadData() {
-    final data = widget.initialData;
-    if (data['entries'] != null) {
-      _entries = List<Map<String, dynamic>>.from(data['entries']);
-      for (var e in _entries) {
-        if (e['time'] is String) { e['time'] = DateTime.parse(e['time']); }
-      }
-    } else {
-      if (data['text'] != null && data['text'].toString().isNotEmpty) {
-        _entries.add({'type': 'text', 'content': data['text'], 'time': widget.date});
-      }
-      if (data['todos'] != null) {
-        for (var t in data['todos']) {
-          _entries.add({'type': 'todo', 'content': t['text'], 'done': t['done'] ?? false, 'time': widget.date});
-        }
-      }
-      if (data['images'] != null) {
-        for (var img in data['images']) {
-          _entries.add({'type': 'image', 'content': img, 'time': widget.date});
-        }
-      }
-      if (data['audio'] != null) {
-        _entries.add({'type': 'audio', 'content': data['audio'], 'time': widget.date});
+  final data = widget.initialData;
+  if (data['entries'] != null) {
+    _entries = List<Map<String, dynamic>>.from(data['entries']);
+    for (var e in _entries) {
+      if (e['time'] is String) { e['time'] = DateTime.parse(e['time']); }
+    }
+  } else {
+    if (data['todos'] != null) {
+      for (var t in data['todos']) {
+        _entries.add({'type': 'todo', 'content': t['text'], 'done': t['done'] ?? false, 'time': widget.date});
       }
     }
-    _sortEntries();
+    if (data['images'] != null) {
+      for (var img in data['images']) {
+        _entries.add({'type': 'image', 'content': img, 'time': widget.date});
+      }
+    }
+    if (data['audio'] != null) {
+      _entries.add({'type': 'audio', 'content': data['audio'], 'time': widget.date});
+    }
+  }
+  // 👈 نقل النص القديم أو اللي اتكتب بالصوت عشان يظهر كفقرة
+  if (data['text'] != null && data['text'].toString().trim().isNotEmpty) {
+    _entries.insert(0, {'type': 'text', 'content': data['text'], 'time': widget.date});
+    diaryCtrl.clear(); 
+  }
+  _sortEntries();
   }
 
   void _sortEntries() {
@@ -8339,65 +8341,72 @@ class _DiaryPageState extends State<_DiaryPage> {
   }
 
   void _showAddMenu() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.text_fields, color: Color(0xFF1B2A4A)),
-              title: const Text('كتابة نص', style: TextStyle(fontWeight: FontWeight.bold)),
-              onTap: () {
-                Navigator.pop(ctx); _diaryFocusNode.requestFocus();
-                _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.check_box, color: Color(0xFF1B2A4A)),
-              title: const Text('إضافة مهام', style: TextStyle(fontWeight: FontWeight.bold)),
-              onTap: () { Navigator.pop(ctx); _addTasks(); },
-            ),
-            ListTile(
-              leading: const Icon(Icons.add_photo_alternate, color: Color(0xFF1B2A4A)),
-              title: const Text('إضافة صورة', style: TextStyle(fontWeight: FontWeight.bold)),
-              onTap: () { Navigator.pop(ctx); _showImageSource(); },
-            ),
-            ListTile(
-              leading: const Icon(Icons.mic, color: Color(0xFF1B2A4A)),
-              title: const Text('تسجيل صوتي', style: TextStyle(fontWeight: FontWeight.bold)),
-              onTap: () { Navigator.pop(ctx); _startRecording(); },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _addText() {
-    TextEditingController ctrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('إضافة نص'),
-        content: TextField(controller: ctrl, maxLines: null, decoration: const InputDecoration(hintText: 'اكتب هنا...')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () {
-              if (ctrl.text.isNotEmpty) {
-                setState(() {
-                  _entries.add({'type': 'text', 'content': ctrl.text, 'time': DateTime.now()});
-                  _sortEntries();
-                });
-              }
-              Navigator.pop(ctx);
+  showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (ctx) => SafeArea(
+      child: Wrap(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.text_fields, color: Color(0xFF1B2A4A)),
+            title: const Text('كتابة نص', style: TextStyle(fontWeight: FontWeight.bold)),
+            onTap: () { 
+              Navigator.pop(ctx); 
+              _addText(); // 👈 التعديل هنا
             },
-            child: const Text('حفظ'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.check_box, color: Color(0xFF1B2A4A)),
+            title: const Text('إضافة مهام', style: TextStyle(fontWeight: FontWeight.bold)),
+            onTap: () { Navigator.pop(ctx); _addTasks(); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.add_photo_alternate, color: Color(0xFF1B2A4A)),
+            title: const Text('إضافة صورة', style: TextStyle(fontWeight: FontWeight.bold)),
+            onTap: () { Navigator.pop(ctx); _showImageSource(); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.mic, color: Color(0xFF1B2A4A)),
+            title: const Text('تسجيل صوتي', style: TextStyle(fontWeight: FontWeight.bold)),
+            onTap: () { Navigator.pop(ctx); _startRecording(); },
           ),
         ],
       ),
-    );
+    ),
+  );
+  }
+
+  void _addText() {
+  TextEditingController ctrl = TextEditingController();
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('إضافة نص لليوميات', style: TextStyle(fontWeight: FontWeight.bold)),
+      content: TextField(
+        controller: ctrl, 
+        maxLines: null, 
+        minLines: 3,
+        autofocus: true,
+        decoration: const InputDecoration(hintText: 'اكتب هنا...', border: OutlineInputBorder())
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A)),
+          onPressed: () {
+            if (ctrl.text.trim().isNotEmpty) {
+              setState(() {
+                _entries.add({'type': 'text', 'content': ctrl.text.trim(), 'time': DateTime.now()});
+                _sortEntries();
+              });
+            }
+            Navigator.pop(ctx);
+          },
+          child: const Text('حفظ', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
   }
 
   void _addTasks() {
@@ -8754,23 +8763,7 @@ int deleteTaskByName(String name) {
                 child: ListView(
                   controller: _scrollController,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
-                      child: TextField(
-                        controller: diaryCtrl, maxLines: null, minLines: 5, style: const TextStyle(fontSize: 16, height: 1.6),
-                        focusNode: _diaryFocusNode,
-                        decoration: InputDecoration(
-                          hintText: 'اكتب يومياتك هنا...', border: InputBorder.none,
-                          suffixIcon: IconButton(
-                            icon: Icon(_isDictating ? Icons.mic : Icons.mic_none, color: _isDictating ? Colors.red : const Color(0xFFC5A059)),
-                            onPressed: _toggleDictation,
-                            tooltip: 'التحدث بالصوت لكتابة اليومية',
-                          ),
-                        )
-                      ),
-                    ),
-                    const SizedBox(height: 20),
+                    
                     ..._entries.asMap().entries.map((mapEntry) {
   final int originalIndex = mapEntry.key;
   final entry = mapEntry.value;
@@ -8830,29 +8823,54 @@ int deleteTaskByName(String name) {
                       }
 
                       if (entry['type'] == 'image') {
-                        return Card(
-                          color: Theme.of(context).cardColor,
-                          clipBehavior: Clip.antiAlias,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Image.file(File(entry['content']), width: double.infinity, height: 200, fit: BoxFit.cover),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text('وقت الإضافة: $timeStr', style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                      onPressed: () => setState(() { _entries.remove(entry); }),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
+  return Card(
+    color: Theme.of(context).cardColor,
+    clipBehavior: Clip.antiAlias,
+    margin: const EdgeInsets.only(bottom: 12),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    child: InkWell(
+      onTap: () {
+        // 👈 كود عشان تفتح الصورة بحجمها الكامل لما تدوس عليها
+        showDialog(
+          context: context,
+          builder: (_) => Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.all(10),
+            child: InteractiveViewer(
+              panEnabled: true,
+              boundaryMargin: const EdgeInsets.all(20),
+              minScale: 0.5,
+              maxScale: 4,
+              child: Image.file(File(entry['content']), fit: BoxFit.contain),
+            ),
+          ),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Image.file(
+            File(entry['content']), 
+            width: double.infinity, 
+            fit: BoxFit.fitWidth // 👈 السر هنا: بيخلي الصورة تاخد عرض الشاشة وتحافظ على أبعادها
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('وقت الإضافة: $timeStr', style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                  onPressed: () => setState(() { _entries.remove(entry); }),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
                       }
 
                       if (entry['type'] == 'audio') {
