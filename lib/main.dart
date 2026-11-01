@@ -839,9 +839,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: ListTile(
-              leading: const Icon(Icons.access_time, color: Color(0xFF1B2A4A), size: 30),
-              title: const Text('وقت التذكير الافتراضي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              subtitle: Padding(
+  leading: const Icon(Icons.access_time, color: Color(0xFF1B2A4A), size: 30),
+  title: const Text('وقت التذكير الافتراضي للمناسبات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)), // 👈 التعديل هنا
+  subtitle: Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   '${_defaultReminderHour.toString().padLeft(2, '0')}:${_defaultReminderMinute.toString().padLeft(2, '0')}',
