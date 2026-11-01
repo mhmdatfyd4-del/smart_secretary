@@ -38,7 +38,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     
     private val repeatRunnable = object : Runnable {
         override fun run() {
-            // 👈 تجديد الـ WakeLock عشان المنبه ميفصلش
+            // تجديد الـ WakeLock عشان المنبه ميفصلش
             if (wakeLock?.isHeld == false) {
                 wakeLock?.acquire(60 * 1000L)
             }
@@ -215,7 +215,10 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
 
     private fun buildNotification(title: String): Notification {
         val launchIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or 
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_TURN_SCREEN_ON   // 👈 التعديل الجديد: نور الشاشة لما التطبيق يفتح
             putExtra("from_alarm", true); putExtra("alarm_title", title)
         }
         val pendingIntent = PendingIntent.getActivity(this, 0, launchIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
