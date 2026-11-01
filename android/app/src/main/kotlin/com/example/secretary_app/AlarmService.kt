@@ -217,8 +217,7 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
         val launchIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or 
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_TURN_SCREEN_ON   // 👈 التعديل الجديد: نور الشاشة لما التطبيق يفتح
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("from_alarm", true); putExtra("alarm_title", title)
         }
         val pendingIntent = PendingIntent.getActivity(this, 0, launchIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
