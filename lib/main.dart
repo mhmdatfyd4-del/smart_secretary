@@ -2134,6 +2134,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   BuildContext? _alarmDialogContext;
 
   Timer? _activeAlarmLoopTimer;
+  // 👈 التعديل الجديد: Timer عشان نضمن إن المايك شغال طول ما المنبه شغال
+  Timer? _alarmVoiceSafetyTimer;
+  
   String? _activeAlarmTaskTitle;
   DateTime? _activeAlarmScheduledTime;
   String? _activeAlarmRepeat;
@@ -2277,6 +2280,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       } else if (call.method == 'onAlarmStoppedByVoice') {
         if (_isAlarmDialogOpen) {
           _activeAlarmLoopTimer?.cancel();
+          _alarmVoiceSafetyTimer?.cancel(); // 👈 التعديل
           _tts.stop();
           WakelockPlus.disable();
           _isAlarmDialogOpen = false;
@@ -2299,6 +2303,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _notificationActionController.stream.listen((action) {
       if (action == 'cancel' && _isAlarmDialogOpen) {
         _activeAlarmLoopTimer?.cancel();
+        _alarmVoiceSafetyTimer?.cancel(); // 👈 التعديل
         _tts.stop();
         WakelockPlus.disable();
         _isAlarmDialogOpen = false;
@@ -2647,6 +2652,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 if (mounted && _isAdhkarMode && !_isListening) _listenVoiceCommand();
               });
             }
+            // 👈 التعديل الجديد: إعادة تشغيل المايك لو المنبه شغال
+            if (_isAlarmDialogOpen) {
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (mounted && _isAlarmDialogOpen && !_isListening && !_isRecording) _listenVoiceCommand();
+              });
+            }
           }
         },
         onError: (error) {
@@ -2674,6 +2685,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             if (_isAdhkarMode) {
               Future.delayed(const Duration(milliseconds: 300), () {
                 if (mounted && _isAdhkarMode && !_isListening) _listenVoiceCommand();
+              });
+            }
+            // 👈 التعديل الجديد: إعادة تشغيل المايك لو المنبه شغال
+            if (_isAlarmDialogOpen) {
+              Future.delayed(const Duration(seconds: 1), () {
+                if (mounted && _isAlarmDialogOpen && !_isListening && !_isRecording) _listenVoiceCommand();
               });
             }
           }
@@ -3180,6 +3197,7 @@ if (adhkarString != null) {
     _positionSub?.cancel();
     _durationSub?.cancel();
     _pendingActionTimer?.cancel();
+    _alarmVoiceSafetyTimer?.cancel(); // 👈 التعديل
     _audioRecorder.dispose();
     _audioPlayer.dispose();
     for (var timer in _activeTimers) {
@@ -4178,6 +4196,8 @@ if (_hasAny(cmd, ['ضيف ملاحظة', 'أضف ملاحظة', 'اضف ملاح
     if (_hasAny(cmd, ['خلاص', 'صحيت', 'صحيتي', 'قومت', 'قومتي', 'فوقت', 'فوقتي', 'اقفل', 'اقفلي', 'كفاية', 'كفايه', 'إيقاف', 'ايقاف', 'إلغاء', 'الغي', 'بس'])) {
       if (_isAlarmDialogOpen) {
         _activeAlarmLoopTimer?.cancel();
+        _alarmVoiceSafetyTimer?.cancel(); // 👈 التعديل
+        _alarmVoiceSafetyTimer = null; // 👈 التعديل
         if (_activeAlarmLoopTimer != null) _activeTimers.remove(_activeAlarmLoopTimer!);
         _activeAlarmLoopTimer = null;
 
@@ -4286,6 +4306,8 @@ else if (cmd.contains('دقيقتين')) minutes = 2;
 
         if (_isAlarmDialogOpen) {
            _activeAlarmLoopTimer?.cancel();
+           _alarmVoiceSafetyTimer?.cancel(); // 👈 التعديل
+           _alarmVoiceSafetyTimer = null; // 👈 التعديل
            _tts.stop();
            WakelockPlus.disable();
            if (_alarmDialogContext != null) Navigator.pop(_alarmDialogContext!);
@@ -5690,8 +5712,19 @@ if (minutes == 30) {
     DateTime scheduled,
     String? soundUri,
   ) {
-    // 👈 الحماية: لو الشاشة مفتوحة بالفعل، متعملش حاجة
-if (_isAlarmDialogOpen) return;
+    // 👈 التعديل الجديد: إغلاق أي شاشة منبه قديمة عشان نفتح الجديدة
+    if (_isAlarmDialogOpen) {
+      if (_alarmDialogContext != null) {
+        try { Navigator.of(_alarmDialogContext!).pop(); } catch (_) {}
+        _alarmDialogContext = null;
+      }
+      _isAlarmDialogOpen = false;
+      _activeAlarmLoopTimer?.cancel();
+      _alarmVoiceSafetyTimer?.cancel(); // إضافي للتأمين
+      _tts.stop();
+      try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
+    }
+
     try { _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
     try { _nativeAlarmChannel.invokeMethod('cancelAlarm', {'id': taskTitle.hashCode + 5000}); } catch (_) {}
     try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
@@ -5797,6 +5830,8 @@ if (_isAlarmDialogOpen) return;
                               ),
                               onPressed: () {
                                 _activeAlarmLoopTimer?.cancel();
+                                _alarmVoiceSafetyTimer?.cancel(); // 👈 التعديل
+                                _alarmVoiceSafetyTimer = null; // 👈 التعديل
                                 _tts.stop();
                                 WakelockPlus.disable();
                                 _isAlarmDialogOpen = false;
@@ -5840,6 +5875,8 @@ if (_isAlarmDialogOpen) return;
                               ),
                               onPressed: () async {
                                 _activeAlarmLoopTimer?.cancel();
+                                _alarmVoiceSafetyTimer?.cancel(); // 👈 التعديل
+                                _alarmVoiceSafetyTimer = null; // 👈 التعديل
                                 _tts.stop();
                                 WakelockPlus.disable();
                                 _isAlarmDialogOpen = false;
@@ -5877,335 +5914,346 @@ if (_isAlarmDialogOpen) return;
         _listenVoiceCommand();
       }
     });
-  }
 
+    // 👈 التعديل: شبكة أمان عشان المايك يفضل شغال طول ما المنبه شغال
+    _alarmVoiceSafetyTimer?.cancel();
+    _alarmVoiceSafetyTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!_isAlarmDialogOpen) {
+        timer.cancel();
+        return;
+      }
+      if (!_isListening && !_starting && !_isRecording) {
+        _listenVoiceCommand();
+      }
+    });
+  }
   Future<Map<String, String>> _calculatePrayerTimes() async {
-    try {
-      final coordinates = Coordinates(30.0444, 31.2357);
-      final date = DateComponents.from(DateTime.now());
-      final params = CalculationMethod.egyptian.getParameters();
-      params.madhab = Madhab.shafi;
-      final prayerTimes = PrayerTimes(coordinates, date, params);
+  try {
+    final coordinates = Coordinates(30.0444, 31.2357);
+    final date = DateComponents.from(DateTime.now());
+    final params = CalculationMethod.egyptian.getParameters();
+    params.madhab = Madhab.shafi;
+    final prayerTimes = PrayerTimes(coordinates, date, params);
 
-      final format = DateFormat('HH:mm');
+    final format = DateFormat('HH:mm');
 
-      return {
-        'fajr': format.format(prayerTimes.fajr.toLocal()),
-        'sunrise': format.format(prayerTimes.sunrise.toLocal()),
-        'dhuhr': format.format(prayerTimes.dhuhr.toLocal()),
-        'asr': format.format(prayerTimes.asr.toLocal()),
-        'maghrib': format.format(prayerTimes.maghrib.toLocal()),
-        'isha': format.format(prayerTimes.isha.toLocal()),
-      };
-    } catch (e) {
-      final format = DateFormat('HH:mm');
-      final now = DateTime.now();
-      return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
-    }
+    return {
+      'fajr': format.format(prayerTimes.fajr.toLocal()),
+      'sunrise': format.format(prayerTimes.sunrise.toLocal()),
+      'dhuhr': format.format(prayerTimes.dhuhr.toLocal()),
+      'asr': format.format(prayerTimes.asr.toLocal()),
+      'maghrib': format.format(prayerTimes.maghrib.toLocal()),
+      'isha': format.format(prayerTimes.isha.toLocal()),
+    };
+  } catch (e) {
+    final format = DateFormat('HH:mm');
+    final now = DateTime.now();
+    return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
   }
+}
 
-  String _formatTimeForDisplay(String time24) {
-    try {
-      final parts = time24.split(':');
-      final hour = int.parse(parts[0]);
-      final minute = parts[1];
-      final isPm = hour >= 12;
-      final h12 = hour % 12 == 0 ? 12 : hour % 12;
-      return '$h12:$minute ${isPm ? 'م' : 'ص'}';
-    } catch (_) {
-      return time24;
-    }
+String _formatTimeForDisplay(String time24) {
+  try {
+    final parts = time24.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = parts[1];
+    final isPm = hour >= 12;
+    final h12 = hour % 12 == 0 ? 12 : hour % 12;
+    return '$h12:$minute ${isPm ? 'م' : 'ص'}';
+  } catch (_) {
+    return time24;
   }
+}
 
-  Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
-    try {
-      final eventDate = DateTime.parse(event['eventDate'].toString());
-      final reminderHour = event['reminderHour'] ?? _settings.defaultReminderHour;
-      final reminderMinute = event['reminderMinute'] ?? _settings.defaultReminderMinute;
-      final advanceDays = _getAdvanceDays(event['advanceReminder'] ?? 'قبلها بيوم');
-      final interval = event['repeatInterval'] ?? 'مرة واحدة';
-      final repeatType = event['repeatType'] ?? 'سنوي';
-      final now = DateTime.now();
+Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
+  try {
+    final eventDate = DateTime.parse(event['eventDate'].toString());
+    final reminderHour = event['reminderHour'] ?? _settings.defaultReminderHour;
+    final reminderMinute = event['reminderMinute'] ?? _settings.defaultReminderMinute;
+    final advanceDays = _getAdvanceDays(event['advanceReminder'] ?? 'قبلها بيوم');
+    final interval = event['repeatInterval'] ?? 'مرة واحدة';
+    final repeatType = event['repeatType'] ?? 'سنوي';
+    final now = DateTime.now();
 
-      final eventThisYear = DateTime(now.year, eventDate.month, eventDate.day);
-      final reminderDate = eventThisYear.subtract(Duration(days: advanceDays));
-      final reminderDateTime = DateTime(reminderDate.year, reminderDate.month, reminderDate.day, reminderHour, reminderMinute);
+    final eventThisYear = DateTime(now.year, eventDate.month, eventDate.day);
+    final reminderDate = eventThisYear.subtract(Duration(days: advanceDays));
+    final reminderDateTime = DateTime(reminderDate.year, reminderDate.month, reminderDate.day, reminderHour, reminderMinute);
 
-      if (reminderDateTime.isBefore(now)) return;
+    if (reminderDateTime.isBefore(now)) return;
 
-      await _scheduleEventNotification(event, reminderDateTime, interval, repeatType);
+    await _scheduleEventNotification(event, reminderDateTime, interval, repeatType);
 
-      final hasCustomSound = event['sound'] != null && event['sound'] != 'default';
-      final eventText = (event['detail'] != null && event['detail'].toString().isNotEmpty)
-          ? '${event['title']} - ${event['detail']}'
-          : event['title'].toString();
-      if (!hasCustomSound) {
-        await _scheduleNativeAlarm(
-          eventText,
-          reminderDateTime,
-          prefix: 'قربت مناسبة: ',
+    final hasCustomSound = event['sound'] != null && event['sound'] != 'default';
+    final eventText = (event['detail'] != null && event['detail'].toString().isNotEmpty)
+        ? '${event['title']} - ${event['detail']}'
+        : event['title'].toString();
+    if (!hasCustomSound) {
+      await _scheduleNativeAlarm(
+        eventText,
+        reminderDateTime,
+        prefix: 'قربت مناسبة: ',
+      );
+    }
+
+    final diff = reminderDateTime.difference(now);
+
+    late final Timer timer;
+    timer = Timer(diff, () {
+      _activeTimers.remove(timer);
+      if (mounted && !_isInBackground) {
+        _showEventReminder(
+          event['title'].toString(),
+          event['detail'].toString(),
+          interval,
+          hasCustomSound: hasCustomSound,
         );
       }
+    });
+    _activeTimers.add(timer);
+  } catch (_) {}
+}
 
-      final diff = reminderDateTime.difference(now);
+Future<void> _scheduleEventNotification(Map<String, dynamic> event, DateTime fireTime, String interval, String repeatType) async {
+  try {
+    final eventId = ('${event['title']}_${event['eventDate']}_${event['reminderHour']}_${event['reminderMinute']}').hashCode & 0x7FFFFFFF;
+    final tzTime = tz.TZDateTime.from(fireTime, tz.local);
 
-      late final Timer timer;
-      timer = Timer(diff, () {
-        _activeTimers.remove(timer);
-        if (mounted && !_isInBackground) {
-          _showEventReminder(
-            event['title'].toString(),
-            event['detail'].toString(),
-            interval,
-            hasCustomSound: hasCustomSound,
-          );
-        }
-      });
-      _activeTimers.add(timer);
-    } catch (_) {}
+    final prefs = await SharedPreferences.getInstance();
+    final finalSound = event['sound'] ?? prefs.getString('default_event_sound');
+
+    final androidDetails = AndroidNotificationDetails(
+      'event_channel_v1', 'تنبيهات المناسبات',
+      channelDescription: 'تنبيهات المناسبات السنوية',
+      importance: Importance.max, priority: Priority.max,
+      playSound: true,
+      sound: _getNotificationSound(finalSound),
+      enableVibration: true,
+      category: AndroidNotificationCategory.alarm,
+      autoCancel: false, ongoing: true,
+      fullScreenIntent: true,
+      visibility: NotificationVisibility.public,
+    );
+
+    final notificationBody = (event['detail'] != null && event['detail'].toString().isNotEmpty)
+        ? 'قربت مناسبة: ${event['title']} - ${event['detail']}'
+        : 'قربت مناسبة: ${event['title']}';
+
+    DateTimeComponents? matchComponent;
+    if (repeatType == 'أسبوعي') matchComponent = DateTimeComponents.dayOfWeekAndTime;
+    else if (repeatType == 'شهري') matchComponent = DateTimeComponents.dayOfMonthAndTime;
+    else matchComponent = DateTimeComponents.dateAndTime;
+
+    await _notifications.zonedSchedule(
+      eventId, '🎉 تذكير بمناسبة', notificationBody,
+      tzTime, NotificationDetails(android: androidDetails),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: matchComponent,
+    );
+
+    await prefs.setString('pending_event_announce', json.encode({
+      'title': event['title'], 'detail': event['detail'],
+      'interval': interval, 'scheduledMillis': fireTime.millisecondsSinceEpoch,
+      'hasCustomSound': finalSound != null && finalSound != 'default',
+    }));
+  } catch (_) {}
+}
+
+int _getAdvanceDays(String advanceReminder) {
+  switch (advanceReminder) {
+    case 'في نفس اليوم': return 0;
+    case 'قبلها بيوم': return 1;
+    case 'قبلها بـ 3 أيام': return 3;
+    case 'قبلها بأسبوع': return 7;
+    case 'قبلها بـ 10 أيام': return 10;
+    case 'قبلها بشهر': return 30;
+    default: return 1;
   }
+}
 
-  Future<void> _scheduleEventNotification(Map<String, dynamic> event, DateTime fireTime, String interval, String repeatType) async {
-    try {
-      final eventId = ('${event['title']}_${event['eventDate']}_${event['reminderHour']}_${event['reminderMinute']}').hashCode & 0x7FFFFFFF;
-      final tzTime = tz.TZDateTime.from(fireTime, tz.local);
+Future<void> _showEventReminder(String title, String detail, String interval, {bool hasCustomSound = false}) async {
+  if (_eventDialogShowing) return;
+  _eventDialogShowing = true;
+  _eventAnnouncing = true;
 
-      final prefs = await SharedPreferences.getInstance();
-      final finalSound = event['sound'] ?? prefs.getString('default_event_sound');
+  HapticFeedback.vibrate();
+  WakelockPlus.enable();
 
-      final androidDetails = AndroidNotificationDetails(
-        'event_channel_v1', 'تنبيهات المناسبات',
-        channelDescription: 'تنبيهات المناسبات السنوية',
-        importance: Importance.max, priority: Priority.max,
-        playSound: true,
-        sound: _getNotificationSound(finalSound),
-        enableVibration: true,
-        category: AndroidNotificationCategory.alarm,
-        autoCancel: false, ongoing: true,
-        fullScreenIntent: true,
-        visibility: NotificationVisibility.public,
-      );
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('pending_event_announce');
+  } catch (_) {}
 
-      final notificationBody = (event['detail'] != null && event['detail'].toString().isNotEmpty)
-          ? 'قربت مناسبة: ${event['title']} - ${event['detail']}'
-          : 'قربت مناسبة: ${event['title']}';
-
-      DateTimeComponents? matchComponent;
-      if (repeatType == 'أسبوعي') matchComponent = DateTimeComponents.dayOfWeekAndTime;
-      else if (repeatType == 'شهري') matchComponent = DateTimeComponents.dayOfMonthAndTime;
-      else matchComponent = DateTimeComponents.dateAndTime;
-
-      await _notifications.zonedSchedule(
-        eventId, '🎉 تذكير بمناسبة', notificationBody,
-        tzTime, NotificationDetails(android: androidDetails),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        matchDateTimeComponents: matchComponent,
-      );
-
-      await prefs.setString('pending_event_announce', json.encode({
-        'title': event['title'], 'detail': event['detail'],
-        'interval': interval, 'scheduledMillis': fireTime.millisecondsSinceEpoch,
-        'hasCustomSound': finalSound != null && finalSound != 'default',
-      }));
-    } catch (_) {}
-  }
-
-  int _getAdvanceDays(String advanceReminder) {
-    switch (advanceReminder) {
-      case 'في نفس اليوم': return 0;
-      case 'قبلها بيوم': return 1;
-      case 'قبلها بـ 3 أيام': return 3;
-      case 'قبلها بأسبوع': return 7;
-      case 'قبلها بـ 10 أيام': return 10;
-      case 'قبلها بشهر': return 30;
-      default: return 1;
+  void speakAlert() {
+    if (!hasCustomSound) {
+      _speak("تَنْبِيه: قَرَبِتْ مُنَاسَبَة $title. $detail");
     }
-  }
-
-  Future<void> _showEventReminder(String title, String detail, String interval, {bool hasCustomSound = false}) async {
-    if (_eventDialogShowing) return;
-    _eventDialogShowing = true;
-    _eventAnnouncing = true;
-
     HapticFeedback.vibrate();
-    WakelockPlus.enable();
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('pending_event_announce');
-    } catch (_) {}
-
-    void speakAlert() {
-      if (!hasCustomSound) {
-        _speak("تَنْبِيه: قَرَبِتْ مُنَاسَبَة $title. $detail");
-      }
-      HapticFeedback.vibrate();
-    }
-
-    if (interval != 'بدون تنبيه' && !hasCustomSound) speakAlert();
-
-    _eventRepeatTimer?.cancel();
-    int secs = _getIntervalSeconds(interval);
-    if (secs > 0 && interval != 'مرة واحدة' && !hasCustomSound) {
-      _eventRepeatTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
-    }
-
-    if (!mounted) {
-      _eventDialogShowing = false;
-      _eventAnnouncing = false;
-      return;
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1B2A4A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(children: [Icon(Icons.celebration, color: Color(0xFFC5A059), size: 30), SizedBox(width: 10), Text('تذكير بمناسبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
-        content: Text('قَرَبِتْ مُنَاسَبَة: $title\n$detail', style: const TextStyle(color: Colors.white, fontSize: 16)),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
-            onPressed: () async {
-              _eventRepeatTimer?.cancel();
-              _tts.stop();
-              WakelockPlus.disable();
-              _eventAnnouncing = false;
-              _eventDialogShowing = false;
-
-              await _notifications.cancel(title.hashCode + detail.hashCode);
-              try { await _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
-              _cancelNativeAlarm('مناسبة: $title');
-              Navigator.pop(ctx);
-            },
-            child: const Text('تمام', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          )
-        ],
-      ),
-    );
   }
 
-  void _deleteTask(int index) {
-    final taskTitle = _tasks[index]['task'].toString();
-    setState(() => _tasks.removeAt(index));
-    _saveData();
-    _cancelNativeAlarm(taskTitle);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
+  if (interval != 'بدون تنبيه' && !hasCustomSound) speakAlert();
+
+  _eventRepeatTimer?.cancel();
+  int secs = _getIntervalSeconds(interval);
+  if (secs > 0 && interval != 'مرة واحدة' && !hasCustomSound) {
+    _eventRepeatTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
   }
 
-  void _deleteWeeklyTask(int index) {
-    final task = _weeklySchedule[index];
-    final taskTitle = task['task'].toString();
-    final day = task['day'].toString();
-    setState(() => _weeklySchedule.removeAt(index));
-    _saveWeeklySchedule();
-    _cancelNativeAlarm('جدول_${day}_$taskTitle');
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف الموعد من $day')));
+  if (!mounted) {
+    _eventDialogShowing = false;
+    _eventAnnouncing = false;
+    return;
   }
 
-  Future<void> _deleteAllWeeklyTasks() async {
-    final userTitle = _userTitle;
-    if (_weeklySchedule.isEmpty) {
-      await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي أَصْلًا $_userTitle.");
-      return;
-    }
-    final count = _weeklySchedule.length;
-    for (final task in List.from(_weeklySchedule)) {
-      await _cancelNativeAlarm('جدول_${task['day']}_${task['task']}');
-    }
-    setState(() => _weeklySchedule.clear());
-    _saveWeeklySchedule();
-    await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنَ الجَدْوَلِ الأُسْبُوعِيِّ $_userTitle.");
-  }
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF1B2A4A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Row(children: [Icon(Icons.celebration, color: Color(0xFFC5A059), size: 30), SizedBox(width: 10), Text('تذكير بمناسبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
+      content: Text('قَرَبِتْ مُنَاسَبَة: $title\n$detail', style: const TextStyle(color: Colors.white, fontSize: 16)),
+      actions: [
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
+          onPressed: () async {
+            _eventRepeatTimer?.cancel();
+            _tts.stop();
+            WakelockPlus.disable();
+            _eventAnnouncing = false;
+            _eventDialogShowing = false;
 
-  // 👈 التعديل رقم 15: إضافة String stopRecordMode في آخر باراميترز onSave
-  void _openSettingsScreen() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SettingsScreen(
-          settings: _settings,
-          ttsVolume: _ttsVolume,
-          currentSecretaryName: _secretaryName,
-          currentIsUserMale: _isUserMale,
-          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeMode, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger, muteBeep, useOverlayAlarm, isKidsMode, customGreeting, tahajjudAlertEnabled, isDarkMode, customImagePath, stopRecordMode) async {
-            setState(() {
-              _settings.defaultReminderHour = hour;
-              _settings.defaultReminderMinute = minute;
-              _settings.voiceLevel = voiceLevel;
-              _settings.greetingEnabled = greeting;
-              _settings.adhanAlertEnabled = adhan;
-              _ttsVolume = ttsVol;
-              _settings.showAboveLockScreen = showLock;
-              _settings.shakeMode = shakeMode;
-              _settings.muteBeep = muteBeep;
-              _settings.voiceGender = voiceGender;
-              _settings.defaultInterval = defaultInterval;
-              _settings.customWakeWord = customWakeWord;
-              _settings.wakeWordMode = wakeWordMode;
-              _settings.wakeWordTrigger = wakeWordTrigger;
-              _settings.useOverlayAlarm = useOverlayAlarm;
-              _settings.isKidsMode = isKidsMode;
-              _settings.customGreeting = customGreeting;
-              _settings.tahajjudAlertEnabled = tahajjudAlertEnabled;
-              _settings.isDarkMode = isDarkMode;
-              _settings.customImagePath = customImagePath;
-              // 👈 التعديل رقم 15: حفظ طريقة إيقاف التسجيل
-              _settings.stopRecordMode = stopRecordMode;
-            });
-
-            await _saveSettings();
-            final prefs = await SharedPreferences.getInstance();
-            _settings.salatAlaNabiEnabled = prefs.getBool('salat_ala_nabi_enabled') ?? false;
-            _settings.salatAlaNabiInterval = prefs.getString('salat_ala_nabi_interval') ?? 'كل ساعة';
-            _settings.customUserTitle = prefs.getString('custom_user_title') ?? '';
-            _settings.customSecTitle = prefs.getString('custom_sec_title') ?? '';
-            _scheduleSalatAlaNabi();
-            widget.onThemeChanged(isDarkMode);
-
-            Future.delayed(const Duration(milliseconds: 100), () async {
-              try { _scheduleAdhan30Days(); } catch (_) {}
-            });
-
-            try { await _configureVoice(skipGreeting: true); } catch (_) {}
-
-            try {
-              if (showLock) {
-                await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
-              } else {
-                await _lockScreenChannel.invokeMethod('disableShowWhenLocked');
-              }
-
-              if (_settings.wakeWordMode == 'off') {
-                try { await _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
-              } else {
-                try { await _wakeWordChannel.invokeMethod('startWakeWord'); } catch (_) {}
-              }
-
-              _initShakeDetector();
-
-            } catch (_) {}
+            await _notifications.cancel(title.hashCode + detail.hashCode);
+            try { await _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
+            _cancelNativeAlarm('مناسبة: $title');
+            Navigator.pop(ctx);
           },
-          onSaveSecretary: (name, voiceGender) async {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('secretary_name', name);
-            await prefs.setString('voice_gender', voiceGender);
-            if (mounted) {
-              setState(() {
-                _secretaryName = name;
-                _settings.voiceGender = voiceGender;
-              });
+          child: const Text('تمام', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        )
+      ],
+    ),
+  );
+}
+
+void _deleteTask(int index) {
+  final taskTitle = _tasks[index]['task'].toString();
+  setState(() => _tasks.removeAt(index));
+  _saveData();
+  _cancelNativeAlarm(taskTitle);
+  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
+}
+
+void _deleteWeeklyTask(int index) {
+  final task = _weeklySchedule[index];
+  final taskTitle = task['task'].toString();
+  final day = task['day'].toString();
+  setState(() => _weeklySchedule.removeAt(index));
+  _saveWeeklySchedule();
+  _cancelNativeAlarm('جدول_${day}_$taskTitle');
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف الموعد من $day')));
+}
+
+Future<void> _deleteAllWeeklyTasks() async {
+  final userTitle = _userTitle;
+  if (_weeklySchedule.isEmpty) {
+    await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي أَصْلًا $_userTitle.");
+    return;
+  }
+  final count = _weeklySchedule.length;
+  for (final task in List.from(_weeklySchedule)) {
+    await _cancelNativeAlarm('جدول_${task['day']}_${task['task']}');
+  }
+  setState(() => _weeklySchedule.clear());
+  _saveWeeklySchedule();
+  await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنَ الجَدْوَلِ الأُسْبُوعِيِّ $_userTitle.");
+}
+
+// 👈 التعديل رقم 15: إضافة String stopRecordMode في آخر باراميترز onSave
+void _openSettingsScreen() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => SettingsScreen(
+        settings: _settings,
+        ttsVolume: _ttsVolume,
+        currentSecretaryName: _secretaryName,
+        currentIsUserMale: _isUserMale,
+        onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeMode, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger, muteBeep, useOverlayAlarm, isKidsMode, customGreeting, tahajjudAlertEnabled, isDarkMode, customImagePath, stopRecordMode) async {
+          setState(() {
+            _settings.defaultReminderHour = hour;
+            _settings.defaultReminderMinute = minute;
+            _settings.voiceLevel = voiceLevel;
+            _settings.greetingEnabled = greeting;
+            _settings.adhanAlertEnabled = adhan;
+            _ttsVolume = ttsVol;
+            _settings.showAboveLockScreen = showLock;
+            _settings.shakeMode = shakeMode;
+            _settings.muteBeep = muteBeep;
+            _settings.voiceGender = voiceGender;
+            _settings.defaultInterval = defaultInterval;
+            _settings.customWakeWord = customWakeWord;
+            _settings.wakeWordMode = wakeWordMode;
+            _settings.wakeWordTrigger = wakeWordTrigger;
+            _settings.useOverlayAlarm = useOverlayAlarm;
+            _settings.isKidsMode = isKidsMode;
+            _settings.customGreeting = customGreeting;
+            _settings.tahajjudAlertEnabled = tahajjudAlertEnabled;
+            _settings.isDarkMode = isDarkMode;
+            _settings.customImagePath = customImagePath;
+            // 👈 التعديل رقم 15: حفظ طريقة إيقاف التسجيل
+            _settings.stopRecordMode = stopRecordMode;
+          });
+
+          await _saveSettings();
+          final prefs = await SharedPreferences.getInstance();
+          _settings.salatAlaNabiEnabled = prefs.getBool('salat_ala_nabi_enabled') ?? false;
+          _settings.salatAlaNabiInterval = prefs.getString('salat_ala_nabi_interval') ?? 'كل ساعة';
+          _settings.customUserTitle = prefs.getString('custom_user_title') ?? '';
+          _settings.customSecTitle = prefs.getString('custom_sec_title') ?? '';
+          _scheduleSalatAlaNabi();
+          widget.onThemeChanged(isDarkMode);
+
+          Future.delayed(const Duration(milliseconds: 100), () async {
+            try { _scheduleAdhan30Days(); } catch (_) {}
+          });
+
+          try { await _configureVoice(skipGreeting: true); } catch (_) {}
+
+          try {
+            if (showLock) {
+              await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
+            } else {
+              await _lockScreenChannel.invokeMethod('disableShowWhenLocked');
             }
-            Future.delayed(const Duration(milliseconds: 300), () {
-              try { _configureVoice(skipGreeting: true); } catch (_) {}
+
+            if (_settings.wakeWordMode == 'off') {
+              try { await _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
+            } else {
+              try { await _wakeWordChannel.invokeMethod('startWakeWord'); } catch (_) {}
+            }
+
+            _initShakeDetector();
+
+          } catch (_) {}
+        },
+        onSaveSecretary: (name, voiceGender) async {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('secretary_name', name);
+          await prefs.setString('voice_gender', voiceGender);
+          if (mounted) {
+            setState(() {
+              _secretaryName = name;
+              _settings.voiceGender = voiceGender;
             });
-          },
-        ),
+          }
+          Future.delayed(const Duration(milliseconds: 300), () {
+            try { _configureVoice(skipGreeting: true); } catch (_) {}
+          });
+        },
       ),
-    );
-  }
+    ),
+  );
+}
   void _addNewTaskDialog() {
   _showTaskDialog();
 }
@@ -6905,587 +6953,587 @@ Widget build(BuildContext context) {
     ),
   );
 }
-
-Widget _buildCalendarTab() {
-  return Column(
-    children: [
-      Container(
-        margin: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: InkWell(
-                onTap: () => setState(() => _calendarSubView = 'calendar'),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: _calendarSubView == 'calendar' ? const Color(0xFF1B2A4A) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.calendar_month, color: _calendarSubView == 'calendar' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
-                      const SizedBox(width: 8),
-                      Text('التقويم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _calendarSubView == 'calendar' ? Colors.white : Colors.grey)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: InkWell(
-                onTap: () => setState(() => _calendarSubView = 'weekly'),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: _calendarSubView == 'weekly' ? const Color(0xFF1B2A4A) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.view_week, color: _calendarSubView == 'weekly' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
-                      const SizedBox(width: 8),
-                      Text('الجدول الأسبوعي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _calendarSubView == 'weekly' ? Colors.white : Colors.grey)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      Expanded(
-        child: _calendarSubView == 'calendar' ? _buildCalendarAndTasksTab() : _buildWeeklyScheduleView(),
-      ),
-    ],
-  );
-}
-
-Widget _buildWeeklyScheduleView() {
-  return SingleChildScrollView(
-    padding: const EdgeInsets.all(12),
-    child: Column(
+    Widget _buildCalendarTab() {
+    return Column(
       children: [
         Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          margin: const EdgeInsets.only(bottom: 12),
+          margin: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)], begin: Alignment.topRight, end: Alignment.bottomLeft),
-            borderRadius: BorderRadius.circular(16),
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
           ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Text('📆 الجدول الأسبوعي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-              SizedBox(height: 5),
-              Text('اضغط على أي يوم لعرض مواعيده وإضافتها', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _calendarSubView = 'calendar'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _calendarSubView == 'calendar' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.calendar_month, color: _calendarSubView == 'calendar' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
+                        const SizedBox(width: 8),
+                        Text('التقويم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _calendarSubView == 'calendar' ? Colors.white : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _calendarSubView = 'weekly'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _calendarSubView == 'weekly' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.view_week, color: _calendarSubView == 'weekly' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
+                        const SizedBox(width: 8),
+                        Text('الجدول الأسبوعي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _calendarSubView == 'weekly' ? Colors.white : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.3),
-          itemCount: _weekDays.length,
-          itemBuilder: (ctx, i) {
-            final day = _weekDays[i];
-            final dayTasks = _weeklySchedule.where((t) => t['day'] == day).toList();
-            return InkWell(
-              onTap: () => _openDayView(day),
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(day, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFC5A059))),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: dayTasks.isEmpty ? Colors.grey.shade200 : const Color(0xFFC5A059),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          dayTasks.isEmpty ? 'فاضي' : '${dayTasks.length} ${dayTasks.length == 1 ? "موعد" : "مواعيد"}',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: dayTasks.isEmpty ? Colors.grey.shade700 : Colors.black),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
+        Expanded(
+          child: _calendarSubView == 'calendar' ? _buildCalendarAndTasksTab() : _buildWeeklyScheduleView(),
         ),
       ],
-    ),
-  );
-}
+    );
+  }
 
-void _openDayView(String day) {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => StatefulBuilder(
-        builder: (context, setStateInner) {
-          final dayTasks = _weeklySchedule.where((t) => t['day'] == day).toList();
-          _sortByTime(dayTasks);
-          return Scaffold(
-            appBar: AppBar(
-              title: Text('مواعيد يوم $day', style: const TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: const Color(0xFF1B2A4A),
-              foregroundColor: Colors.white,
-            ),
-            body: dayTasks.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.event_busy, size: 80, color: Colors.grey.shade400),
-                        const SizedBox(height: 15),
-                        Text('مفيش مواعيد في يوم $day', style: const TextStyle(color: Colors.grey, fontSize: 15)),
-                        const SizedBox(height: 25),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                          icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
-                          label: const Text('إضافة موعد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          onPressed: () async {
-                            await _addWeeklyTaskDialog(day);
-                            setStateInner(() {});
-                          },
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: dayTasks.length,
-                    itemBuilder: (ctx, i) {
-                      final task = dayTasks[i];
-                      final globalIndex = _weeklySchedule.indexOf(task);
-                      return Container(
-                        margin: const EdgeInsets.symmetric(vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(12),
-                          border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 5)),
-                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
-                        ),
-                        child: ListTile(
-                          leading: const Icon(Icons.alarm, color: Color(0xFFC5A059)),
-                          title: Text(task['task'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          subtitle: Text('${task['time']} • ${task['repeatInterval']}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit, color: Colors.blue),
-                                onPressed: () async {
-                                  await _editWeeklyTaskDialog(globalIndex);
-                                  setStateInner(() {});
-                                },
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                onPressed: () async {
-                                  _deleteWeeklyTask(globalIndex);
-                                  setStateInner(() {});
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-            floatingActionButton: dayTasks.isNotEmpty
-                ? FloatingActionButton.extended(
-                    onPressed: () async {
-                      await _addWeeklyTaskDialog(day);
-                      setStateInner(() {});
-                    },
-                    backgroundColor: const Color(0xFF1B2A4A),
-                    icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
-                    label: const Text('إضافة موعد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  )
-                : null,
-          );
-        },
-      ),
-    ),
-  );
-}
-
-Widget _buildCalendarAndTasksTab() {
-  String formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
-  String currentTime = DateFormat('hh:mm a', 'ar').format(DateTime.now());
-  var dayTasks = _tasks.where((t) => t['date'] == formattedDate).toList();
-  _sortByTime(dayTasks);
-  String userTitle = _userTitle;
-  return SingleChildScrollView(
-    child: Column(children: [
-      Container(
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)], begin: Alignment.topRight, end: Alignment.bottomLeft),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4))],
-        ),
-        child: Row(children: [
+  Widget _buildWeeklyScheduleView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
           Container(
-            width: 70, height: 70,
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFFC5A059), width: 2),
-              image: DecorationImage(
-                image: _settings.customImagePath != null ? FileImage(File(_settings.customImagePath!)) as ImageProvider : AssetImage(_getSecretaryImage(_secretaryName, _settings.voiceGender)),
-                fit: BoxFit.cover, alignment: Alignment.topCenter,
-              ),
+              gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)], begin: Alignment.topRight, end: Alignment.bottomLeft),
+              borderRadius: BorderRadius.circular(16),
             ),
-          ),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Column(
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('مرحباً بك $userTitle! 👋', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                const SizedBox(height: 4),
-                Text('الوقت: $currentTime', style: const TextStyle(fontSize: 13, color: Color(0xFFC5A059), fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                Text('📳 هُز الهاتف أو نادِ باسم $_secTitle.', style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                Text('📆 الجدول الأسبوعي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                SizedBox(height: 5),
+                Text('اضغط على أي يوم لعرض مواعيده وإضافتها', style: TextStyle(color: Colors.white70, fontSize: 13)),
               ],
             ),
           ),
-        ]),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.3),
+            itemCount: _weekDays.length,
+            itemBuilder: (ctx, i) {
+              final day = _weekDays[i];
+              final dayTasks = _weeklySchedule.where((t) => t['day'] == day).toList();
+              return InkWell(
+                onTap: () => _openDayView(day),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(day, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFC5A059))),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: dayTasks.isEmpty ? Colors.grey.shade200 : const Color(0xFFC5A059),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            dayTasks.isEmpty ? 'فاضي' : '${dayTasks.length} ${dayTasks.length == 1 ? "موعد" : "مواعيد"}',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: dayTasks.isEmpty ? Colors.grey.shade700 : Colors.black),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
-      GestureDetector(
-        onTap: () {
-          setState(() {
-            _isHijriView = !_isHijriView;
-          });
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    );
+  }
+
+  void _openDayView(String day) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StatefulBuilder(
+          builder: (context, setStateInner) {
+            final dayTasks = _weeklySchedule.where((t) => t['day'] == day).toList();
+            _sortByTime(dayTasks);
+            return Scaffold(
+              appBar: AppBar(
+                title: Text('مواعيد يوم $day', style: const TextStyle(fontWeight: FontWeight.bold)),
+                backgroundColor: const Color(0xFF1B2A4A),
+                foregroundColor: Colors.white,
+              ),
+              body: dayTasks.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.event_busy, size: 80, color: Colors.grey.shade400),
+                          const SizedBox(height: 15),
+                          Text('مفيش مواعيد في يوم $day', style: const TextStyle(color: Colors.grey, fontSize: 15)),
+                          const SizedBox(height: 25),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                            icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
+                            label: const Text('إضافة موعد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            onPressed: () async {
+                              await _addWeeklyTaskDialog(day);
+                              setStateInner(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: dayTasks.length,
+                      itemBuilder: (ctx, i) {
+                        final task = dayTasks[i];
+                        final globalIndex = _weeklySchedule.indexOf(task);
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 5)),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
+                          ),
+                          child: ListTile(
+                            leading: const Icon(Icons.alarm, color: Color(0xFFC5A059)),
+                            title: Text(task['task'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            subtitle: Text('${task['time']} • ${task['repeatInterval']}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.blue),
+                                  onPressed: () async {
+                                    await _editWeeklyTaskDialog(globalIndex);
+                                    setStateInner(() {});
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  onPressed: () async {
+                                    _deleteWeeklyTask(globalIndex);
+                                    setStateInner(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+              floatingActionButton: dayTasks.isNotEmpty
+                  ? FloatingActionButton.extended(
+                      onPressed: () async {
+                        await _addWeeklyTaskDialog(day);
+                        setStateInner(() {});
+                      },
+                      backgroundColor: const Color(0xFF1B2A4A),
+                      icon: const Icon(Icons.add, color: Color(0xFFC5A059)),
+                      label: const Text('إضافة موعد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    )
+                  : null,
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCalendarAndTasksTab() {
+    String formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
+    String currentTime = DateFormat('hh:mm a', 'ar').format(DateTime.now());
+    var dayTasks = _tasks.where((t) => t['date'] == formattedDate).toList();
+    _sortByTime(dayTasks);
+    String userTitle = _userTitle;
+    return SingleChildScrollView(
+      child: Column(children: [
+        Container(
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: _isHijriView
-                ? const Color(0xFFC5A059).withOpacity(0.1)
-                : Colors.grey.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isHijriView
-                  ? const Color(0xFFC5A059)
-                  : Colors.grey.withOpacity(0.5),
-              width: 1.5,
+            gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)], begin: Alignment.topRight, end: Alignment.bottomLeft),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4))],
+          ),
+          child: Row(children: [
+            Container(
+              width: 70, height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFC5A059), width: 2),
+                image: DecorationImage(
+                  image: _settings.customImagePath != null ? FileImage(File(_settings.customImagePath!)) as ImageProvider : AssetImage(_getSecretaryImage(_secretaryName, _settings.voiceGender)),
+                  fit: BoxFit.cover, alignment: Alignment.topCenter,
+                ),
+              ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('مرحباً بك $userTitle! 👋', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 4),
+                  Text('الوقت: $currentTime', style: const TextStyle(fontSize: 13, color: Color(0xFFC5A059), fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text('📳 هُز الهاتف أو نادِ باسم $_secTitle.', style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                ],
+              ),
+            ),
+          ]),
+        ),
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _isHijriView = !_isHijriView;
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: _isHijriView 
+                  ? const Color(0xFFC5A059).withOpacity(0.1) 
+                  : Colors.grey.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isHijriView 
+                    ? const Color(0xFFC5A059) 
+                    : Colors.grey.withOpacity(0.5),
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  DateFormat('dd MMMM yyyy', 'ar').format(_selectedDate),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: _isHijriView ? Colors.black87 : const Color(0xFF1B2A4A),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '|',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: _isHijriView ? Colors.black87 : const Color(0xFF1B2A4A),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _getHijriDate(_selectedDate),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: _isHijriView ? const Color(0xFFC5A059) : Colors.black87,
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
+        Container(
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFC5A059), width: 2),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8)],
+          ),
+          child: _isHijriView
+              ? _HijriCalendarWidget(
+                  selectedDate: _selectedDate,
+                  onDateChanged: (d) => setState(() => _selectedDate = d),
+                )
+              : CalendarDatePicker(
+                  key: ValueKey(formattedDate),
+                  initialDate: _selectedDate,
+                  firstDate: DateTime(2024),
+                  lastDate: DateTime(2030),
+                  onDateChanged: (d) => setState(() => _selectedDate = d),
+                ),
+        ),
+        const SizedBox(height: 15),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                DateFormat('dd MMMM yyyy', 'ar').format(_selectedDate),
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: _isHijriView ? Colors.black87 : const Color(0xFF1B2A4A),
+              const Text('جدول أعمال اليوم:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+              Chip(label: Text('${dayTasks.length} مواعيد', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: const Color(0xFF1B2A4A)),
+            ],
+          ),
+        ),
+        dayTasks.isEmpty
+            ? Container(
+                padding: const EdgeInsets.all(30),
+                child: Column(children: [
+                  Icon(Icons.event_note, size: 50, color: Colors.grey.shade400),
+                  const SizedBox(height: 8),
+                  const Text('لا توجد مواعيد', style: TextStyle(color: Colors.grey, fontSize: 14))
+                ]))
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: dayTasks.length,
+                itemBuilder: (ctx, i) => Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 5)),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5)],
+                  ),
+                  child: ListTile(
+                    leading: const Icon(Icons.alarm, color: Color(0xFFC5A059)),
+                    title: Text(dayTasks[i]['task'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    subtitle: Text('${dayTasks[i]['time']} • ${dayTasks[i]['repeat'] ?? 'مرة واحدة'}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        dayTasks[i]['alarm'] == true ? const Icon(Icons.notifications_active, color: Colors.redAccent) : const Icon(Icons.notifications_off, color: Colors.grey),
+                        IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _editTaskDialog(_tasks.indexOf(dayTasks[i]))),
+                        IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => _deleteTask(_tasks.indexOf(dayTasks[i]))),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                '|',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: _isHijriView ? Colors.black87 : const Color(0xFF1B2A4A),
+        const SizedBox(height: 20),
+      ]),
+    );
+  }
+
+  Widget _buildDiariesTab() {
+    return SingleChildScrollView(
+      child: Column(children: [
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(color: const Color(0xFF1B2A4A), borderRadius: BorderRadius.circular(12)),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text('📖 مفكرة اليوميات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                    SizedBox(height: 5),
+                    Text('اختر أي يوم لفتح صفحة التدوين.', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                _getHijriDate(_selectedDate),
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: _isHijriView ? const Color(0xFFC5A059) : Colors.black87,
+              IconButton(
+                icon: const Icon(Icons.delete_sweep, color: Colors.redAccent, size: 30),
+                tooltip: 'مسح كل اليوميات',
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      title: const Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+                          SizedBox(width: 8),
+                          Text('مسح كل اليوميات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                        ],
+                      ),
+                      content: const Text('هل أنت متأكد أنك تريد مسح كل اليوميات المسجلة في التطبيق نهائياً؟ لا يمكن التراجع عن هذا الإجراء.', style: TextStyle(fontSize: 16)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx), 
+                          child: const Text('إلغاء', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          onPressed: () async {
+                            setState(() {
+                              _diaries.clear();
+                            });
+                            await _saveData();
+                            if (mounted) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('تم مسح كل اليوميات بنجاح'), backgroundColor: Colors.green),
+                              );
+                            }
+                          },
+                          child: const Text('مسح الكل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
+          ),
+          child: CalendarDatePicker(
+            initialDate: _diaryDate,
+            firstDate: DateTime(2024),
+            lastDate: DateTime(2030),
+            onDateChanged: (selectedDay) {
+              setState(() => _diaryDate = selectedDay);
+              _openDiaryPage(selectedDay);
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), minimumSize: const Size.fromHeight(48), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            icon: const Icon(Icons.edit_note, color: Color(0xFFC5A059)),
+            label: const Text('فتح يومية اليوم', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            onPressed: () => _openDiaryPage(_diaryDate),
+          ),
+        ),
+        const SizedBox(height: 20),
+      ]),
+    );
+  }
+
+  Widget _buildPrayerTimesTab() {
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _prayerSubView = 'times'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _prayerSubView == 'times' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.access_time_filled, color: _prayerSubView == 'times' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
+                        const SizedBox(width: 8),
+                        Text('المواقيت', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _prayerSubView == 'times' ? Colors.white : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _prayerSubView = 'adhkar'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _prayerSubView == 'adhkar' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.menu_book, color: _prayerSubView == 'adhkar' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
+                        const SizedBox(width: 8),
+                        Text('الأذكار', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _prayerSubView == 'adhkar' ? Colors.white : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _prayerSubView = 'tasbeeh'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _prayerSubView == 'tasbeeh' ? const Color(0xFF1B2A4A) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.touch_app, color: _prayerSubView == 'tasbeeh' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
+                        const SizedBox(width: 8),
+                        Text('التسبيح', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _prayerSubView == 'tasbeeh' ? Colors.white : Colors.grey)),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
         ),
-      ),
-      Container(
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFC5A059), width: 2),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8)],
+        Expanded(
+          child: _prayerSubView == 'times'
+              ? _buildPrayerTimesList()
+              : _prayerSubView == 'adhkar'
+                  ? _buildAdhkarList()
+                  : _buildTasbeehCounter(),
         ),
-        child: _isHijriView
-            ? _HijriCalendarWidget(
-                selectedDate: _selectedDate,
-                onDateChanged: (d) => setState(() => _selectedDate = d),
-              )
-            : CalendarDatePicker(
-                key: ValueKey(formattedDate),
-                initialDate: _selectedDate,
-                firstDate: DateTime(2024),
-                lastDate: DateTime(2030),
-                onDateChanged: (d) => setState(() => _selectedDate = d),
-              ),
-      ),
-      const SizedBox(height: 15),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('جدول أعمال اليوم:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
-            Chip(label: Text('${dayTasks.length} مواعيد', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: const Color(0xFF1B2A4A)),
-          ],
-        ),
-      ),
-      dayTasks.isEmpty
-          ? Container(
-              padding: const EdgeInsets.all(30),
-              child: Column(children: [
-                Icon(Icons.event_note, size: 50, color: Colors.grey.shade400),
-                const SizedBox(height: 8),
-                const Text('لا توجد مواعيد', style: TextStyle(color: Colors.grey, fontSize: 14))
-              ]))
-          : ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: dayTasks.length,
-              itemBuilder: (ctx, i) => Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: const Border(right: BorderSide(color: Color(0xFFC5A059), width: 5)),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5)],
-                ),
-                child: ListTile(
-                  leading: const Icon(Icons.alarm, color: Color(0xFFC5A059)),
-                  title: Text(dayTasks[i]['task'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  subtitle: Text('${dayTasks[i]['time']} • ${dayTasks[i]['repeat'] ?? 'مرة واحدة'}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      dayTasks[i]['alarm'] == true ? const Icon(Icons.notifications_active, color: Colors.redAccent) : const Icon(Icons.notifications_off, color: Colors.grey),
-                      IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _editTaskDialog(_tasks.indexOf(dayTasks[i]))),
-                      IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => _deleteTask(_tasks.indexOf(dayTasks[i]))),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-      const SizedBox(height: 20),
-    ]),
-  );
-}
+      ],
+    );
+  }
 
-Widget _buildDiariesTab() {
-  return SingleChildScrollView(
-    child: Column(children: [
-      Container(
-        width: double.infinity,
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(color: const Color(0xFF1B2A4A), borderRadius: BorderRadius.circular(12)),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text('📖 مفكرة اليوميات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                  SizedBox(height: 5),
-                  Text('اختر أي يوم لفتح صفحة التدوين.', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                ],
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_sweep, color: Colors.redAccent, size: 30),
-              tooltip: 'مسح كل اليوميات',
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                    title: const Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
-                        SizedBox(width: 8),
-                        Text('مسح كل اليوميات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-                      ],
-                    ),
-                    content: const Text('هل أنت متأكد أنك تريد مسح كل اليوميات المسجلة في التطبيق نهائياً؟ لا يمكن التراجع عن هذا الإجراء.', style: TextStyle(fontSize: 16)),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('إلغاء', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                        onPressed: () async {
-                          setState(() {
-                            _diaries.clear();
-                          });
-                          await _saveData();
-                          if (mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('تم مسح كل اليوميات بنجاح'), backgroundColor: Colors.green),
-                            );
-                          }
-                        },
-                        child: const Text('مسح الكل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-      Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFC5A059), width: 1.5),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
-        ),
-        child: CalendarDatePicker(
-          initialDate: _diaryDate,
-          firstDate: DateTime(2024),
-          lastDate: DateTime(2030),
-          onDateChanged: (selectedDay) {
-            setState(() => _diaryDate = selectedDay);
-            _openDiaryPage(selectedDay);
-          },
-        ),
-      ),
-      const SizedBox(height: 12),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), minimumSize: const Size.fromHeight(48), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-          icon: const Icon(Icons.edit_note, color: Color(0xFFC5A059)),
-          label: const Text('فتح يومية اليوم', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          onPressed: () => _openDiaryPage(_diaryDate),
-        ),
-      ),
-      const SizedBox(height: 20),
-    ]),
-  );
-}
-
-Widget _buildPrayerTimesTab() {
-  return Column(
-    children: [
-      Container(
-        margin: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: InkWell(
-                onTap: () => setState(() => _prayerSubView = 'times'),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: _prayerSubView == 'times' ? const Color(0xFF1B2A4A) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.access_time_filled, color: _prayerSubView == 'times' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
-                      const SizedBox(width: 8),
-                      Text('المواقيت', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _prayerSubView == 'times' ? Colors.white : Colors.grey)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: InkWell(
-                onTap: () => setState(() => _prayerSubView = 'adhkar'),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: _prayerSubView == 'adhkar' ? const Color(0xFF1B2A4A) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.menu_book, color: _prayerSubView == 'adhkar' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
-                      const SizedBox(width: 8),
-                      Text('الأذكار', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _prayerSubView == 'adhkar' ? Colors.white : Colors.grey)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: InkWell(
-                onTap: () => setState(() => _prayerSubView = 'tasbeeh'),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: _prayerSubView == 'tasbeeh' ? const Color(0xFF1B2A4A) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.touch_app, color: _prayerSubView == 'tasbeeh' ? const Color(0xFFC5A059) : Colors.grey, size: 20),
-                      const SizedBox(width: 8),
-                      Text('التسبيح', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _prayerSubView == 'tasbeeh' ? Colors.white : Colors.grey)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      Expanded(
-        child: _prayerSubView == 'times'
-            ? _buildPrayerTimesList()
-            : _prayerSubView == 'adhkar'
-                ? _buildAdhkarList()
-                : _buildTasbeehCounter(),
-      ),
-    ],
-  );
-}
-    Widget _buildPrayerTimesList() {
+  Widget _buildPrayerTimesList() {
     return FutureBuilder<Map<String, String>>(
       future: _calculatePrayerTimes(),
       builder: (context, snapshot) {
@@ -7707,7 +7755,7 @@ Widget _buildPrayerTimesTab() {
             itemBuilder: (ctx, i) {
               final text = adhkarList[i]['text'];
               _adhkarCounts.putIfAbsent(text, () => adhkarList[i]['count']);
-
+              
               return _AdhkarCard(
                 text: text,
                 count: _adhkarCounts[text] ?? 0,
@@ -8056,10 +8104,10 @@ Widget _buildPrayerTimesTab() {
 {'key': 'allahu_akbar', 'text': _norm('الله اكبر')},
 {'key': 'la_ilaha_illallah', 'text': _norm('لا اله الا الله')},
     ];
-
+    
     String remaining = norm;
     final counts = <String, int>{};
-
+    
     for (var m in matches) {
       final text = m['text']!;
       final key = m['key']!;
@@ -8071,7 +8119,7 @@ Widget _buildPrayerTimesTab() {
       }
       if (cnt > 0) counts[key] = (counts[key] ?? 0) + cnt;
     }
-
+    
     if (counts.isEmpty) return;
     setState(() {
       for (var entry in counts.entries) {
@@ -8086,7 +8134,6 @@ Widget _buildPrayerTimesTab() {
       }
     });
   }
-
 
   void _handleAdhkarResult(String rawText) {
     String norm = _norm(rawText);
