@@ -5647,61 +5647,51 @@ if (minutes == 30) {
   }
 
   Future<void> _scheduleBackgroundNotification(
-    String taskTitle,
-    DateTime scheduledDateTime, {
-    String repeat = 'مرة واحدة',
-    String interval = 'بدون تنبيه',
-    List<String> customDays = const [],
-    String? soundUri,
-    int? customNotificationId,
-  }) async {
-    final tzTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
-    final hasSound = soundUri != null && soundUri.isNotEmpty && soundUri != 'default' && soundUri != 'null';
+  String taskTitle,
+  DateTime scheduledDateTime, {
+  String repeat = 'مرة واحدة',
+  String interval = 'بدون تنبيه',
+  List<String> customDays = const [],
+  String? soundUri,
+  int? customNotificationId,
+}) async {
+  final tzTime = tz.TZDateTime.from(scheduledDateTime, tz.local);
 
-    final androidDetails = AndroidNotificationDetails(
-      'secretary_alarm_v6',
-      'منبه السكرتير v6',
-      channelDescription: 'تنبيهات المواعيد',
-      importance: Importance.max,
-      priority: Priority.max,
-      playSound: hasSound,
-      sound: hasSound ? _getNotificationSound(soundUri) : null,
-      enableVibration: true,
-      category: AndroidNotificationCategory.alarm,
-      autoCancel: false,
-      ongoing: true,
-      fullScreenIntent: true,
-      visibility: NotificationVisibility.public,
-      audioAttributesUsage: AudioAttributesUsage.alarm,
-      actions: <AndroidNotificationAction>[
-        AndroidNotificationAction(
-          'cancel_alarm',
-          'إلغاء',
-          showsUserInterface: false,
-          cancelNotification: true,
-        ),
-      ],
-    );
+  // 👈 الفلاتر صامتة تماماً، بتسجل بس في الخلفية
+  final androidDetails = AndroidNotificationDetails(
+    'secretary_alarm_bg_v6',
+    'منبه السكرتير (خلفية)',
+    channelDescription: 'لضمان استقرار المنبه في الخلفية',
+    importance: Importance.low,
+    priority: Priority.low,
+    playSound: false,
+    enableVibration: false,
+    autoCancel: true,
+    ongoing: false,
+    fullScreenIntent: false, // 👈 شيلنا الشاشة عشان الكوتلن هو اللي يفتحها
+    visibility: NotificationVisibility.public,
+  );
 
-    await _notifications.zonedSchedule(
-      customNotificationId ?? (taskTitle.hashCode + 1000),
-      'تنبيه هام!',
-      'حان الآن موعد: $taskTitle',
-      tzTime,
-      NotificationDetails(android: androidDetails),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-    );
+  await _notifications.zonedSchedule(
+    customNotificationId ?? (taskTitle.hashCode + 1000),
+    'تنبيه هام!',
+    'حان الآن موعد: $taskTitle',
+    tzTime,
+    NotificationDetails(android: androidDetails),
+    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+  );
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('pending_alarm', json.encode({
-      'title': taskTitle,
-      'scheduledMillis': scheduledDateTime.millisecondsSinceEpoch,
-      'repeat': repeat,
-      'interval': interval,
-      'customDays': customDays,
-      'sound': soundUri,
-    }));
+  // 👈 أهم سطرين: بنحفظ علامة pending_alarm عشان التطبيق يفتح شاشة السكرتير
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('pending_alarm', json.encode({
+    'title': taskTitle,
+    'scheduledMillis': scheduledDateTime.millisecondsSinceEpoch,
+    'repeat': repeat,
+    'interval': interval,
+    'customDays': customDays,
+    'sound': soundUri,
+  }));
   }
 
   void _startAlarmLoop(
@@ -5712,18 +5702,22 @@ if (minutes == 30) {
     DateTime scheduled,
     String? soundUri,
   ) {
-    // 👈 التعديل الجديد: إغلاق أي شاشة منبه قديمة عشان نفتح الجديدة
-    if (_isAlarmDialogOpen) {
-      if (_alarmDialogContext != null) {
-        try { Navigator.of(_alarmDialogContext!).pop(); } catch (_) {}
-        _alarmDialogContext = null;
-      }
-      _isAlarmDialogOpen = false;
-      _activeAlarmLoopTimer?.cancel();
-      _alarmVoiceSafetyTimer?.cancel(); // إضافي للتأمين
-      _tts.stop();
-      try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
-    }
+    // 👈 منع تكرار شاشة المنبه لو اتضربت مرتين في نفس اللحظة
+if (_isAlarmDialogOpen) {
+  if (_activeAlarmTaskTitle == taskTitle) {
+    return; // نفس المنبه شغال بالفعل، متعملش حاجة واطلع
+  }
+  // لو ده منبه تاني مختلف، اقفل القديم وافتح الجديد
+  if (_alarmDialogContext != null) {
+    try { Navigator.of(_alarmDialogContext!).pop(); } catch (_) {}
+    _alarmDialogContext = null;
+  }
+  _isAlarmDialogOpen = false;
+  _activeAlarmLoopTimer?.cancel();
+  _alarmVoiceSafetyTimer?.cancel();
+  _tts.stop();
+  try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
+}
 
     try { _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
     try { _nativeAlarmChannel.invokeMethod('cancelAlarm', {'id': taskTitle.hashCode + 5000}); } catch (_) {}
