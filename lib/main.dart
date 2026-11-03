@@ -2722,7 +2722,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
             if (!_isListening && !_starting) {
               if (_isRecording) _stopRecording();
               if (isDiaryRec) _DiaryPageState.activeInstance!.stopRecordingByVoice();
-              _listenVoiceCommand();
+              Future.delayed(const Duration(milliseconds: 500), () {
+  if (mounted && !_isListening && !_starting) {
+    _listenVoiceCommand();
+  }
+});
             }
           }
         } else {
@@ -3038,7 +3042,9 @@ if (adhkarString != null) {
   }
 
   Future<void> _stopRecording() async {
-    try {
+    if (!_isRecording) return;
+setState(() => _isRecording = false);
+try {
       await _notifications.cancel(9999);
       _recordingTimer?.cancel();
       final path = await _audioRecorder.stop();
@@ -8719,6 +8725,8 @@ class _DiaryPageState extends State<_DiaryPage> {
   }
 
   Future<void> _stopRecording() async {
+    if (!_isRecordingNow) return; 
+setState(() => _isRecordingNow = false); 
     await _notifications.cancel(9999);
     final path = await _recorder.stop();
     setState(() {
