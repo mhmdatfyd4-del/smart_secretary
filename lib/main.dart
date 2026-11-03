@@ -4053,7 +4053,13 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
   ]);
 
   if (!isWritingToDiary && _hasAny(cmd, ['يوميات', 'يوميه', 'يومية', 'مفكره', 'مفكرة'])) {
-    if (_DiaryPageState.activeInstance != null) {
+    // 👈 التعديل الجديد: لو مفيش يومية مفتوحة، نفتح يومية النهاردة
+if (_DiaryPageState.activeInstance == null) {
+  _openDiaryPage(DateTime.now());
+  await Future.delayed(const Duration(milliseconds: 500));
+}
+
+if (_DiaryPageState.activeInstance != null) {
       if (_hasAny(cmd, ['ضيف مهمة', 'ضيفي مهمة', 'حط مهمة', 'أضف مهمة', 'ضيفلي مهمة', 'ضيفيلي مهمة'])) {
         String text = rawCommand.trim();
         text = text.replaceFirst(RegExp(r'^(?:(?:يا\s+)?(?:سكرتير|سكرتيرة)\s+)?(?:ضيف|ضيفي|حط|أضف|اضف|ضيفلي|ضيفيلي)\s+(?:مهمة\s+)?'), '');
