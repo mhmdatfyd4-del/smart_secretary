@@ -4046,11 +4046,11 @@ Future<void> _processSmartVoiceCommand(String rawCommand) async {
 
   // 5. أوامر اليوميات
   final isWritingToDiary = _hasAny(cmd, [
-    'اكتب في اليوميات', 'اكتب في يومياتي', 'سجل في اليوميات', 'سجل في يومياتي', 
-    'اكتب يومية', 'سجل يومية', 'سجل عندك في يومية', 
-    'اكتب عندك في يومية', 'اكتب عندك', 'اكتبلي في يومية', 'اكتبلي يومية', 'سجللي يومية',
-    'سجل عندك', 'اكتب في المذكرة', 'سجل في المذكرة'
-  ]);
+  'اكتب في اليوميات', 'اكتب في يومياتي', 'سجل في اليوميات', 'سجل في يومياتي', 
+  'اكتب يومية', 'سجل يومية', 'سجل عندك في يومية', 
+  'اكتب عندك في يومية', 'اكتب عندك', 'اكتبلي في يومية', 'اكتبلي يومية', 'سجللي يومية',
+  'سجل عندك', 'اكتب في المذكرة', 'سجل في المذكرة', 'اكتبي عندك', 'اكتبي', 'اكتب', 'سجلي', 'سجل'
+]);
 
   if (!isWritingToDiary && _hasAny(cmd, ['يوميات', 'يوميه', 'يومية', 'مفكره', 'مفكرة'])) {
     // 👈 التعديل الجديد: لو مفيش يومية مفتوحة، نفتح يومية النهاردة
@@ -4377,22 +4377,33 @@ if (_DiaryPageState.activeInstance != null) {
   }
 
   // 11. كتابة اليوميات
-  if (isWritingToDiary) {
-    DateTime targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
-    final key = DateFormat('yyyy-MM-dd').format(targetDate);
-    String textToWrite = rawCommand;
-    final removeWords = ['اكتب', 'سجل', 'في', 'اليوميات', 'يومياتي', 'يومية', 'يا', 'سكرتير', 'سكرتيرة', 'عندك'];
-    for (var w in removeWords) { textToWrite = textToWrite.replaceAll(w, ''); }
-    textToWrite = _cleanDateWordsFromText(textToWrite);
+if (isWritingToDiary) {
+  String textToWrite = rawCommand;
+  // مسح كلمات الأوامر
+  final removeWords = ['اكتب', 'اكتبي', 'اكتبلي', 'سجل', 'سجلي', 'سجللي', 'في', 'اليوميات', 'يومياتي', 'يوميتي', 'يومية', 'يوميه', 'يا', 'سكرتير', 'سكرتيرة', 'عندك', 'عندي'];
+  for (var w in removeWords) { textToWrite = textToWrite.replaceAll(w, ''); }
+  textToWrite = _cleanDateWordsFromText(textToWrite);
 
-    if (textToWrite.isNotEmpty) {
+  if (textToWrite.isNotEmpty) {
+     if (_DiaryPageState.activeInstance != null) {
+       // 👈 لو في يومية مفتوحة قدامك، هيكتب فيها فوراً
+       _diaryVoiceStream.add({'action': 'add_text_note', 'text': textToWrite});
+       await _speak("تَمَام $_userTitle، كَتَبْتْ النَّصْ فِي اليَوْمِيَّة الْمَفْتُوحَة.");
+     } else {
+       // 👈 لو مفيش يومية مفتوحة، هيكتب في يومية النهاردة ويحفظها
+       DateTime targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
+       final key = DateFormat('yyyy-MM-dd').format(targetDate);
        final existing = _diaries[key] ?? {'text': '', 'entries': []};
        existing['text'] = (existing['text'] ?? '') + '\n' + textToWrite;
        setState(() => _diaries[key] = existing); _saveData();
        await _speak("تَمَّ كِتَابَةُ اليَوْمِيَّةِ بِنَجَاح $_userTitle.");
-    } else { if (mounted) _openDiaryPage(targetDate); await _speak("اتْفَضَّلْ $_userTitle، اكْتُبْ يَوْمِيَّاتَك."); }
-    return;
+     }
+  } else { 
+     if (mounted) _openDiaryPage(DateTime.now()); 
+     await _speak("اتْفَضَّلْ $_userTitle، اكْتُبْ يَوْمِيَّاتَك."); 
   }
+  return;
+}
 
   // 12. أوامر الإعدادات والوضع الليلي
   if (_hasAny(cmd, ['افتح الإعدادات', 'افتحي الإعدادات', 'الإعدادات', 'اعدادات', 'الاعدادات', 'افتح الاعدادات'])) { _openSettingsScreen(); await _speak("تَمَّ فَتْحُ الإِعْدَادَاتِ $_userTitle."); return; }
