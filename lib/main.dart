@@ -1367,15 +1367,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'manual_only', 
   );
 
-                    await widget.onSave(
-                      18, 0, 'متوسط',
-                      true, true, 1.0,
-                      false, 'app_open', 'ذكر',
-                      'كل 10 ثواني', 'يا سكرتير', 'off', 'both',
-                      true, false,
-                      false, 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.', false, false, null,
-                      'shake_and_voice',
-                    );
                     await widget.onSaveSecretary('محمد', 'ذكر');
 
                     final prefs = await SharedPreferences.getInstance();
@@ -2706,7 +2697,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     if (_settings.shakeMode == 'always') {
       try { _shakeChannel.invokeMethod('startShakeService'); } catch (_) {}
-      return;? 
+      return;
     }
 
     try { _shakeChannel.invokeMethod('stopShakeService'); } catch (_) {}
@@ -2725,22 +2716,19 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         if (_isInBackground && _settings.shakeMode != 'background') return;
         _lastShake = now;
 
-        final isDiaryRec = _DiaryPageState.activeInstance?._isRecordingNow ?? false;
+              final isDiaryRec = _DiaryPageState.activeInstance?._isRecordingNow ?? false;
 
-        if (_isRecording || isDiaryRec) {
-  if (_settings.stopRecordMode == 'shake_only') {
-    if (_isRecording) _stopRecording();
-    if (isDiaryRec) _DiaryPageState.activeInstance!.stopRecordingByVoice();
-  }
-} else {
-            }
-          }
-        } else {
-          if (!_isListening && !_starting) _listenVoiceCommand();
+      if (_isRecording || isDiaryRec) {
+        if (_settings.stopRecordMode == 'shake_only') {
+          if (_isRecording) _stopRecording();
+          if (isDiaryRec) _DiaryPageState.activeInstance!.stopRecordingByVoice();
         }
+      } else {
+        if (!_isListening && !_starting) _listenVoiceCommand();
       }
-    });
-  }
+    }
+  }); // 👈 هنا بنقفل الـ listen
+} // 👈 القوس ده اللي كان ناقص ويقفل الدالة
 
   void _startAdhanWatcher() {
     _adhanTimer?.cancel();
