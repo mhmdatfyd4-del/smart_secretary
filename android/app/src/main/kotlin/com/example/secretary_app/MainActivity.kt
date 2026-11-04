@@ -17,12 +17,12 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val LOCK_CHANNEL = "com.example.secretary_app/lock_screen"
-    private val SETTINGS_CHANNEL = "com.example.secretary_app/settings"
-    private val ALARM_CHANNEL = "com.example.secretary_app/native_alarm"
-    private val SOUND_CHANNEL = "com.example.secretary_app/sounds"
-    private val WAKE_WORD_CHANNEL = "com.example.secretary_app/wake_word"
-    private val SHAKE_CHANNEL = "com.example.secretary_app/shake"
+    private val LOCK_CHANNEL = "com.m7md.secretary_app/lock_screen"
+    private val SETTINGS_CHANNEL = "com.m7md.secretary_app/settings"
+    private val ALARM_CHANNEL = "com.m7md.secretary_app/native_alarm"
+    private val SOUND_CHANNEL = "com.m7md.secretary_app/sounds"
+    private val WAKE_WORD_CHANNEL = "com.m7md.secretary_app/wake_word"
+    private val SHAKE_CHANNEL = "com.m7md.secretary_app/shake"
 
     private var previewPlayer: MediaPlayer? = null
     private var previewRingtone: android.media.Ringtone? = null
@@ -64,13 +64,13 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.example.secretary_app.WAKE_WORD_DETECTED"), Context.RECEIVER_NOT_EXPORTED)
-            registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.example.secretary_app.ALARM_STOPPED_BY_VOICE"), Context.RECEIVER_NOT_EXPORTED)
-            registerReceiver(shakeReceiver, android.content.IntentFilter("com.example.secretary_app.SHAKE_DETECTED"), Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.m7md.secretary_app.WAKE_WORD_DETECTED"), Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.m7md.secretary_app.ALARM_STOPPED_BY_VOICE"), Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(shakeReceiver, android.content.IntentFilter("com.m7md.secretary_app.SHAKE_DETECTED"), Context.RECEIVER_NOT_EXPORTED)
         } else {
-            registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.example.secretary_app.WAKE_WORD_DETECTED"))
-            registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.example.secretary_app.ALARM_STOPPED_BY_VOICE"))
-            registerReceiver(shakeReceiver, android.content.IntentFilter("com.example.secretary_app.SHAKE_DETECTED"))
+            registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.m7md.secretary_app.WAKE_WORD_DETECTED"))
+            registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.m7md.secretary_app.ALARM_STOPPED_BY_VOICE"))
+            registerReceiver(shakeReceiver, android.content.IntentFilter("com.m7md.secretary_app.SHAKE_DETECTED"))
         }
 
         if (intent?.getBooleanExtra("WAKE_WORD_DETECTED", false) == true) {
@@ -272,7 +272,7 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
                 "pauseWakeWord" -> {
-                    sendBroadcast(Intent("com.example.secretary_app.PAUSE_WAKE_WORD"))
+                    sendBroadcast(Intent("com.m7md.secretary_app.PAUSE_WAKE_WORD"))
                     result.success(true)
                 }
                 "resumeWakeWord" -> {
