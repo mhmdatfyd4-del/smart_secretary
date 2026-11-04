@@ -33,7 +33,7 @@ class MainActivity : FlutterActivity() {
 
     private val wakeWordReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.example.secretary_app.WAKE_WORD_DETECTED") {
+            if (intent?.action == "com.m7md.secretary_app.WAKE_WORD_DETECTED") {
                 flutterEngine?.dartExecutor?.binaryMessenger?.let {
                     MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onWakeWordDetected", null)
                 }
@@ -43,7 +43,7 @@ class MainActivity : FlutterActivity() {
 
     private val alarmStopReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.example.secretary_app.ALARM_STOPPED_BY_VOICE") {
+            if (intent?.action == "com.m7md.secretary_app.ALARM_STOPPED_BY_VOICE") {
                 flutterEngine?.dartExecutor?.binaryMessenger?.let {
                     MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onAlarmStoppedByVoice", null)
                 }
@@ -53,7 +53,7 @@ class MainActivity : FlutterActivity() {
 
     private val shakeReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.example.secretary_app.SHAKE_DETECTED") {
+            if (intent?.action == "com.m7md.secretary_app.SHAKE_DETECTED") {
                 flutterEngine?.dartExecutor?.binaryMessenger?.let {
                     MethodChannel(it, SHAKE_CHANNEL).invokeMethod("onShakeDetected", null)
                 }
