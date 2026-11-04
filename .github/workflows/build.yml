@@ -29,16 +29,13 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Generate missing Android files
-        run: flutter create . --platforms=android --org com.example --project-name secretary_app
+      # ❌ شلنا الخطوة اللي كانت بتدمر اسم الحزمة وتخليه com.example
 
-      # ⬇️ ضفنا الخطوتين دول عشان اللوجو والسبلاش يشتغلوا ⬇️
       - name: Generate Launcher Icons
         run: dart run flutter_launcher_icons
 
       - name: Generate Splash Screen
         run: dart run flutter_native_splash:create
-      # ⬆️ ⬆️
 
       - name: Update Gradle to 8.0
         run: |
