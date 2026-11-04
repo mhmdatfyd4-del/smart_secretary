@@ -265,7 +265,7 @@ class AppSettings {
     this.salatAlaNabiInterval = 'كل ساعة',
     this.customUserTitle = '',
     this.customSecTitle = '',
-    this.stopRecordMode = 'shake_and_voice',
+    this.stopRecordMode = 'manual_only',
   });
 
   double get speechRate {
@@ -1101,10 +1101,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     decoration: const InputDecoration(border: OutlineInputBorder()),
                     items: [
                       DropdownMenuItem(value: 'shake_only', child: Text('بمجرد الهز فقط')),
-                      DropdownMenuItem(value: 'shake_and_voice', child: Text('الهز ثم قول "وقف تسجيل"')),
                       DropdownMenuItem(value: 'manual_only', child: Text('باستخدام الأزرار فقط')),
                     ],
-                    onChanged: (val) => setState(() => _stopRecordMode = val ?? 'shake_and_voice'),
+                    onChanged: (val) => setState(() => _stopRecordMode = val ?? 'manual_only'),
                   ),
                 ],
               ),
@@ -1323,36 +1322,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: const Icon(Icons.restore, color: Colors.white, size: 18),
                   label: const Text('استعادة الافتراضي', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                   onPressed: () async {
-                    setState(() {
-                      _defaultReminderHour = 18;
-                      _defaultReminderMinute = 0;
-                      _voiceLevel = 'متوسط';
-                      _greetingEnabled = true;
-                      _adhanAlertEnabled = true;
-                      _showAboveLockScreen = false;
-                      _shakeMode = 'app_open';
-                      _muteBeep = true;
-                      _voiceGender = 'ذكر';
-                      _defaultInterval = 'كل 10 ثواني';
-                      _secretaryName = 'محمد';
-                      _nameController.text = 'محمد';
-                      _wakeWordMode = 'off';
-                      _wakeWordTrigger = 'both';
-                      _wakeWordController.text = 'يا سكرتير';
-                      _isKidsMode = false;
-                      _tahajjudAlertEnabled = false;
-                      _isDarkMode = false;
-                      _useOverlayAlarm = false;
-                      _ttsVolume = 1.0;
-                      _customImagePath = null;
-                      _defaultAlarmSound = null;
-                      _defaultWeeklySound = null;
-                      _defaultEventSound = null;
-                      _customGreetingController.text = 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.';
-                      _userTitleController.clear();
-                      _secTitleController.clear();
-                      _stopRecordMode = 'shake_and_voice';
-                    });
+  setState(() {
+    _defaultReminderHour = 18;
+    _defaultReminderMinute = 0;
+    _voiceLevel = 'متوسط';
+    _greetingEnabled = true;
+    _adhanAlertEnabled = true;
+    _showAboveLockScreen = false;
+    _shakeMode = 'app_open';
+    _muteBeep = true;
+    _voiceGender = 'ذكر';
+    _defaultInterval = 'كل 10 ثواني';
+    _secretaryName = 'محمد';
+    _nameController.text = 'محمد';
+    _wakeWordMode = 'off';
+    _wakeWordTrigger = 'both';
+    _wakeWordController.text = 'يا سكرتير';
+    _isKidsMode = false;
+    _tahajjudAlertEnabled = false;
+    _isDarkMode = false;
+    _useOverlayAlarm = false;
+    _ttsVolume = 1.0;
+    _customImagePath = null;
+    _defaultAlarmSound = null;
+    _defaultWeeklySound = null;
+    _defaultEventSound = null;
+    _customGreetingController.text = 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.';
+    _userTitleController.clear();
+    _secTitleController.clear();
+    
+    // 👈 4️⃣ التعديل الأول (جوه الـ setState)
+    _stopRecordMode = 'manual_only'; 
+  });
+
+  await widget.onSave(
+    18, 0, 'متوسط',
+    true, true, 1.0,
+    false, 'app_open', 'ذكر',
+    'كل 10 ثواني', 'يا سكرتير', 'off', 'both',
+    true, false,
+    false, 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.', false, false, null,
+    
+    // 👈 5️⃣ التعديل التاني (جوه widget.onSave)
+    'manual_only', 
+  );
 
                     await widget.onSave(
                       18, 0, 'متوسط',
@@ -2693,7 +2706,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     if (_settings.shakeMode == 'always') {
       try { _shakeChannel.invokeMethod('startShakeService'); } catch (_) {}
-      return;
+      return;? 
     }
 
     try { _shakeChannel.invokeMethod('stopShakeService'); } catch (_) {}
@@ -2715,18 +2728,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         final isDiaryRec = _DiaryPageState.activeInstance?._isRecordingNow ?? false;
 
         if (_isRecording || isDiaryRec) {
-          if (_settings.stopRecordMode == 'shake_only') {
-            if (_isRecording) _stopRecording();
-            if (isDiaryRec) _DiaryPageState.activeInstance!.stopRecordingByVoice();
-          } else if (_settings.stopRecordMode == 'shake_and_voice') {
-            if (!_isListening && !_starting) {
-              if (_isRecording) _stopRecording();
-              if (isDiaryRec) _DiaryPageState.activeInstance!.stopRecordingByVoice();
-              Future.delayed(const Duration(milliseconds: 500), () {
-  if (mounted && !_isListening && !_starting) {
-    _listenVoiceCommand();
+  if (_settings.stopRecordMode == 'shake_only') {
+    if (_isRecording) _stopRecording();
+    if (isDiaryRec) _DiaryPageState.activeInstance!.stopRecordingByVoice();
   }
-});
+} else {
             }
           }
         } else {
@@ -2884,7 +2890,7 @@ if (adhkarString != null) {
     _settings.salatAlaNabiInterval = prefs.getString('salat_ala_nabi_interval') ?? 'كل ساعة';
     _settings.customUserTitle = prefs.getString('custom_user_title') ?? '';
     _settings.customSecTitle = prefs.getString('custom_sec_title') ?? '';
-    _settings.stopRecordMode = prefs.getString('stop_record_mode') ?? 'shake_and_voice';
+    _settings.stopRecordMode = prefs.getString('stop_record_mode') ?? 'manual_only';
 
     Future.delayed(const Duration(seconds: 2), () {
       _scheduleSalatAlaNabi();
