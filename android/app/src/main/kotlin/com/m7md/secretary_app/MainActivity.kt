@@ -1,0 +1,368 @@
+package com.m7md.secretary_app
+
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.media.MediaPlayer
+import android.media.RingtoneManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import android.view.WindowManager
+import androidx.core.content.ContextCompat
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+
+class MainActivity : FlutterActivity() {
+    private val LOCK_CHANNEL = "com.m7md.secretary_app/lock_screen"
+    private val SETTINGS_CHANNEL = "com.m7md.secretary_app/settings"
+    private val ALARM_CHANNEL = "com.m7md.secretary_app/native_alarm"
+    private val SOUND_CHANNEL = "com.m7md.secretary_app/sounds"
+    private val WAKE_WORD_CHANNEL = "com.m7md.secretary_app/wake_word"
+    private val SHAKE_CHANNEL = "com.m7md.secretary_app/shake"
+
+    private var previewPlayer: MediaPlayer? = null
+    private var previewRingtone: android.media.Ringtone? = null
+    private var pendingWakeWord = false
+
+    // 👈 التعديل الجديد: علامة تدل على إن التطبيق اتفتح عشان منبه شغال
+    private var isAlarmTriggered = false
+
+    private val wakeWordReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.m7md.secretary_app.WAKE_WORD_DETECTED") {
+                flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                    MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onWakeWordDetected", null)
+                }
+            }
+        }
+    }
+
+    private val alarmStopReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.m7md.secretary_app.ALARM_STOPPED_BY_VOICE") {
+                flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                    MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onAlarmStoppedByVoice", null)
+                }
+            }
+        }
+    }
+
+    private val shakeReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.m7md.secretary_app.SHAKE_DETECTED") {
+                flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                    MethodChannel(it, SHAKE_CHANNEL).invokeMethod("onShakeDetected", null)
+                }
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.m7md.secretary_app.WAKE_WORD_DETECTED"), Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.m7md.secretary_app.ALARM_STOPPED_BY_VOICE"), Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(shakeReceiver, android.content.IntentFilter("com.m7md.secretary_app.SHAKE_DETECTED"), Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.m7md.secretary_app.WAKE_WORD_DETECTED"))
+            registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.m7md.secretary_app.ALARM_STOPPED_BY_VOICE"))
+            registerReceiver(shakeReceiver, android.content.IntentFilter("com.m7md.secretary_app.SHAKE_DETECTED"))
+        }
+
+        if (intent?.getBooleanExtra("WAKE_WORD_DETECTED", false) == true) {
+            pendingWakeWord = true
+        }
+
+        // 👈 التعديل الجديد: لو التطبيق اتفتح من المنبه، نور الشاشة واظهر فوق شاشة القفل
+        if (intent?.getBooleanExtra("from_alarm", false) == true) {
+            isAlarmTriggered = true
+            forceTurnScreenOn()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("WAKE_WORD_DETECTED", false)) {
+            flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onWakeWordDetected", null)
+            }
+        }
+
+        // 👈 التعديل الجديد: لو المنبه فتح التطبيق وهو شغال، نور الشاشة كمان
+        if (intent.getBooleanExtra("from_alarm", false)) {
+            isAlarmTriggered = true
+            forceTurnScreenOn()
+        }
+    }
+
+    override fun onDestroy() {
+        try { unregisterReceiver(wakeWordReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(alarmStopReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(shakeReceiver) } catch (_: Exception) {}
+        super.onDestroy()
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LOCK_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "enableShowWhenLocked" -> { enableShowWhenLocked(); result.success(true) }
+                "disableShowWhenLocked" -> { disableShowWhenLocked(); result.success(true) }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SETTINGS_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "openFullScreenIntentSettings" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
+                            intent.data = Uri.parse("package:$packageName")
+                            startActivity(intent)
+                        } else {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                            intent.data = Uri.parse("package:$packageName")
+                            startActivity(intent)
+                        }
+                        result.success(true)
+                    } catch (e: Exception) { result.success(false) }
+                }
+                "isFullScreenIntentAllowed" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+                            result.success(nm.canUseFullScreenIntent())
+                        } else { result.success(true) }
+                    } catch (e: Exception) { result.success(true) }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ALARM_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "scheduleAlarm" -> {
+                    val id = call.argument<Int>("id") ?: 0
+                    val title = call.argument<String>("title") ?: ""
+                    val timestamp = call.argument<Long>("timestamp") ?: 0L
+                    val prefix = call.argument<String>("prefix") ?: AlarmService.DEFAULT_PREFIX
+                    val soundUri = call.argument<String>("soundUri")
+                    val showOnScreen = call.argument<Boolean>("showOnScreen") ?: true
+                    val interval = call.argument<Int>("interval") ?: 0 
+                    scheduleAlarm(id, title, timestamp, prefix, soundUri, showOnScreen, interval)
+                    result.success(true)
+                }
+                "cancelAlarm" -> {
+                    val id = call.argument<Int>("id") ?: 0
+                    cancelAlarm(id)
+                    result.success(true)
+                }
+                "stopAlarmService" -> {
+                    try {
+                        val intent = Intent(this, AlarmService::class.java)
+                        stopService(intent)
+                    } catch (_: Exception) {}
+                    // 👈 التعديل الجديد: لما المنبه يتقفل، رجّع السلوك الطبيعي حسب الإعداد
+                    isAlarmTriggered = false
+                    try {
+                        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                        if (prefs.getBoolean("flutter.show_above_lock_screen", false)) {
+                            enableShowWhenLocked()
+                        } else {
+                            disableShowWhenLocked()
+                        }
+                    } catch (_: Exception) {}
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SOUND_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getAvailableSounds" -> {
+                    val sounds = mutableListOf<Map<String, String>>()
+                    val customSounds = listOf(
+                        "alarm_scary1" to "😱 مرعب 1", "alarm_scary2" to "👻 مرعب 2",
+                        "alarm_iphone" to "📱 iPhone", "alarm_famous1" to "⭐ مشهور 1",
+                        "alarm_famous2" to "⭐ مشهور 2", "alarm_loud1" to "🔊 صحيان قوي 1",
+                        "alarm_loud2" to "🔊 صحيان قوي 2"
+                    )
+                    for ((fileName, displayName) in customSounds) {
+                        try {
+                            val resId = resources.getIdentifier(fileName, "raw", packageName)
+                            if (resId != 0) {
+                                val mp = MediaPlayer.create(this, resId)
+                                val duration = mp?.duration ?: 5000
+                                mp?.release()
+                                sounds.add(mapOf("title" to displayName, "uri" to "raw://$fileName", "duration" to duration.toString()))
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    
+                    val types = listOf(
+                        RingtoneManager.TYPE_ALARM to "منبه", 
+                        RingtoneManager.TYPE_NOTIFICATION to "إشعار", 
+                        RingtoneManager.TYPE_RINGTONE to "رنين"
+                    )
+                    for ((type, prefix) in types) {
+                        try {
+                            val manager = RingtoneManager(this)
+                            manager.setType(type)
+                            val cursor = manager.cursor
+                            while (cursor.moveToNext()) {
+                                val title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX)
+                                val uri = cursor.getString(RingtoneManager.URI_COLUMN_INDEX)
+                                val id = cursor.getString(RingtoneManager.ID_COLUMN_INDEX)
+                                sounds.add(mapOf("title" to "$prefix: $title", "uri" to "$uri/$id", "duration" to "0"))
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    
+                    result.success(sounds)
+                }
+                "previewSound" -> {
+                    val uriStr = call.argument<String>("uri") ?: ""
+                    try {
+                        previewPlayer?.release(); previewPlayer = null
+                        previewRingtone?.stop(); previewRingtone = null
+                        if (uriStr.startsWith("raw://")) {
+                            val fileName = uriStr.replace("raw://", "")
+                            val resId = resources.getIdentifier(fileName, "raw", packageName)
+                            if (resId != 0) {
+                                previewPlayer = MediaPlayer.create(this, resId)
+                                previewPlayer?.start()
+                                previewPlayer?.setOnCompletionListener { it.release(); previewPlayer = null }
+                            }
+                        } else {
+                            previewRingtone = RingtoneManager.getRingtone(this, Uri.parse(uriStr))
+                            previewRingtone?.play()
+                        }
+                    } catch (_: Exception) {}
+                    result.success(true)
+                }
+                "stopPreview" -> {
+                    try {
+                        previewPlayer?.stop(); previewPlayer?.release(); previewPlayer = null
+                        previewRingtone?.stop(); previewRingtone = null
+                    } catch (_: Exception) {}
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WAKE_WORD_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startWakeWord" -> {
+                    val intent = Intent(this, WakeWordService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+                    result.success(true)
+                }
+                "stopWakeWord" -> {
+                    val intent = Intent(this, WakeWordService::class.java)
+                    stopService(intent)
+                    result.success(true)
+                }
+                "pauseWakeWord" -> {
+                    sendBroadcast(Intent("com.m7md.secretary_app.PAUSE_WAKE_WORD"))
+                    result.success(true)
+                }
+                "resumeWakeWord" -> {
+                    val intent = Intent(this, WakeWordService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+                    result.success(true)
+                }
+                "isWakeWordPending" -> {
+                    result.success(pendingWakeWord)
+                    pendingWakeWord = false
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SHAKE_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startShakeService" -> {
+                    val intent = Intent(this, ShakeService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+                    result.success(true)
+                }
+                "stopShakeService" -> {
+                    val intent = Intent(this, ShakeService::class.java)
+                    stopService(intent)
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun scheduleAlarm(id: Int, title: String, timestamp: Long, prefix: String, soundUri: String?, showOnScreen: Boolean, interval: Int) {
+        val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+        val receiverIntent = Intent(this, AlarmReceiver::class.java).apply {
+            putExtra("title", title)
+            putExtra("prefix", prefix)
+            putExtra("soundUri", soundUri)
+            putExtra("showOnScreen", showOnScreen)
+            putExtra("interval", interval)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, id, receiverIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarmClockInfo = AlarmManager.AlarmClockInfo(timestamp, pendingIntent)
+        alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
+    }
+
+    private fun cancelAlarm(id: Int) {
+        val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+        val receiverIntent = Intent(this, AlarmReceiver::class.java)
+        val receiverPI = PendingIntent.getBroadcast(this, id, receiverIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        alarmManager.cancel(receiverPI)
+    }
+
+    // 👈 التعديل: enableShowWhenLocked بقت بتعمل ShowWhenLocked فقط (بدون TurnScreenOn)
+    private fun enableShowWhenLocked() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+        }
+    }
+
+    // 👈 التعديل: disableShowWhenLocked بتتخطى لو إحنا في وضع منبه
+    private fun disableShowWhenLocked() {
+        if (isAlarmTriggered) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(false)
+        } else {
+            @Suppress("DEPRECATION")
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+        }
+    }
+
+    // 👈 دالة جديدة: بتتنادى لما المنبه يفتح التطبيق - بتنور الشاشة وتخلي التطبيق فوق شاشة القفل
+    private fun forceTurnScreenOn() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true)
+                setTurnScreenOn(true)
+            } else {
+                @Suppress("DEPRECATION")
+                window.addFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                )
+            }
+        } catch (_: Exception) {}
+    }
+}
