@@ -32,12 +32,12 @@ final StreamController<String> _notificationActionController = StreamController<
 
 const List<String> _weekDays = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
 
-const MethodChannel _lockScreenChannel = MethodChannel('com.example.secretary_app/lock_screen');
-const MethodChannel _settingsChannel = MethodChannel('com.example.secretary_app/settings');
-const MethodChannel _nativeAlarmChannel = MethodChannel('com.example.secretary_app/native_alarm');
-const MethodChannel _soundChannel = MethodChannel('com.example.secretary_app/sounds');
-const MethodChannel _wakeWordChannel = MethodChannel('com.example.secretary_app/wake_word');
-const MethodChannel _shakeChannel = MethodChannel('com.example.secretary_app/shake');
+const MethodChannel _lockScreenChannel = MethodChannel('com.m7md.secretary_app/lock_screen');
+const MethodChannel _settingsChannel = MethodChannel('com.m7md.secretary_app/settings');
+const MethodChannel _nativeAlarmChannel = MethodChannel('com.m7md.secretary_app/native_alarm');
+const MethodChannel _soundChannel = MethodChannel('com.m7md.secretary_app/sounds');
+const MethodChannel _wakeWordChannel = MethodChannel('com.m7md.secretary_app/wake_word');
+const MethodChannel _shakeChannel = MethodChannel('com.m7md.secretary_app/shake');
 
 const Map<String, String> _maleNamesMap = {
   'محمد': 'assets/mohamed.png',
