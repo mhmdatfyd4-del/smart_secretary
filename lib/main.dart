@@ -2292,18 +2292,22 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     });
 
     _notificationActionController.stream.listen((action) {
-      if (action == 'cancel' && _isAlarmDialogOpen) {
-        _activeAlarmLoopTimer?.cancel();
-        _alarmVoiceSafetyTimer?.cancel(); // 👈 التعديل
-        _tts.stop();
-        WakelockPlus.disable();
-        _isAlarmDialogOpen = false;
-        _activeAlarmTitle = null;
-        if (_alarmDialogContext != null) {
-          Navigator.of(_alarmDialogContext!).pop();
-          _alarmDialogContext = null;
-        }
-        _cancelNativeAlarm(_activeAlarmTitle ?? '');
+      if (action == 'cancel') { 
+  _activeAlarmLoopTimer?.cancel();
+  _alarmVoiceSafetyTimer?.cancel();
+  _tts.stop();
+  try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
+  WakelockPlus.disable();
+  _isAlarmDialogOpen = false;
+  _activeAlarmTitle = null;
+  if (_alarmDialogContext != null) {
+    try { Navigator.of(_alarmDialogContext!).pop(); } catch (_) {}
+    _alarmDialogContext = null;
+  }
+  _speech.stop();
+  if (mounted) setState(() => _isListening = false);
+  
+  _cancelNativeAlarm(_activeAlarmTitle ?? '');
       }
       // 👈 التعديل رقم 9: التعامل مع إجراء إيقاف التسجيل من الإشعار
       if (action == 'stop_recording') {
@@ -5676,6 +5680,10 @@ if (isWritingToDiary) {
     DateTime scheduled,
     String? soundUri,
   ) {
+    // 👈 لو المنبه ده كان من زمان (أكتر من دقيقتين)، متفتحوش تاني
+if (scheduled.isBefore(DateTime.now().subtract(const Duration(minutes: 2)))) {
+  return;
+}
     // 👈 منع تكرار شاشة المنبه لو اتضربت مرتين في نفس اللحظة
     if (_isAlarmDialogOpen) {
       if (_activeAlarmTaskTitle == taskTitle) {
@@ -5693,13 +5701,15 @@ if (isWritingToDiary) {
       try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
     }
 
-    try { _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
-    try { _nativeAlarmChannel.invokeMethod('cancelAlarm', {'id': taskTitle.hashCode + 5000}); } catch (_) {}
-    try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
-
     final userTitle = _userTitle;
-    final hasCustomSound = soundUri != null && soundUri.isNotEmpty && soundUri != 'default';
+final hasCustomSound = soundUri != null && soundUri.isNotEmpty && soundUri != 'default';
 
+// 👈 لو مفيش نغمة مخصصة، نقفل الكوتلن عشان الفلاتر تتكلم. لو في نغمة مخصصة، نسيب الكوتلن شغال.
+if (!hasCustomSound) {
+  try { _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
+  try { _nativeAlarmChannel.invokeMethod('cancelAlarm', {'id': taskTitle.hashCode + 5000}); } catch (_) {}
+}
+try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
     WakelockPlus.enable();
     HapticFeedback.vibrate();
 
