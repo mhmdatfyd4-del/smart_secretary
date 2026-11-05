@@ -2299,15 +2299,21 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
   WakelockPlus.disable();
   _isAlarmDialogOpen = false;
+  
+  final stoppedTitle = _activeAlarmTitle;
   _activeAlarmTitle = null;
+
   if (_alarmDialogContext != null) {
     try { Navigator.of(_alarmDialogContext!).pop(); } catch (_) {}
     _alarmDialogContext = null;
   }
+  
   _speech.stop();
   if (mounted) setState(() => _isListening = false);
   
-  _cancelNativeAlarm(_activeAlarmTitle ?? '');
+  if (stoppedTitle != null) {
+    _cancelNativeAlarm(stoppedTitle);
+  }
       }
       // 👈 التعديل رقم 9: التعامل مع إجراء إيقاف التسجيل من الإشعار
       if (action == 'stop_recording') {
