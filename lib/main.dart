@@ -2292,14 +2292,14 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     });
 
     _notificationActionController.stream.listen((action) {
-      if (action == 'cancel') { 
+      if (action == 'cancel') {
   _activeAlarmLoopTimer?.cancel();
   _alarmVoiceSafetyTimer?.cancel();
   _tts.stop();
   try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
   WakelockPlus.disable();
   _isAlarmDialogOpen = false;
-  
+
   final stoppedTitle = _activeAlarmTitle;
   _activeAlarmTitle = null;
 
@@ -2307,12 +2307,31 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     try { Navigator.of(_alarmDialogContext!).pop(); } catch (_) {}
     _alarmDialogContext = null;
   }
-  
+
+  // 👈 إيقاف المايك والـ Wake word فوراً
   _speech.stop();
   if (mounted) setState(() => _isListening = false);
-  
+  try { _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
+
   if (stoppedTitle != null) {
+    // إلغاء المنبه من الكوتلن (Native)
     _cancelNativeAlarm(stoppedTitle);
+
+    // إلغاء الإشعار من شريط الإشعارات
+    try { _notifications.cancel(stoppedTitle.hashCode + 1000); } catch (_) {}
+
+    // 👈 أهم سطر: مسح علامة المنبه المعلق عشان ميفتحش لما ندخل التطبيق
+    SharedPreferences.getInstance().then((prefs) => prefs.remove('pending_alarm'));
+
+    // 👈 مسح المهمة من قائمة مهام التطبيق (لو كانت مرة واحدة)
+    final idx = _tasks.indexWhere((t) => t['task'] == stoppedTitle);
+    if (idx != -1) {
+      final task = _tasks[idx];
+      if (task['repeat'] == 'مرة واحدة' || task['repeat'] == null) {
+        setState(() => _tasks.removeAt(idx));
+        _saveData();
+      }
+    }
   }
       }
       // 👈 التعديل رقم 9: التعامل مع إجراء إيقاف التسجيل من الإشعار
@@ -5086,15 +5105,53 @@ if (isWritingToDiary) {
   }
 
   String? _parseSoundFromVoice(String cmd) {
-    if (_hasAny(cmd, ['صوت السكرتير', 'صوت السكرتيرة', 'الافتراضي', 'صوت عادي', 'من غير نغمة', 'صوتك'])) return 'secretary';
-    if (_hasAny(cmd, ['مرعب 1', 'مرعب واحد', 'رعب 1'])) return 'raw://alarm_scary1';
-    if (_hasAny(cmd, ['مرعب 2', 'مرعب اتنين', 'رعب 2'])) return 'raw://alarm_scary2';
-    if (_hasAny(cmd, ['ايفون', 'آيفون', 'iphone'])) return 'raw://alarm_iphone';
-    if (_hasAny(cmd, ['مشهور 1', 'مشهور واحد'])) return 'raw://alarm_famous1';
-    if (_hasAny(cmd, ['مشهور 2', 'مشهور اتنين'])) return 'raw://alarm_famous2';
-    if (_hasAny(cmd, ['صحيان قوي 1', 'صحيان قوي واحد', 'قوي 1', 'الصحيان القوي 1', 'الصحيان القوي واحد'])) return 'raw://alarm_loud1';
-    if (_hasAny(cmd, ['صحيان قوي 2', 'صحيان قوي اتنين', 'قوي 2', 'الصحيان القوي 2', 'الصحيان القوي اتنين'])) return 'raw://alarm_loud2';
-    return 'use_default';
+  // 👈 1. صوت السكرتير (الافتراضي)
+  if (_hasAny(cmd, [
+    'صوت السكرتير', 'صوت السكرتيرة', 'الافتراضي', 'صوت عادي', 'من غير نغمة', 
+    'صوتك', 'بدون نغمة', 'بدون صوت', 'عادي', 'صوت طبيعي', 'مفيش نغمة', 
+    'واقف', 'اسكت', 'صامت'
+  ])) return 'secretary';
+
+  // 👈 2. مرعب 1
+  if (_hasAny(cmd, [
+    'مرعب 1', 'مرعب واحد', 'رعب 1', 'رعب واحد', 'مرعب', 'رعب', 'مخيف 1', 'مخيف واحد', 'خوف 1'
+  ])) return 'raw://alarm_scary1';
+
+  // 👈 3. مرعب 2
+  if (_hasAny(cmd, [
+    'مرعب 2', 'مرعب اتنين', 'رعب 2', 'رعب اتنين', 'مخيف 2', 'مخيف اتنين', 'خوف 2', 'خوف اتنين'
+  ])) return 'raw://alarm_scary2';
+
+  // 👈 4. آيفون
+  if (_hasAny(cmd, [
+    'ايفون', 'آيفون', 'iphone', 'ايفون 1', 'آيفون 1', 'ايفون 2', 'آيفون 2', 
+    'نغمة ايفون', 'رنة ايفون', 'صوت ايفون', 'تفاحة'
+  ])) return 'raw://alarm_iphone';
+
+  // 👈 5. مشهور 1
+  if (_hasAny(cmd, [
+    'مشهور 1', 'مشهور واحد', 'مشهور', 'مشهورة 1', 'معروف 1', 'مشهور اوي 1'
+  ])) return 'raw://alarm_famous1';
+
+  // 👈 6. مشهور 2
+  if (_hasAny(cmd, [
+    'مشهور 2', 'مشهور اتنين', 'مشهورة 2', 'معروف 2', 'مشهور اوي 2'
+  ])) return 'raw://alarm_famous2';
+
+  // 👈 7. صحيان قوي 1 (نغمة الاستيقاظ)
+  if (_hasAny(cmd, [
+    'صحيان قوي 1', 'صحيان قوي واحد', 'قوي 1', 'الصحيان القوي 1', 'الصحيان القوي واحد',
+    'صحيان 1', 'صحيان واحد', 'عالي 1', 'عالي واحد', 'صوت عالي 1', 'مزعج 1', 'الصحيان', 'صحيان', 'عالي',
+    'نغمة الاستيقاظ', 'نغمة استيقاظ', 'استيقاظ', 'صوت الاستيقاظ', 'منبه الاستيقاظ', 'نغمة الصحوة'
+  ])) return 'raw://alarm_loud1';
+
+  // 👈 8. صحيان قوي 2
+  if (_hasAny(cmd, [
+    'صحيان قوي 2', 'صحيان قوي اتنين', 'قوي 2', 'الصحيان القوي 2', 'الصحيان القوي اتنين',
+    'صحيان 2', 'صحيان اتنين', 'عالي 2', 'عالي اتنين', 'صوت عالي 2', 'مزعج 2'
+  ])) return 'raw://alarm_loud2';
+
+  return 'use_default';
   }
 
   String _getSoundName(String? uri) {
