@@ -1,4 +1,4 @@
-package com.example.secretary_app
+package com.m7md.secretary_app
 
 import android.content.BroadcastReceiver
 import android.content.Context
