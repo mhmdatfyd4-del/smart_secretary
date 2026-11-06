@@ -28,7 +28,6 @@ class MainActivity : FlutterActivity() {
     private var previewRingtone: android.media.Ringtone? = null
     private var pendingWakeWord = false
 
-    // 👈 التعديل الجديد: علامة تدل على إن التطبيق اتفتح عشان منبه شغال
     private var isAlarmTriggered = false
 
     private val wakeWordReceiver = object : android.content.BroadcastReceiver() {
@@ -51,6 +50,17 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // 👈 جديد: استقبال إشارة إلغاء المنبه من الإشعار
+    private val alarmStoppedByNotificationReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.m7md.secretary_app.ALARM_STOPPED_BY_NOTIFICATION") {
+                flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                    MethodChannel(it, WAKE_WORD_CHANNEL).invokeMethod("onAlarmStoppedByNotification", null)
+                }
+            }
+        }
+    }
+
     private val shakeReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.m7md.secretary_app.SHAKE_DETECTED") {
@@ -66,10 +76,12 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.m7md.secretary_app.WAKE_WORD_DETECTED"), Context.RECEIVER_NOT_EXPORTED)
             registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.m7md.secretary_app.ALARM_STOPPED_BY_VOICE"), Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(alarmStoppedByNotificationReceiver, android.content.IntentFilter("com.m7md.secretary_app.ALARM_STOPPED_BY_NOTIFICATION"), Context.RECEIVER_NOT_EXPORTED)
             registerReceiver(shakeReceiver, android.content.IntentFilter("com.m7md.secretary_app.SHAKE_DETECTED"), Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(wakeWordReceiver, android.content.IntentFilter("com.m7md.secretary_app.WAKE_WORD_DETECTED"))
             registerReceiver(alarmStopReceiver, android.content.IntentFilter("com.m7md.secretary_app.ALARM_STOPPED_BY_VOICE"))
+            registerReceiver(alarmStoppedByNotificationReceiver, android.content.IntentFilter("com.m7md.secretary_app.ALARM_STOPPED_BY_NOTIFICATION"))
             registerReceiver(shakeReceiver, android.content.IntentFilter("com.m7md.secretary_app.SHAKE_DETECTED"))
         }
 
@@ -77,7 +89,6 @@ class MainActivity : FlutterActivity() {
             pendingWakeWord = true
         }
 
-        // 👈 التعديل الجديد: لو التطبيق اتفتح من المنبه، نور الشاشة واظهر فوق شاشة القفل
         if (intent?.getBooleanExtra("from_alarm", false) == true) {
             isAlarmTriggered = true
             forceTurnScreenOn()
@@ -93,7 +104,6 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // 👈 التعديل الجديد: لو المنبه فتح التطبيق وهو شغال، نور الشاشة كمان
         if (intent.getBooleanExtra("from_alarm", false)) {
             isAlarmTriggered = true
             forceTurnScreenOn()
@@ -103,6 +113,7 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         try { unregisterReceiver(wakeWordReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(alarmStopReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(alarmStoppedByNotificationReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(shakeReceiver) } catch (_: Exception) {}
         super.onDestroy()
     }
@@ -169,7 +180,6 @@ class MainActivity : FlutterActivity() {
                         val intent = Intent(this, AlarmService::class.java)
                         stopService(intent)
                     } catch (_: Exception) {}
-                    // 👈 التعديل الجديد: لما المنبه يتقفل، رجّع السلوك الطبيعي حسب الإعداد
                     isAlarmTriggered = false
                     try {
                         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
@@ -330,7 +340,6 @@ class MainActivity : FlutterActivity() {
         alarmManager.cancel(receiverPI)
     }
 
-    // 👈 التعديل: enableShowWhenLocked بقت بتعمل ShowWhenLocked فقط (بدون TurnScreenOn)
     private fun enableShowWhenLocked() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
@@ -340,7 +349,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // 👈 التعديل: disableShowWhenLocked بتتخطى لو إحنا في وضع منبه
     private fun disableShowWhenLocked() {
         if (isAlarmTriggered) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -351,7 +359,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // 👈 دالة جديدة: بتتنادى لما المنبه يفتح التطبيق - بتنور الشاشة وتخلي التطبيق فوق شاشة القفل
     private fun forceTurnScreenOn() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
