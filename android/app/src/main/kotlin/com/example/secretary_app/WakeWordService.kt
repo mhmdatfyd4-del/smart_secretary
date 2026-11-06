@@ -87,6 +87,13 @@ class WakeWordService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         listenMode = prefs.getString("flutter.wake_word_mode", "always") ?: "always"
+        
+        // 👈 التعديل الأساسي: لو متوقف بسبب منبه، مش هيشتغل
+        val pausedByAlarm = prefs.getBoolean("flutter.wake_word_paused_by_alarm", false)
+        if (pausedByAlarm) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         if (isPaused) {
             isPaused = false
@@ -102,8 +109,10 @@ class WakeWordService : Service() {
         
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         val mode = prefs.getString("flutter.wake_word_mode", "off") ?: "off"
+        val pausedByAlarm = prefs.getBoolean("flutter.wake_word_paused_by_alarm", false)
         
-        if (mode != "always") {
+        // 👈 التعديل الأساسي: لو متوقف بسبب منبه، متشغلوش تاني
+        if (mode != "always" || pausedByAlarm) {
             stopSelf()
         } else {
             val restartIntent = Intent(applicationContext, WakeWordService::class.java)
@@ -164,7 +173,6 @@ class WakeWordService : Service() {
     fun startListening() {
         if (listenMode == "off" || isPaused) return
         
-        // 👈 تجديد الـ WakeLock عشان المايك ميفصلش
         if (wakeLock?.isHeld == false) {
             wakeLock?.acquire(10 * 60 * 1000L)
         }
@@ -214,7 +222,6 @@ class WakeWordService : Service() {
                         val original = audioManager.getStreamVolume(stream)
                         mutedStreams[stream] = original
                         
-                        // 👈 شبكة الأمان: حفظ الصوت الأصلي في الذاكرة
                         when (stream) {
                             AudioManager.STREAM_SYSTEM -> editor.putInt("flutter.muted_sys_vol", original)
                             AudioManager.STREAM_NOTIFICATION -> editor.putInt("flutter.muted_notif_vol", original)
