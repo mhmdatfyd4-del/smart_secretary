@@ -38,7 +38,6 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     
     private val repeatRunnable = object : Runnable {
         override fun run() {
-            // تجديد الـ WakeLock عشان المنبه ميفصلش
             if (wakeLock?.isHeld == false) {
                 wakeLock?.acquire(60 * 1000L)
             }
@@ -79,11 +78,26 @@ class AlarmService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 👈 التعديل الأساسي: لما "إلغاء" يتضغط من الإشعار
         if (intent?.action == ACTION_CANCEL) {
             try {
                 val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
                 prefs.edit().remove("flutter.pending_alarm").apply()
+                // 👈 علم إن المايك متوقف بسبب إلغاء المنبه
+                prefs.edit().putBoolean("flutter.wake_word_paused_by_alarm", true).apply()
             } catch (_: Exception) {}
+            
+            // 👈 إيقاف الـ WakeWordService مباشرة (ده الحل الأساسي للمشكلة)
+            try {
+                val wakeIntent = Intent(this, WakeWordService::class.java)
+                stopService(wakeIntent)
+            } catch (_: Exception) {}
+            
+            // 👈 إرسال broadcast لـ Flutter عشان يقفل الـ dialog والمايك
+            try {
+                sendBroadcast(Intent("com.m7md.secretary_app.ALARM_STOPPED_BY_NOTIFICATION"))
+            } catch (_: Exception) {}
+            
             stopAlarmAndSelf()
             return START_NOT_STICKY
         }
