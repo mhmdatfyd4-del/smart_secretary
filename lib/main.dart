@@ -2311,7 +2311,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   // 👈 إيقاف المايك والـ Wake word فوراً
   _speech.stop();
   if (mounted) setState(() => _isListening = false);
-  try { _wakeWordChannel.invokeMethod('pauseWakeWord'); } catch (_) {}
+  try { _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
+_isWakeWordListening = false;
 
   if (stoppedTitle != null) {
     // إلغاء المنبه من الكوتلن (Native)
