@@ -173,6 +173,7 @@ class MainActivity : FlutterActivity() {
                     isAlarmTriggered = false
                     try {
                         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                        prefs.edit().remove("flutter.pending_alarm").apply()
                         if (prefs.getBoolean("flutter.show_above_lock_screen", false)) {
                             enableShowWhenLocked()
                         } else {
