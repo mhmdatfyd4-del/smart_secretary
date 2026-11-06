@@ -2259,25 +2259,50 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _isUserMale = widget.isUserMale;
 
     _wakeWordChannel.setMethodCallHandler((call) async {
-      if (call.method == 'onWakeWordDetected') {
-        if (mounted) {
-          setState(() => _isListening = false);
-          _listenVoiceCommand();
-        }
-      } else if (call.method == 'onAlarmStoppedByVoice') {
-        if (_isAlarmDialogOpen) {
-          _activeAlarmLoopTimer?.cancel();
-          _alarmVoiceSafetyTimer?.cancel(); 
-          _tts.stop();
-          WakelockPlus.disable();
-          _isAlarmDialogOpen = false;
-          if (_alarmDialogContext != null) {
-            Navigator.of(_alarmDialogContext!).pop();
-            _alarmDialogContext = null;
-          }
-        }
+  if (call.method == 'onWakeWordDetected') {
+    if (mounted) {
+      setState(() => _isListening = false);
+      _listenVoiceCommand();
+    }
+  } else if (call.method == 'onAlarmStoppedByVoice') {
+    if (_isAlarmDialogOpen) {
+      _activeAlarmLoopTimer?.cancel();
+      _alarmVoiceSafetyTimer?.cancel(); 
+      _tts.stop();
+      WakelockPlus.disable();
+      _isAlarmDialogOpen = false;
+      if (_alarmDialogContext != null) {
+        Navigator.of(_alarmDialogContext!).pop();
+        _alarmDialogContext = null;
       }
+    }
+  } else if (call.method == 'onAlarmStoppedByNotification') {
+    if (_isAlarmDialogOpen) {
+      _activeAlarmLoopTimer?.cancel();
+      _alarmVoiceSafetyTimer?.cancel();
+      _alarmVoiceSafetyTimer = null;
+      _tts.stop();
+      try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
+      WakelockPlus.disable();
+      _isAlarmDialogOpen = false;
+      _activeAlarmTitle = null;
+      if (_alarmDialogContext != null) {
+        try { Navigator.of(_alarmDialogContext!).pop(); } catch (_) {}
+        _alarmDialogContext = null;
+      }
+    }
+    try { await _speech.cancel(); } catch (_) {}
+    if (mounted) setState(() => _isListening = false);
+    _isWakeWordListening = false;
+    _ignoreNextWakeWordStart = true;
+    Future.delayed(const Duration(seconds: 15), () {
+      _ignoreNextWakeWordStart = false;
     });
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.remove('pending_alarm');
+    });
+  }
+});
 
     _shakeChannel.setMethodCallHandler((call) async {
       if (call.method == 'onShakeDetected') {
@@ -2355,6 +2380,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       _isInBackground = false;
+      SharedPreferences.getInstance().then((prefs) {
+  prefs.remove('wake_word_paused_by_alarm');
+});
       Future.delayed(const Duration(milliseconds: 500), _checkPendingAlarm);
       Future.delayed(const Duration(seconds: 2), _checkPendingEventAnnouncements);
       Future.delayed(const Duration(seconds: 1), () => _checkAdhanTime(forceCheck: true));
@@ -6018,7 +6046,7 @@ if (isWritingToDiary) {
     }));
   }
 
-  void _startAlarmLoop(
+    void _startAlarmLoop(
     String taskTitle,
     String repeat,
     String interval,
@@ -6026,6 +6054,9 @@ if (isWritingToDiary) {
     DateTime scheduled,
     String? soundUri,
   ) {
+    _ignoreNextWakeWordStart = false; // 👈 السطر الجديد اللي هتضيفه (كوبي بيست)
+    
+    // 👈 لو المنبه ده كان من زمان (أكتر من دقيقتين)، متفتحوش تاني
 if (scheduled.isBefore(DateTime.now().subtract(const Duration(minutes: 2)))) {
   return;
 }
