@@ -5963,6 +5963,7 @@ try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
         timer.cancel();
         return;
       }
+      if (_isInBackground) return;
       if (!_isListening && !_starting && !_isRecording) {
         _listenVoiceCommand();
       }
