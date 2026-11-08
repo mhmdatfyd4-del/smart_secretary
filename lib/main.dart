@@ -1,3 +1,8 @@
+// ══════════════════════════════════════════════════════
+// PART 1 / 8
+// Imports + Globals + Helpers + main() + AppSettings
+// ══════════════════════════════════════════════════════
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -284,6 +289,15 @@ class AppSettings {
     }
   }
 }
+
+// ══════════════════════════════════════════════════════
+// نهاية PART 1 / 8
+// ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
+// PART 2 / 8
+// SettingsScreen + SecretaryApp + Splash + AnimatedDots
+// + TermsAndPermissionsScreen + SetupSecretaryScreen
+// ══════════════════════════════════════════════════════
 
 class SettingsScreen extends StatefulWidget {
   final AppSettings settings;
@@ -635,7 +649,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-                    const SizedBox(height: 12),
+          const SizedBox(height: 12),
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1350,7 +1364,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _customGreetingController.text = 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.';
                       _userTitleController.clear();
                       _secTitleController.clear();
-                      _stopRecordMode = 'manual_only'; 
+                      _stopRecordMode = 'manual_only';
                     });
 
                     await widget.onSave(
@@ -1360,7 +1374,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'كل 10 ثواني', 'يا سكرتير', 'off', 'both',
                       true, false,
                       false, 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.', false, false, null,
-                      'manual_only', 
+                      'manual_only',
                     );
 
                     await widget.onSaveSecretary('محمد', 'ذكر');
@@ -1387,6 +1401,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
+
+// ══════════════════════════════════════════════════════
+// SecretaryApp + Splash + AnimatedDots
+// ══════════════════════════════════════════════════════
+
 class SecretaryApp extends StatefulWidget {
   final bool isFirstTime;
   final String? savedName;
@@ -1948,6 +1967,17 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
     );
   }
 }
+
+// ══════════════════════════════════════════════════════
+// نهاية PART 2 / 8
+// ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
+// PART 3 / 8
+// SoundPickerDialog + MainDashboard (State + Fields + initState
+// + Lifecycle + _initAll + PendingAlarm + PendingEvent
+// + Adhan Scheduling + Speech Init + Shake + AdhanWatcher)
+// ══════════════════════════════════════════════════════
+
 class SoundPickerDialog extends StatefulWidget {
   final String? currentUri;
   final String voiceGender;
@@ -2121,8 +2151,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   BuildContext? _alarmDialogContext;
 
   Timer? _activeAlarmLoopTimer;
-  Timer? _alarmVoiceSafetyTimer; 
-  
+  Timer? _alarmVoiceSafetyTimer;
+
   String? _activeAlarmTaskTitle;
   DateTime? _activeAlarmScheduledTime;
   String? _activeAlarmRepeat;
@@ -2139,7 +2169,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   late bool _isUserMale;
 
   bool _isInBackground = false;
-  bool _ignoreNextWakeWordStart = false; // 👈 التعديل: حاجز الأمان للميك
+  bool _ignoreNextWakeWordStart = false;
   int _tasbeehCount = 0;
   bool _isTasbeehMode = false;
   String _prayerSubView = 'times';
@@ -2199,8 +2229,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     {'key': 'astaghfirullah', 'text': 'أستغفر الله'},
     {'key': 'salah_ala_nabi', 'text': 'اللهم صل على سيدنا محمد'},
     {'key': 'alhamdulillah', 'text': 'الحمد لله'},
-{'key': 'allahu_akbar', 'text': 'الله أكبر'},
-{'key': 'la_ilaha_illallah', 'text': 'لا إله إلا الله'},
+    {'key': 'allahu_akbar', 'text': 'الله أكبر'},
+    {'key': 'la_ilaha_illallah', 'text': 'لا إله إلا الله'},
   ];
 
   static const List<Map<String, dynamic>> _morningAdhkarList = [
@@ -2259,50 +2289,50 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _isUserMale = widget.isUserMale;
 
     _wakeWordChannel.setMethodCallHandler((call) async {
-  if (call.method == 'onWakeWordDetected') {
-    if (mounted) {
-      setState(() => _isListening = false);
-      _listenVoiceCommand();
-    }
-  } else if (call.method == 'onAlarmStoppedByVoice') {
-    if (_isAlarmDialogOpen) {
-      _activeAlarmLoopTimer?.cancel();
-      _alarmVoiceSafetyTimer?.cancel(); 
-      _tts.stop();
-      WakelockPlus.disable();
-      _isAlarmDialogOpen = false;
-      if (_alarmDialogContext != null) {
-        Navigator.of(_alarmDialogContext!).pop();
-        _alarmDialogContext = null;
+      if (call.method == 'onWakeWordDetected') {
+        if (mounted) {
+          setState(() => _isListening = false);
+          _listenVoiceCommand();
+        }
+      } else if (call.method == 'onAlarmStoppedByVoice') {
+        if (_isAlarmDialogOpen) {
+          _activeAlarmLoopTimer?.cancel();
+          _alarmVoiceSafetyTimer?.cancel();
+          _tts.stop();
+          WakelockPlus.disable();
+          _isAlarmDialogOpen = false;
+          if (_alarmDialogContext != null) {
+            Navigator.of(_alarmDialogContext!).pop();
+            _alarmDialogContext = null;
+          }
+        }
+      } else if (call.method == 'onAlarmStoppedByNotification') {
+        if (_isAlarmDialogOpen) {
+          _activeAlarmLoopTimer?.cancel();
+          _alarmVoiceSafetyTimer?.cancel();
+          _alarmVoiceSafetyTimer = null;
+          _tts.stop();
+          try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
+          WakelockPlus.disable();
+          _isAlarmDialogOpen = false;
+          _activeAlarmTitle = null;
+          if (_alarmDialogContext != null) {
+            try { Navigator.of(_alarmDialogContext!).pop(); } catch (_) {}
+            _alarmDialogContext = null;
+          }
+        }
+        try { await _speech.cancel(); } catch (_) {}
+        if (mounted) setState(() => _isListening = false);
+        _isWakeWordListening = false;
+        _ignoreNextWakeWordStart = true;
+        Future.delayed(const Duration(seconds: 15), () {
+          _ignoreNextWakeWordStart = false;
+        });
+        SharedPreferences.getInstance().then((prefs) {
+          prefs.remove('pending_alarm');
+        });
       }
-    }
-  } else if (call.method == 'onAlarmStoppedByNotification') {
-    if (_isAlarmDialogOpen) {
-      _activeAlarmLoopTimer?.cancel();
-      _alarmVoiceSafetyTimer?.cancel();
-      _alarmVoiceSafetyTimer = null;
-      _tts.stop();
-      try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
-      WakelockPlus.disable();
-      _isAlarmDialogOpen = false;
-      _activeAlarmTitle = null;
-      if (_alarmDialogContext != null) {
-        try { Navigator.of(_alarmDialogContext!).pop(); } catch (_) {}
-        _alarmDialogContext = null;
-      }
-    }
-    try { await _speech.cancel(); } catch (_) {}
-    if (mounted) setState(() => _isListening = false);
-    _isWakeWordListening = false;
-    _ignoreNextWakeWordStart = true;
-    Future.delayed(const Duration(seconds: 15), () {
-      _ignoreNextWakeWordStart = false;
     });
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.remove('pending_alarm');
-    });
-  }
-});
 
     _shakeChannel.setMethodCallHandler((call) async {
       if (call.method == 'onShakeDetected') {
@@ -2314,7 +2344,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     _notificationActionController.stream.listen((action) {
       if (action == 'cancel') {
-        // 👈 التعديل: منع تشغيل المايك فوراً بعد إلغاء المنبه من الإشعار
         _ignoreNextWakeWordStart = true;
         Future.delayed(const Duration(seconds: 5), () {
           _ignoreNextWakeWordStart = false;
@@ -2337,8 +2366,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
         _speech.stop();
         if (mounted) setState(() => _isListening = false);
-        
-        // 👈 التعديل: استخدام stopWakeWord بدلاً من pause
+
         try { _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
         _isWakeWordListening = false;
 
@@ -2356,7 +2384,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           }
         }
       }
-      
+
       if (action == 'stop_recording') {
         if (_isRecording) _stopRecording();
         if (_DiaryPageState.activeInstance != null) _DiaryPageState.activeInstance!.stopRecordingByVoice();
@@ -2381,18 +2409,17 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     if (state == AppLifecycleState.resumed) {
       _isInBackground = false;
       SharedPreferences.getInstance().then((prefs) {
-  prefs.remove('wake_word_paused_by_alarm');
-});
+        prefs.remove('wake_word_paused_by_alarm');
+      });
       Future.delayed(const Duration(milliseconds: 500), _checkPendingAlarm);
       Future.delayed(const Duration(seconds: 2), _checkPendingEventAnnouncements);
       Future.delayed(const Duration(seconds: 1), () => _checkAdhanTime(forceCheck: true));
 
-      // 👈 التعديل: عدم تشغيل الـ WakeWord لو التطبيق رجع بعد إلغاء المنبه من الإشعار
       if (_settings.wakeWordMode == 'app_open' ||
           _settings.wakeWordMode == 'background' ||
           _settings.wakeWordMode == 'always') {
         Future.delayed(const Duration(seconds: 1), () {
-           if (!_isListening && !_ignoreNextWakeWordStart) _startWakeWordLoop();
+          if (!_isListening && !_ignoreNextWakeWordStart) _startWakeWordLoop();
         });
       }
 
@@ -2412,7 +2439,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     }
   }
-      Future<void> _initAll() async {
+
+  Future<void> _initAll() async {
     try {
       await _loadData();
       await _loadRecordings();
@@ -2461,7 +2489,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final prefs = await SharedPreferences.getInstance();
       final pendingStr = prefs.getString('pending_alarm');
       if (pendingStr == null) return;
-      if (_isAlarmDialogOpen) return; // ✅ منع تكرار فتح المنبه لو شغال بالفعل
+      if (_isAlarmDialogOpen) return;
 
       final data = json.decode(pendingStr) as Map<String, dynamic>;
       final scheduledMillis = data['scheduledMillis'] as int?;
@@ -2642,11 +2670,11 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     const int totalHoursToSchedule = 30 * 24;
 
     for (int i = 1; i <= totalHoursToSchedule; i++) {
-       if (i % intervalHours != 0) continue;
+      if (i % intervalHours != 0) continue;
 
-       final scheduledTime = now.add(Duration(hours: i));
+      final scheduledTime = now.add(Duration(hours: i));
 
-       final androidDetails = AndroidNotificationDetails(
+      final androidDetails = AndroidNotificationDetails(
         'salat_ala_nabi_channel_v1',
         'تذكير الصلاة على النبي',
         channelDescription: 'تنبيهات تذكير الصلاة على النبي',
@@ -2781,7 +2809,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           if (!_isListening && !_starting) _listenVoiceCommand();
         }
       }
-    }); 
+    });
   }
 
   void _startAdhanWatcher() {
@@ -2840,6 +2868,15 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     } catch (_) {}
   }
+
+// ══════════════════════════════════════════════════════
+// نهاية PART 3 / 8
+// ══════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
+// PART 4 / 8
+// Load/Save Data + Recordings + Voice Config + Speak
+// + ListenVoiceCommand + WakeWordLoop + HandleSocialReply
+// ══════════════════════════════════════════════════════
 
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
@@ -2997,9 +3034,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('saved_weekly_schedule', json.encode(_weeklySchedule));
   }
+
   Future<void> _saveAdhkarCounts() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('saved_adhkar_counts', json.encode(_adhkarCounts));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('saved_adhkar_counts', json.encode(_adhkarCounts));
   }
 
   int _getAdvanceMinutes(String reminder) {
@@ -3091,8 +3129,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
   Future<void> _stopRecording() async {
     if (!_isRecording) return;
-setState(() => _isRecording = false);
-try {
+    setState(() => _isRecording = false);
+    try {
       await _notifications.cancel(9999);
       _recordingTimer?.cancel();
       final path = await _audioRecorder.stop();
@@ -3431,7 +3469,7 @@ try {
 
   Future<void> _startWakeWordLoop() async {
     if (_settings.wakeWordMode == 'off') return;
-    if (_ignoreNextWakeWordStart) return; // 👈 التعديل
+    if (_ignoreNextWakeWordStart) return;
     if (_isListening || _starting || _isRecording) return;
     if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
 
@@ -3475,7 +3513,7 @@ try {
         if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
           Future.delayed(const Duration(milliseconds: 200), () {
             if (mounted && !_isListening && !_starting && !_isRecording) {
-               _startWakeWordLoop();
+              _startWakeWordLoop();
             }
           });
         }
@@ -3492,7 +3530,8 @@ try {
       }
     }
   }
-    Future<bool> _handleSocialReply(String cmd) async {
+
+  Future<bool> _handleSocialReply(String cmd) async {
     final userTitle = _userTitle;
     final secTitle = _settings.voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة';
     final now = DateTime.now();
@@ -3686,1633 +3725,1828 @@ try {
     return false;
   }
 
-DateTime? _parseFullDate(String cmd) {
-  final now = DateTime.now();
-  String normCmd = _norm(cmd);
+// ══════════════════════════════════════════════════════
+// نهاية PART 4 / 8
+// ══════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
+// PART 5 / 8
+// Date Parsers + _processSmartVoiceCommand (بداية)
+// يشمل: أوامر الإعدادات الصوتية (14 بلوك) + إيقاف التسجيل
+// ══════════════════════════════════════════════════════
 
-  if (normCmd.contains('بعد بكره') || normCmd.contains('بعد بكرة') || normCmd.contains('بعد غد')) return now.add(const Duration(days: 2));
-  if (normCmd.contains('بكره') || normCmd.contains('بكرة') || normCmd.contains('غدا') || normCmd.contains('غداً')) return now.add(const Duration(days: 1));
-  
-  if (normCmd.contains('الاسبوع الجاي') || normCmd.contains('الاسبوع القادم') || normCmd.contains('اسبوع جاي') || normCmd.contains('الاسبوع اللي جاي')) {
-    return now.add(const Duration(days: 7));
-  }
-  if (normCmd.contains('الشهر الجاي') || normCmd.contains('الشهر القادم') || normCmd.contains('شهر جاي') || normCmd.contains('الشهر اللي جاي')) {
-    return DateTime(now.year, now.month + 1, now.day);
-  }
-  if (normCmd.contains('السنة الجاية') || normCmd.contains('السنة القادمة') || normCmd.contains('سنة جاية') || normCmd.contains('العام الجاي') || normCmd.contains('السنة اللي جاية')) {
-    return DateTime(now.year + 1, now.month, now.day);
-  }
-  
-  if (normCmd.contains('النهاردة') || normCmd.contains('النهارده') || normCmd.contains('اليوم') || normCmd.contains('انهاردة') || normCmd.contains('انهارده')) return now;
-  if (normCmd.contains('امبارح') || normCmd.contains('امس') || normCmd.contains('البارح')) return now.subtract(const Duration(days: 1));
-  if (normCmd.contains('اول امبارح') || normCmd.contains('قبل امبارح')) return now.subtract(const Duration(days: 2));
+  DateTime? _parseFullDate(String cmd) {
+    final now = DateTime.now();
+    String normCmd = _norm(cmd);
 
-  final afterDaysMatch = RegExp(r'بعد\s*(\d+)\s*(يوم|ايام|أيام)').firstMatch(normCmd);
-  if (afterDaysMatch != null) return now.add(Duration(days: int.parse(afterDaysMatch.group(1)!)));
+    if (normCmd.contains('بعد بكره') || normCmd.contains('بعد بكرة') || normCmd.contains('بعد غد')) return now.add(const Duration(days: 2));
+    if (normCmd.contains('بكره') || normCmd.contains('بكرة') || normCmd.contains('غدا') || normCmd.contains('غداً')) return now.add(const Duration(days: 1));
 
-  final dayKeywords = {
-    DateTime.saturday: ['السبت', 'سبت'],
-    DateTime.sunday: ['الاحد', 'الأحد', 'الحد', 'حد'],
-    DateTime.monday: ['الاتنين', 'الاثنين', 'اتنين'],
-    DateTime.tuesday: ['التلات', 'الثلاثاء', 'تلات'],
-    DateTime.wednesday: ['الاربع', 'الأربعاء', 'اربع'],
-    DateTime.thursday: ['الخميس', 'خميس'],
-    DateTime.friday: ['الجمعه', 'الجمعة', 'جمعه'],
-  };
-
-  int? targetWeekday;
-  for (final entry in dayKeywords.entries) {
-    if (_hasAny(normCmd, entry.value)) {
-      targetWeekday = entry.key;
-      break;
+    if (normCmd.contains('الاسبوع الجاي') || normCmd.contains('الاسبوع القادم') || normCmd.contains('اسبوع جاي') || normCmd.contains('الاسبوع اللي جاي')) {
+      return now.add(const Duration(days: 7));
     }
-  }
-
-  if (targetWeekday != null) {
-    final isLast = _hasAny(normCmd, ['اللي فات', 'اللى فات', 'الماضي']);
-    final isNext = _hasAny(normCmd, ['الجاي', 'القادم', 'اللي جاي']);
-    if (isLast) {
-      var diff = now.weekday - targetWeekday;
-      if (diff <= 0) diff += 7;
-      return now.subtract(Duration(days: diff));
-    } else if (isNext) {
-      var diff = targetWeekday - now.weekday;
-      if (diff <= 0) diff += 7;
-      return now.add(Duration(days: diff));
-    } else {
-      var diff = targetWeekday - now.weekday;
-      if (diff < 0) diff += 7;
-      return now.add(Duration(days: diff));
+    if (normCmd.contains('الشهر الجاي') || normCmd.contains('الشهر القادم') || normCmd.contains('شهر جاي') || normCmd.contains('الشهر اللي جاي')) {
+      return DateTime(now.year, now.month + 1, now.day);
     }
-  }
+    if (normCmd.contains('السنة الجاية') || normCmd.contains('السنة القادمة') || normCmd.contains('سنة جاية') || normCmd.contains('العام الجاي') || normCmd.contains('السنة اللي جاية')) {
+      return DateTime(now.year + 1, now.month, now.day);
+    }
 
-  int? parsedDay; int? parsedMonth;
+    if (normCmd.contains('النهاردة') || normCmd.contains('النهارده') || normCmd.contains('اليوم') || normCmd.contains('انهاردة') || normCmd.contains('انهارده')) return now;
+    if (normCmd.contains('امبارح') || normCmd.contains('امس') || normCmd.contains('البارح')) return now.subtract(const Duration(days: 1));
+    if (normCmd.contains('اول امبارح') || normCmd.contains('قبل امبارح')) return now.subtract(const Duration(days: 2));
 
-  final dateMatch = RegExp(r'(\d{1,2})\s*[/\-\s]\s*(\d{1,2})').firstMatch(normCmd);
-  if (dateMatch != null) {
-    parsedDay = int.tryParse(dateMatch.group(1)!);
-    parsedMonth = int.tryParse(dateMatch.group(2)!);
-  } else {
-    String tempCmd = normCmd;
-    final numWords = {
-      'واحد': '1', 'واحده': '1', 'اتنين': '2', 'اثنين': '2',
-      'تلاته': '3', 'ثلاثه': '3', 'اربعه': '4', 'خمسه': '5',
-      'سته': '6', 'سبعه': '7', 'تمانيه': '8', 'ثمانيه': '8',
-      'تسعه': '9', 'عشره': '10', 'احداشر': '11', 'اتناشر': '12',
-      'عشرين': '20', 'تلاتين': '30'
+    final afterDaysMatch = RegExp(r'بعد\s*(\d+)\s*(يوم|ايام|أيام)').firstMatch(normCmd);
+    if (afterDaysMatch != null) return now.add(Duration(days: int.parse(afterDaysMatch.group(1)!)));
+
+    final dayKeywords = {
+      DateTime.saturday: ['السبت', 'سبت'],
+      DateTime.sunday: ['الاحد', 'الأحد', 'الحد', 'حد'],
+      DateTime.monday: ['الاتنين', 'الاثنين', 'اتنين'],
+      DateTime.tuesday: ['التلات', 'الثلاثاء', 'تلات'],
+      DateTime.wednesday: ['الاربع', 'الأربعاء', 'اربع'],
+      DateTime.thursday: ['الخميس', 'خميس'],
+      DateTime.friday: ['الجمعه', 'الجمعة', 'جمعه'],
     };
 
-    numWords.forEach((word, digit) {
-      tempCmd = tempCmd.replaceAll(RegExp(r'\b' + word + r'\b'), digit);
-    });
-
-    final wordDateMatch = RegExp(r'(\d{1,2})\s*[/\-\s]\s*(\d{1,2})').firstMatch(tempCmd);
-    if (wordDateMatch != null) {
-      parsedDay = int.tryParse(wordDateMatch.group(1)!);
-      parsedMonth = int.tryParse(wordDateMatch.group(2)!);
-    }
-  }
-
-  if (parsedMonth == null) {
-    final monthsMap = {
-      1: ['يناير', '1'], 2: ['فبراير', '2'], 3: ['مارس', '3'], 4: ['ابريل', 'أبريل', '4'],
-      5: ['مايو', '5'], 6: ['يونيو', '6'], 7: ['يوليو', '7'], 8: ['اغسطس', 'أغسطس', '8'],
-      9: ['سبتمبر', '9'], 10: ['اكتوبر', 'أكتوبر', '10'], 11: ['نوفمبر', '11'], 12: ['ديسمبر', '12'],
-    };
-
-    for (var entry in monthsMap.entries) {
+    int? targetWeekday;
+    for (final entry in dayKeywords.entries) {
       if (_hasAny(normCmd, entry.value)) {
-        parsedMonth = entry.key;
+        targetWeekday = entry.key;
         break;
       }
     }
 
-    if (parsedMonth != null) {
-      final dayWordsMap = {
-        1: ['واحد', 'واحدة'], 2: ['اتنين'], 3: ['تلاتة'], 4: ['اربعة'], 5: ['خمسة'],
-        6: ['ستة'], 7: ['سبعة'], 8: ['تمانية'], 9: ['تسعة'], 10: ['عشرة'],
-        11: ['حداشر'], 12: ['اتناشر'], 13: ['تلتاشر'], 14: ['اربعطاشر'], 15: ['خمستاشر', 'خمسة عشر'],
-        16: ['ستاشر'], 17: ['سبعتاشر'], 18: ['تمنتاشر'], 19: ['تسعتاشر'], 20: ['عشرين'],
-        21: ['واحد وعشرين'], 22: ['اتنين وعشرين'], 23: ['تلاتة وعشرين'], 24: ['اربعة وعشرين'],
-        25: ['خمسة وعشرين'], 26: ['ستة وعشرين'], 27: ['سبعة وعشرين'], 28: ['تمانية وعشرين'],
-        29: ['تسعة وعشرين'], 30: ['تلاتين'], 31: ['واحد وتلاتين']
+    if (targetWeekday != null) {
+      final isLast = _hasAny(normCmd, ['اللي فات', 'اللى فات', 'الماضي']);
+      final isNext = _hasAny(normCmd, ['الجاي', 'القادم', 'اللي جاي']);
+      if (isLast) {
+        var diff = now.weekday - targetWeekday;
+        if (diff <= 0) diff += 7;
+        return now.subtract(Duration(days: diff));
+      } else if (isNext) {
+        var diff = targetWeekday - now.weekday;
+        if (diff <= 0) diff += 7;
+        return now.add(Duration(days: diff));
+      } else {
+        var diff = targetWeekday - now.weekday;
+        if (diff < 0) diff += 7;
+        return now.add(Duration(days: diff));
+      }
+    }
+
+    int? parsedDay; int? parsedMonth;
+
+    final dateMatch = RegExp(r'(\d{1,2})\s*[/\-\s]\s*(\d{1,2})').firstMatch(normCmd);
+    if (dateMatch != null) {
+      parsedDay = int.tryParse(dateMatch.group(1)!);
+      parsedMonth = int.tryParse(dateMatch.group(2)!);
+    } else {
+      String tempCmd = normCmd;
+      final numWords = {
+        'واحد': '1', 'واحده': '1', 'اتنين': '2', 'اثنين': '2',
+        'تلاته': '3', 'ثلاثه': '3', 'اربعه': '4', 'خمسه': '5',
+        'سته': '6', 'سبعه': '7', 'تمانيه': '8', 'ثمانيه': '8',
+        'تسعه': '9', 'عشره': '10', 'احداشر': '11', 'اتناشر': '12',
+        'عشرين': '20', 'تلاتين': '30'
       };
 
-      final dayDigitMatch = RegExp(r'(\d{1,2})').firstMatch(normCmd);
-      if (dayDigitMatch != null) {
-        parsedDay = int.tryParse(dayDigitMatch.group(1)!);
-      } else {
-        for (var entry in dayWordsMap.entries) {
-          if (_hasAny(normCmd, entry.value)) {
-            parsedDay = entry.key;
-            break;
+      numWords.forEach((word, digit) {
+        tempCmd = tempCmd.replaceAll(RegExp(r'\b' + word + r'\b'), digit);
+      });
+
+      final wordDateMatch = RegExp(r'(\d{1,2})\s*[/\-\s]\s*(\d{1,2})').firstMatch(tempCmd);
+      if (wordDateMatch != null) {
+        parsedDay = int.tryParse(wordDateMatch.group(1)!);
+        parsedMonth = int.tryParse(wordDateMatch.group(2)!);
+      }
+    }
+
+    if (parsedMonth == null) {
+      final monthsMap = {
+        1: ['يناير', '1'], 2: ['فبراير', '2'], 3: ['مارس', '3'], 4: ['ابريل', 'أبريل', '4'],
+        5: ['مايو', '5'], 6: ['يونيو', '6'], 7: ['يوليو', '7'], 8: ['اغسطس', 'أغسطس', '8'],
+        9: ['سبتمبر', '9'], 10: ['اكتوبر', 'أكتوبر', '10'], 11: ['نوفمبر', '11'], 12: ['ديسمبر', '12'],
+      };
+
+      for (var entry in monthsMap.entries) {
+        if (_hasAny(normCmd, entry.value)) {
+          parsedMonth = entry.key;
+          break;
+        }
+      }
+
+      if (parsedMonth != null) {
+        final dayWordsMap = {
+          1: ['واحد', 'واحدة'], 2: ['اتنين'], 3: ['تلاتة'], 4: ['اربعة'], 5: ['خمسة'],
+          6: ['ستة'], 7: ['سبعة'], 8: ['تمانية'], 9: ['تسعة'], 10: ['عشرة'],
+          11: ['حداشر'], 12: ['اتناشر'], 13: ['تلتاشر'], 14: ['اربعطاشر'], 15: ['خمستاشر', 'خمسة عشر'],
+          16: ['ستاشر'], 17: ['سبعتاشر'], 18: ['تمنتاشر'], 19: ['تسعتاشر'], 20: ['عشرين'],
+          21: ['واحد وعشرين'], 22: ['اتنين وعشرين'], 23: ['تلاتة وعشرين'], 24: ['اربعة وعشرين'],
+          25: ['خمسة وعشرين'], 26: ['ستة وعشرين'], 27: ['سبعة وعشرين'], 28: ['تمانية وعشرين'],
+          29: ['تسعة وعشرين'], 30: ['تلاتين'], 31: ['واحد وتلاتين']
+        };
+
+        final dayDigitMatch = RegExp(r'(\d{1,2})').firstMatch(normCmd);
+        if (dayDigitMatch != null) {
+          parsedDay = int.tryParse(dayDigitMatch.group(1)!);
+        } else {
+          for (var entry in dayWordsMap.entries) {
+            if (_hasAny(normCmd, entry.value)) {
+              parsedDay = entry.key;
+              break;
+            }
           }
         }
       }
     }
-  }
 
-  if (parsedDay != null && parsedMonth != null && parsedMonth >= 1 && parsedMonth <= 12 && parsedDay >= 1 && parsedDay <= 31) {
-     try { return DateTime(now.year, parsedMonth, parsedDay); } catch (_) { return null; }
-  }
+    if (parsedDay != null && parsedMonth != null && parsedMonth >= 1 && parsedMonth <= 12 && parsedDay >= 1 && parsedDay <= 31) {
+      try { return DateTime(now.year, parsedMonth, parsedDay); } catch (_) { return null; }
+    }
 
-  if (parsedDay != null && parsedMonth == null) {
-     final dayOnlyMatch = RegExp(r'يوم\s*(\d{1,2})').firstMatch(normCmd);
-     if (dayOnlyMatch != null) {
+    if (parsedDay != null && parsedMonth == null) {
+      final dayOnlyMatch = RegExp(r'يوم\s*(\d{1,2})').firstMatch(normCmd);
+      if (dayOnlyMatch != null) {
         final d = int.tryParse(dayOnlyMatch.group(1)!);
         if (d != null && d >= 1 && d <= 31) {
-           var result = DateTime(now.year, now.month, d);
-           if (result.isBefore(now)) result = DateTime(now.year, now.month + 1, d);
-           return result;
+          var result = DateTime(now.year, now.month, d);
+          if (result.isBefore(now)) result = DateTime(now.year, now.month + 1, d);
+          return result;
         }
-     }
-  }
-
-  return null;
-}
-
-String _cleanDateWordsFromText(String text) {
-  String cleaned = text;
-  final monthsList = ['يناير','فبراير','مارس','ابريل','أبريل','مايو','يونيو','يوليو','اغسطس','أغسطس','سبتمبر','اكتوبر','أكتوبر','نوفمبر','ديسمبر'];
-  final dayWords = ['واحد', 'واحدة', 'اتنين', 'اثنين', 'تلاتة', 'ثلاثة', 'اربعة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'تمانية', 'ثمانية', 'تسعة', 'عشرة', 'حداشر', 'اتناشر', 'تلتاشر', 'اربعطاشر', 'خمستاشر', 'خمسة عشر', 'ستاشر', 'سبعتاشر', 'تمنتاشر', 'تسعتاشر', 'عشرين', 'تلاتين', 'ثلاثين'];
-
-  for (var m in monthsList) {
-    cleaned = cleaned.replaceAll(RegExp(r'\d+\s*' + m), '');
-    for (var w in dayWords) {
-      cleaned = cleaned.replaceAll(RegExp(r'\b' + w + r'\s*' + m), '');
+      }
     }
-    cleaned = cleaned.replaceAll(RegExp(r'\b' + m + r'\b'), '');
+
+    return null;
   }
 
-  final relativeDays = [
-    'النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم',
-    'بكرة', 'بكره', 'غدا', 'غداً',
-    'امبارح', 'امس', 'البارح', 'اول امبارح', 'قبل امبارح',
-    'بعد بكرة', 'بعد بكره', 'بعد غد',
-    'الاسبوع الجاي', 'الاسبوع القادم', 'اسبوع جاي', 'الاسبوع اللي جاي',
-    'الشهر الجاي', 'الشهر القادم', 'شهر جاي', 'الشهر اللي جاي',
-    'السنة الجاية', 'السنة القادمة', 'سنة جاية', 'العام الجاي', 'السنة اللي جاية'
-  ];
-  relativeDays.sort((a, b) => b.length.compareTo(a.length));
-  for (var d in relativeDays) {
-    cleaned = cleaned.replaceAll(RegExp(r'\b' + d + r'\b'), '');
-  }
+  String _cleanDateWordsFromText(String text) {
+    String cleaned = text;
+    final monthsList = ['يناير','فبراير','مارس','ابريل','أبريل','مايو','يونيو','يوليو','اغسطس','أغسطس','سبتمبر','اكتوبر','أكتوبر','نوفمبر','ديسمبر'];
+    final dayWords = ['واحد', 'واحدة', 'اتنين', 'اثنين', 'تلاتة', 'ثلاثة', 'اربعة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'تمانية', 'ثمانية', 'تسعة', 'عشرة', 'حداشر', 'اتناشر', 'تلتاشر', 'اربعطاشر', 'خمستاشر', 'خمسة عشر', 'ستاشر', 'سبعتاشر', 'تمنتاشر', 'تسعتاشر', 'عشرين', 'تلاتين', 'ثلاثين'];
 
-  final days = ['السبت', 'سبت', 'الاحد', 'الأحد', 'الحد', 'حد', 'الاتنين', 'الاثنين', 'التلات', 'الثلاثاء', 'الاربع', 'الأربعاء', 'الخميس', 'خميس', 'الجمعه', 'الجمعة', 'جمعه'];
-  for (var d in days) {
-    cleaned = cleaned.replaceAll(RegExp(r'\bيوم\s+' + d + r'\b'), '');
-    cleaned = cleaned.replaceAll(RegExp(r'\b' + d + r'\b'), '');
-  }
-  cleaned = cleaned.replaceAll(RegExp(r'\bيوم\b'), '');
-
-  cleaned = cleaned.replaceAll(RegExp(r'بعد\s*\d+\s*(يوم|ايام|أيام)'), '');
-  cleaned = cleaned.replaceAll(RegExp(r'\bيوم\s*\d{1,2}\b'), '');
-  cleaned = cleaned.replaceAll(RegExp(r'\b\d{1,2}\s*[/\-]\s*\d{1,2}\b'), '');
-
-  return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
-}
-
-DateTime? _parseDiaryDate(String cmd) {
-  return _parseFullDate(cmd);
-}
-
-List<String> _parseCustomDays(String cmd) {
-  final days = <String>[];
-  _dayKeywords.forEach((dayName, keywords) {
-    if (_hasAny(cmd, keywords)) days.add(dayName);
-  });
-  return days;
-}
-
-String _parseRepeatType(String cmd) {
-  final customDays = _parseCustomDays(cmd);
-  if (customDays.isNotEmpty) return 'مخصص';
-  if (_hasAny(cmd, ['كل يوم', 'يومي', 'يوميا', 'يومياً', 'كل يوم الصبح', 'كل يوم بالليل', 'يوم بيوم', 'يوم بعد يوم', 'كل يومين', 'دائما', 'على طول', 'كل صباح', 'كل مساء', 'كل ليله', 'بشكل يومي'])) return 'يومي';
-  if (_hasAny(cmd, ['كل اسبوع', 'اسبوعي', 'اسبوعيا', 'كل جمعه', 'كل جمعة', 'كل 7 ايام', 'اسبوع ورا اسبوع'])) return 'أسبوعي';
-  if (_hasAny(cmd, ['كل شهر', 'شهري', 'شهريا', 'كل 30 يوم', 'شهر ورا شهر', 'كل اول الشهر'])) return 'شهري';
-  return 'مرة واحدة';
-}
-
-String _parseIntervalType(String cmd) {
-  if (_hasAny(cmd, ['بدون تنبيه', 'بدون تنبيهات', 'مش محتاج تنبيه', 'مش عايز تنبيه', 'مش عايزة تنبيه', 'من غير تنبيه', 'بلاش تنبيه', 'مش عاوزة تنبيه'])) return 'بدون تنبيه';
-  if (_hasAny(cmd, ['مره واحده بس', 'مرة واحدة بس', 'تنبيه واحد بس', 'مش محتاج يتكرر', 'مش محتاجة يتكرر'])) return 'مرة واحدة';
-  if (_hasAny(cmd, ['كل 10 ثواني', 'كل عشر ثواني', 'كل عشره ثواني'])) return 'كل 10 ثواني';
-  if (_hasAny(cmd, ['كل 20 ثانية', 'كل عشرين ثانيه'])) return 'كل 20 ثانية';
-  if (_hasAny(cmd, ['كل 30 ثانية', 'كل تلاتين ثانيه', 'نص دقيقه', 'نصف دقيقة'])) return 'كل 30 ثانية';
-  if (_hasAny(cmd, ['كل دقيقة', 'كل دقيقه', 'كل 60 ثانيه'])) return 'كل دقيقة';
-  if (_hasAny(cmd, ['كل دقيقتين'])) return 'كل دقيقتين';
-  if (_hasAny(cmd, ['كل 3 دقايق', 'كل تلات دقايق'])) return 'كل 3 دقايق';
-  if (_hasAny(cmd, ['كل 5 دقايق', 'كل خمس دقايق'])) return 'كل 5 دقايق';
-  if (_hasAny(cmd, ['كل 10 دقايق', 'كل عشر دقايق'])) return 'كل 10 دقايق';
-  return 'كل 10 ثواني';
-}
-
-List<String> _extractWeeklyDaysFromCmd(String cmd) {
-  final result = <String>[];
-
-  if (_hasAny(cmd, ['بالكامل', 'الجدول كله', 'كل الايام', 'كل الأيام', 'طول الاسبوع', 'طول الأسبوع', 'كل الجدول'])) {
-    return ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
-  }
-
-  if (_hasAny(cmd, ['النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم'])) {
-    result.add(_weekDays[(DateTime.now().weekday) % 7]);
-  }
-  if (_hasAny(cmd, ['بكره', 'بكرة', 'غدا', 'غداً'])) {
-    result.add(_weekDays[(DateTime.now().add(const Duration(days: 1)).weekday) % 7]);
-  }
-
-  for (final day in _weekDays) {
-    if (result.contains(day)) continue;
-    final keywords = _dayKeywords[day] ?? [day];
-    if (_hasAny(cmd, keywords)) {
-      result.add(day);
+    for (var m in monthsList) {
+      cleaned = cleaned.replaceAll(RegExp(r'\d+\s*' + m), '');
+      for (var w in dayWords) {
+        cleaned = cleaned.replaceAll(RegExp(r'\b' + w + r'\s*' + m), '');
+      }
+      cleaned = cleaned.replaceAll(RegExp(r'\b' + m + r'\b'), '');
     }
-  }
-  return result;
-}
 
-String _extractWeeklyTaskName(String rawCommand) {
-  final stripRaw = <String>{
-    'امسح', 'امسحي', 'احذف', 'احذفي', 'شيل', 'شيلي', 'الغي', 'الغى', 'الغيلي',
-    'مسح', 'حذف', 'امسحلي', 'امسحيلي',
-    'عدل', 'عدلي', 'عدللي', 'عدليلي', 'غير', 'غيري', 'غيرلي', 'غيريلي',
-    'بدل', 'بدلي', 'بدللي', 'بدليلي', 'تعديل', 'تعديلي',
-    'ضيف', 'ضيفي', 'ضيفلي', 'اضف', 'أضف', 'أضفي', 'حط', 'حطي', 'حطلي',
-    'سجل', 'سجلي', 'سجللي', 'اعمل', 'اعملي', 'اعمللي',
-    'الجدول', 'جدول', 'الاسبوعي', 'الأسبوعي', 'اسبوعي', 'أسبوعي',
-    'جدولي', 'جدولى', 'بتاعي', 'بتاعى',
-    'في', 'من', 'على', 'علي', 'بتاع', 'بتاعه', 'بتاعت', 'يوم',
-    'موعد', 'ميعاد', 'الميعاد', 'الموعد', 'و',
-    'الساعة', 'ساعة', 'الساعه', 'صباحا', 'صباحاً', 'مساء', 'مساءً',
-    'الصبح', 'بالليل', 'الليل',
-    'لي', 'لى', 'بكام', 'لحد', 'عشان', 'ورايا', 'وراي',
-    'بصوت', 'بنغمة', 'نغمة', 'صوت', 'مرعب', 'ايفون', 'آيفون', 'مشهور', 'صحيان', 'قوي', 'السكرتير', 'السكرتيرة', 'الافتراضي',
-    'بالكامل', 'الجدول كله', 'كل الايام', 'كل الأيام', 'طول الاسبوع', 'طول الأسبوع'
-  };
-  for (final day in _weekDays) {
-    stripRaw.add(day);
-    stripRaw.add('يوم $day');
-    stripRaw.add(day.replaceAll('ال', ''));
-    final keywords = _dayKeywords[day] ?? [];
-    for (final k in keywords) {
-      stripRaw.add(k);
+    final relativeDays = [
+      'النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم',
+      'بكرة', 'بكره', 'غدا', 'غداً',
+      'امبارح', 'امس', 'البارح', 'اول امبارح', 'قبل امبارح',
+      'بعد بكرة', 'بعد بكره', 'بعد غد',
+      'الاسبوع الجاي', 'الاسبوع القادم', 'اسبوع جاي', 'الاسبوع اللي جاي',
+      'الشهر الجاي', 'الشهر القادم', 'شهر جاي', 'الشهر اللي جاي',
+      'السنة الجاية', 'السنة القادمة', 'سنة جاية', 'العام الجاي', 'السنة اللي جاية'
+    ];
+    relativeDays.sort((a, b) => b.length.compareTo(a.length));
+    for (var d in relativeDays) {
+      cleaned = cleaned.replaceAll(RegExp(r'\b' + d + r'\b'), '');
     }
+
+    final days = ['السبت', 'سبت', 'الاحد', 'الأحد', 'الحد', 'حد', 'الاتنين', 'الاثنين', 'التلات', 'الثلاثاء', 'الاربع', 'الأربعاء', 'الخميس', 'خميس', 'الجمعه', 'الجمعة', 'جمعه'];
+    for (var d in days) {
+      cleaned = cleaned.replaceAll(RegExp(r'\bيوم\s+' + d + r'\b'), '');
+      cleaned = cleaned.replaceAll(RegExp(r'\b' + d + r'\b'), '');
+    }
+    cleaned = cleaned.replaceAll(RegExp(r'\bيوم\b'), '');
+
+    cleaned = cleaned.replaceAll(RegExp(r'بعد\s*\d+\s*(يوم|ايام|أيام)'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\bيوم\s*\d{1,2}\b'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\b\d{1,2}\s*[/\-]\s*\d{1,2}\b'), '');
+
+    return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
-  final strip = stripRaw.map((e) => _norm(e)).toSet();
-  final nameNorm = _norm(_secretaryName);
-  final kept = <String>[];
 
-  for (final t in rawCommand.split(RegExp(r'\s+'))) {
-    final n = _norm(t);
-    if (n.isEmpty) continue;
-    if (strip.contains(n) || n == nameNorm) continue;
+  DateTime? _parseDiaryDate(String cmd) {
+    return _parseFullDate(cmd);
+  }
 
-    String nWithoutWaw = n.startsWith('و') ? n.substring(1) : n;
-    if (strip.contains(nWithoutWaw)) continue;
+  List<String> _parseCustomDays(String cmd) {
+    final days = <String>[];
+    _dayKeywords.forEach((dayName, keywords) {
+      if (_hasAny(cmd, keywords)) days.add(dayName);
+    });
+    return days;
+  }
 
-    bool isDay = false;
+  String _parseRepeatType(String cmd) {
+    final customDays = _parseCustomDays(cmd);
+    if (customDays.isNotEmpty) return 'مخصص';
+    if (_hasAny(cmd, ['كل يوم', 'يومي', 'يوميا', 'يومياً', 'كل يوم الصبح', 'كل يوم بالليل', 'يوم بيوم', 'يوم بعد يوم', 'كل يومين', 'دائما', 'على طول', 'كل صباح', 'كل مساء', 'كل ليله', 'بشكل يومي'])) return 'يومي';
+    if (_hasAny(cmd, ['كل اسبوع', 'اسبوعي', 'اسبوعيا', 'كل جمعه', 'كل جمعة', 'كل 7 ايام', 'اسبوع ورا اسبوع'])) return 'أسبوعي';
+    if (_hasAny(cmd, ['كل شهر', 'شهري', 'شهريا', 'كل 30 يوم', 'شهر ورا شهر', 'كل اول الشهر'])) return 'شهري';
+    return 'مرة واحدة';
+  }
+
+  String _parseIntervalType(String cmd) {
+    if (_hasAny(cmd, ['بدون تنبيه', 'بدون تنبيهات', 'مش محتاج تنبيه', 'مش عايز تنبيه', 'مش عايزة تنبيه', 'من غير تنبيه', 'بلاش تنبيه', 'مش عاوزة تنبيه'])) return 'بدون تنبيه';
+    if (_hasAny(cmd, ['مره واحده بس', 'مرة واحدة بس', 'تنبيه واحد بس', 'مش محتاج يتكرر', 'مش محتاجة يتكرر'])) return 'مرة واحدة';
+    if (_hasAny(cmd, ['كل 10 ثواني', 'كل عشر ثواني', 'كل عشره ثواني'])) return 'كل 10 ثواني';
+    if (_hasAny(cmd, ['كل 20 ثانية', 'كل عشرين ثانيه'])) return 'كل 20 ثانية';
+    if (_hasAny(cmd, ['كل 30 ثانية', 'كل تلاتين ثانيه', 'نص دقيقه', 'نصف دقيقة'])) return 'كل 30 ثانية';
+    if (_hasAny(cmd, ['كل دقيقة', 'كل دقيقه', 'كل 60 ثانيه'])) return 'كل دقيقة';
+    if (_hasAny(cmd, ['كل دقيقتين'])) return 'كل دقيقتين';
+    if (_hasAny(cmd, ['كل 3 دقايق', 'كل تلات دقايق'])) return 'كل 3 دقايق';
+    if (_hasAny(cmd, ['كل 5 دقايق', 'كل خمس دقايق'])) return 'كل 5 دقايق';
+    if (_hasAny(cmd, ['كل 10 دقايق', 'كل عشر دقايق'])) return 'كل 10 دقايق';
+    return 'كل 10 ثواني';
+  }
+
+  List<String> _extractWeeklyDaysFromCmd(String cmd) {
+    final result = <String>[];
+
+    if (_hasAny(cmd, ['بالكامل', 'الجدول كله', 'كل الايام', 'كل الأيام', 'طول الاسبوع', 'طول الأسبوع', 'كل الجدول'])) {
+      return ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+    }
+
+    if (_hasAny(cmd, ['النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم'])) {
+      result.add(_weekDays[(DateTime.now().weekday) % 7]);
+    }
+    if (_hasAny(cmd, ['بكره', 'بكرة', 'غدا', 'غداً'])) {
+      result.add(_weekDays[(DateTime.now().add(const Duration(days: 1)).weekday) % 7]);
+    }
+
     for (final day in _weekDays) {
-       if (_hasAny(nWithoutWaw, _dayKeywords[day] ?? [day])) {
-         isDay = true;
-         break;
-       }
+      if (result.contains(day)) continue;
+      final keywords = _dayKeywords[day] ?? [day];
+      if (_hasAny(cmd, keywords)) {
+        result.add(day);
+      }
     }
-    if (isDay) continue;
-
-    if (RegExp(r'^\d{1,2}(:\d{2})?$').hasMatch(n)) continue;
-    if (_hourWords.containsKey(n) || _hourWords.containsKey(nWithoutWaw)) continue;
-    if (n == 'ونص' || n == 'وربع' || n == 'وثلث') continue;
-    kept.add(t);
+    return result;
   }
-  return kept.join(' ').trim();
-}
 
-Future<void> _processSmartVoiceCommand(String rawCommand) async {
-  final userTitle = _userTitle;
-  final cmd = _norm(rawCommand);
-  final nameNorm = _norm(_secretaryName);
-  bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('يا سكرتيرة');
-
-  // 👈 ==========================================
-  // 👈 بداية الأوامر الصوتية للإعدادات (جديد)
-  // 👈 ==========================================
-  
-  // 1. تغيير اسم السكرتير
-  if (_hasAny(cmd, ['غير اسم السكرتير', 'غيري اسم السكرتير', 'غير اسمك', 'غيري اسمك', 'من دلوقتي اسمك', 'خلي اسمك'])) {
-    String newName = rawCommand
-        .replaceAll(RegExp(r'^(?:يا\s+)?(?:سكرتير|سكرتيرة)\s*'), '')
-        .replaceAll(RegExp(r'(?:غير|غيري)\s+اسم(?:ك| السكرتير| السكرتيرة)\s+(?:لـ|إلى|الى)?\s*'), '')
-        .replaceAll(RegExp(r'(?:من دلوقتي|من دلوقتى)\s+اسمك\s*'), '')
-        .replaceAll(RegExp(r'خلي\s+اسمك\s*'), '')
-        .trim();
-    if (newName.isNotEmpty) {
-      setState(() => _secretaryName = newName);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('secretary_name', newName);
-      await _speak("تَمَام $userTitle، مِنْ دِلْوَقْتِي اِسْمِي $newName.");
-      return;
+  String _extractWeeklyTaskName(String rawCommand) {
+    final stripRaw = <String>{
+      'امسح', 'امسحي', 'احذف', 'احذفي', 'شيل', 'شيلي', 'الغي', 'الغى', 'الغيلي',
+      'مسح', 'حذف', 'امسحلي', 'امسحيلي',
+      'عدل', 'عدلي', 'عدللي', 'عدليلي', 'غير', 'غيري', 'غيرلي', 'غيريلي',
+      'بدل', 'بدلي', 'بدللي', 'بدليلي', 'تعديل', 'تعديلي',
+      'ضيف', 'ضيفي', 'ضيفلي', 'اضف', 'أضف', 'أضفي', 'حط', 'حطي', 'حطلي',
+      'سجل', 'سجلي', 'سجللي', 'اعمل', 'اعملي', 'اعمللي',
+      'الجدول', 'جدول', 'الاسبوعي', 'الأسبوعي', 'اسبوعي', 'أسبوعي',
+      'جدولي', 'جدولى', 'بتاعي', 'بتاعى',
+      'في', 'من', 'على', 'علي', 'بتاع', 'بتاعه', 'بتاعت', 'يوم',
+      'موعد', 'ميعاد', 'الميعاد', 'الموعد', 'و',
+      'الساعة', 'ساعة', 'الساعه', 'صباحا', 'صباحاً', 'مساء', 'مساءً',
+      'الصبح', 'بالليل', 'الليل',
+      'لي', 'لى', 'بكام', 'لحد', 'عشان', 'ورايا', 'وراي',
+      'بصوت', 'بنغمة', 'نغمة', 'صوت', 'مرعب', 'ايفون', 'آيفون', 'مشهور', 'صحيان', 'قوي', 'السكرتير', 'السكرتيرة', 'الافتراضي',
+      'بالكامل', 'الجدول كله', 'كل الايام', 'كل الأيام', 'طول الاسبوع', 'طول الأسبوع'
+    };
+    for (final day in _weekDays) {
+      stripRaw.add(day);
+      stripRaw.add('يوم $day');
+      stripRaw.add(day.replaceAll('ال', ''));
+      final keywords = _dayKeywords[day] ?? [];
+      for (final k in keywords) {
+        stripRaw.add(k);
+      }
     }
-  }
+    final strip = stripRaw.map((e) => _norm(e)).toSet();
+    final nameNorm = _norm(_secretaryName);
+    final kept = <String>[];
 
-  // 2. تغيير نوع السكرتير (ذكر/أنثى)
-  if (_hasAny(cmd, ['خليك سكرتير', 'خليك راجل', 'رجع صوتك رجالي', 'خليكي راجل', 'غير نوعك لذكر'])) {
-    setState(() {
-      _settings.voiceGender = 'ذكر';
-      final newNames = _getNamesForGender('ذكر');
-      if (!newNames.contains(_secretaryName)) _secretaryName = 'محمد';
-    });
-    await _saveSettings();
-    await _configureVoice(skipGreeting: true);
-    await _speak("تَمَام $userTitle، دِلْوَقْتِي أَنَا سِكْرِتِير ذَكَر.");
-    return;
-  }
-  if (_hasAny(cmd, ['خليك سكرتيرة', 'خليك بنت', 'رجع صوتك نسائي', 'خليكي سكرتيرة', 'غير نوعك لانثى', 'غيري نوعك لانثى'])) {
-    setState(() {
-      _settings.voiceGender = 'أنثى';
-      final newNames = _getNamesForGender('أنثى');
-      if (!newNames.contains(_secretaryName)) _secretaryName = 'سارة';
-    });
-    await _saveSettings();
-    await _configureVoice(skipGreeting: true);
-    await _speak("تَمَام $userTitle، دِلْوَقْتِي أَنَا سِكْرِتِيرَة.");
-    return;
-  }
+    for (final t in rawCommand.split(RegExp(r'\s+'))) {
+      final n = _norm(t);
+      if (n.isEmpty) continue;
+      if (strip.contains(n) || n == nameNorm) continue;
 
-  // 3. تغيير لقب المستخدم
-  if (_hasAny(cmd, ['غير لقبي', 'غيري لقبي', 'ناديني', 'خلي لقبي', 'خليكي تناديني'])) {
-    String newTitle = rawCommand
-        .replaceAll(RegExp(r'^(?:يا\s+)?(?:سكرتير|سكرتيرة)\s*'), '')
-        .replaceAll(RegExp(r'(?:غير|غيري)\s+لقبي\s+(?:لـ|إلى|الى)?\s*'), '')
-        .replaceAll(RegExp(r'(?:ناديني|ناديني)\s*'), '')
-        .replaceAll(RegExp(r'خلي(?:كي)?\s+لقبي\s*'), '')
-        .trim();
-    if (newTitle.isNotEmpty) {
-      setState(() => _settings.customUserTitle = newTitle);
-      await _saveSettings();
-      await _speak("تَمَام $userTitle، مِنْ دِلْوَقْتِي هَنَادِيك $newTitle.");
-      return;
+      String nWithoutWaw = n.startsWith('و') ? n.substring(1) : n;
+      if (strip.contains(nWithoutWaw)) continue;
+
+      bool isDay = false;
+      for (final day in _weekDays) {
+        if (_hasAny(nWithoutWaw, _dayKeywords[day] ?? [day])) {
+          isDay = true;
+          break;
+        }
+      }
+      if (isDay) continue;
+
+      if (RegExp(r'^\d{1,2}(:\d{2})?$').hasMatch(n)) continue;
+      if (_hourWords.containsKey(n) || _hourWords.containsKey(nWithoutWaw)) continue;
+      if (n == 'ونص' || n == 'وربع' || n == 'وثلث') continue;
+      kept.add(t);
     }
+    return kept.join(' ').trim();
   }
 
-  // 4. تغيير لقب السكرتير
-  if (_hasAny(cmd, ['غير لقبك', 'غيري لقبك', 'غير لقب السكرتير', 'غيري لقب السكرتير', 'غير لقب السكرتيرة'])) {
-    String newTitle = rawCommand
-        .replaceAll(RegExp(r'^(?:يا\s+)?(?:سكرتير|سكرتيرة)\s*'), '')
-        .replaceAll(RegExp(r'(?:غير|غيري)\s+لقب(?:ك| السكرتير| السكرتيرة)\s+(?:لـ|إلى|الى)?\s*'), '')
-        .trim();
-    if (newTitle.isNotEmpty) {
-      setState(() => _settings.customSecTitle = newTitle);
-      await _saveSettings();
-      await _speak("تَمَام $userTitle، مِنْ دِلْوَقْتِي لَقَبِي $newTitle.");
-      return;
-    }
-  }
+  Future<void> _processSmartVoiceCommand(String rawCommand) async {
+    final userTitle = _userTitle;
+    final cmd = _norm(rawCommand);
+    final nameNorm = _norm(_secretaryName);
+    bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('يا سكرتيرة');
 
-  // 5. سرعة الصوت
-  if (_hasAny(cmd, ['خلي سرعة الصوت سريعة', 'خلي الصوت سريع', 'كلمني بسرعة'])) {
-    setState(() => _settings.voiceLevel = 'سريع');
-    await _saveSettings();
-    await _speak("تَمَام $userTitle، خَلِّيتْ سُرْعَة الصَّوْت سَرِيعَة.");
-    return;
-  }
-  if (_hasAny(cmd, ['خلي سرعة الصوت متوسطة', 'خلي الصوت متوسط'])) {
-    setState(() => _settings.voiceLevel = 'متوسط');
-    await _saveSettings();
-    await _speak("تَمَام $userTitle، خَلِّيتْ سُرْعَة الصَّوْت مُتَوَسِّطَة.");
-    return;
-  }
-  if (_hasAny(cmd, ['خلي سرعة الصوت بطيئة', 'خلي الصوت بطيء', 'كلمني بالراحة'])) {
-    setState(() => _settings.voiceLevel = 'بطيء');
-    await _saveSettings();
-    await _speak("تَمَام $userTitle، خَلِّيتْ سُرْعَة الصَّوْت بَطِيئَة.");
-    return;
-  }
+    // 👈 ==========================================
+    // 👈 بداية الأوامر الصوتية للإعدادات
+    // 👈 ==========================================
 
-  // 6. تنبيه الأذان
-  if (_hasAny(cmd, ['شغل الأذان', 'فعل تنبيه الأذان', 'شغلي الأذان'])) {
-    setState(() => _settings.adhanAlertEnabled = true);
-    await _saveSettings();
-    _scheduleAdhan30Days();
-    await _speak("تَمَام $userTitle، تَمَّ تَشْغِيل تَنْبِيهَات الأَذَان.");
-    return;
-  }
-  if (_hasAny(cmd, ['اقفل الأذان', 'الغي الأذان', 'اقفلي الأذان', 'وقف الأذان', 'قفل تنبيه الأذان'])) {
-    setState(() => _settings.adhanAlertEnabled = false);
-    await _saveSettings();
-    await _speak("تَمَام $userTitle، تَمَّ إِلْغَاء تَنْبِيهَات الأَذَان.");
-    return;
-  }
-
-  // 7. الصلاة على النبي
-  if (_hasAny(cmd, ['شغل الصلاة على النبي', 'فعل الصلاة على النبي', 'شغلي الصلاة على النبي'])) {
-    setState(() => _settings.salatAlaNabiEnabled = true);
-    await _saveSettings();
-    _scheduleSalatAlaNabi();
-    await _speak("تَمَام $userTitle، تَمَّ تَشْغِيل تَذْكِير الصَّلَاة عَلَى النَّبِيّ.");
-    return;
-  }
-  if (_hasAny(cmd, ['اقفل الصلاة على النبي', 'وقف التذكير', 'اقفلي الصلاة على النبي'])) {
-    setState(() => _settings.salatAlaNabiEnabled = false);
-    await _saveSettings();
-    _scheduleSalatAlaNabi();
-    await _speak("تَمَام $userTitle، تَمَّ إِلْغَاء تَذْكِير الصَّلَاة عَلَى النَّبِيّ.");
-    return;
-  }
-
-  // 8. تغيير الوضع الليلي
-  if (_hasAny(cmd, ['شغل الوضع الليلي', 'فعل الوضع الداكن', 'شغلي الوضع الليلي'])) {
-    setState(() => _settings.isDarkMode = true);
-    await _saveSettings();
-    widget.onThemeChanged(true);
-    await _speak("تَمَام $userTitle، تَمَّ تَشْغِيل الوَضْع اللَّيْلِيّ.");
-    return;
-  }
-  if (_hasAny(cmd, ['اقفل الوضع الليلي', 'شغل الوضع النهاري', 'اقفلي الوضع الليلي'])) {
-    setState(() => _settings.isDarkMode = false);
-    await _saveSettings();
-    widget.onThemeChanged(false);
-    await _speak("تَمَام $userTitle، تَمَّ تَشْغِيل الوَضْع النَّهَارِيّ.");
-    return;
-  }
-
-  // 9. شاشة القفل
-  if (_hasAny(cmd, ['شغل شاشة القفل', 'خلي التطبيق يظهر فوق شاشة القفل', 'شغلي شاشة القفل'])) {
-    setState(() => _settings.showAboveLockScreen = true);
-    await _saveSettings();
-    try { await _lockScreenChannel.invokeMethod('enableShowWhenLocked'); } catch (_) {}
-    await _speak("تَمَام $userTitle، التَّطْبِيق هَيَظْهَر فَوْقَ شَاشَة القَفْل.");
-    return;
-  }
-  if (_hasAny(cmd, ['اقفل شاشة القفل', 'خلي التطبيق ميبانش فوق شاشة القفل', 'اقفلي شاشة القفل'])) {
-    setState(() => _settings.showAboveLockScreen = false);
-    await _saveSettings();
-    try { await _lockScreenChannel.invokeMethod('disableShowWhenLocked'); } catch (_) {}
-    await _speak("تَمَام $userTitle، التَّطْبِيق مِشْ هَيَظْهَر فَوْقَ شَاشَة القَفْل.");
-    return;
-  }
-
-  // 10. الهز
-  if (_hasAny(cmd, ['شغل الهز', 'فعل الهز', 'شغلي الهز'])) {
-    setState(() => _settings.shakeMode = 'app_open');
-    await _saveSettings();
-    _initShakeDetector();
-    await _speak("تَمَام $userTitle، تَمَّ تَشْغِيل الهَز.");
-    return;
-  }
-  if (_hasAny(cmd, ['اقفل الهز', 'وقف الهز', 'اقفلي الهز'])) {
-    setState(() => _settings.shakeMode = 'off');
-    await _saveSettings();
-    _initShakeDetector();
-    try { await _shakeChannel.invokeMethod('stopShakeService'); } catch (_) {}
-    await _speak("تَمَام $userTitle، تَمَّ إِلْغَاء الهَز.");
-    return;
-  }
-  if (_hasAny(cmd, ['خلي الهز دايماً', 'خلي الهز دائمًا', 'خلي الهز في الخلفية'])) {
-    setState(() => _settings.shakeMode = 'always');
-    await _saveSettings();
-    _initShakeDetector();
-    await _speak("تَمَام $userTitle، الهَزْ شَغَّال دَايْمًا.");
-    return;
-  }
-
-  // 11. إيقاف التسجيل
-  if (_hasAny(cmd, ['خلي ايقاف التسجيل بالهز', 'خلي إيقاف التسجيل بالهز'])) {
-    setState(() => _settings.stopRecordMode = 'shake_only');
-    await _saveSettings();
-    await _speak("تَمَام $userTitle، إِيقَاف التَّسْجِيل هَيَكُون بِالهَز.");
-    return;
-  }
-  if (_hasAny(cmd, ['خلي ايقاف التسجيل بالزرار', 'خلي إيقاف التسجيل بالزرار'])) {
-    setState(() => _settings.stopRecordMode = 'manual_only');
-    await _saveSettings();
-    await _speak("تَمَام $userTitle، إِيقَاف التَّسْجِيل هَيَكُون بِالأَزْرَار.");
-    return;
-  }
-
-  // 12. كلمة السر للنداء
-  if (_hasAny(cmd, ['غير كلمة السر', 'غيري كلمة السر', 'غير كلمة النداء'])) {
-    String newWord = rawCommand
-        .replaceAll(RegExp(r'^(?:يا\s+)?(?:سكرتير|سكرتيرة)\s*'), '')
-        .replaceAll(RegExp(r'(?:غير|غيري)\s+كلمة\s+(?:السر|النداء)\s+(?:لـ|إلى|الى)?\s*'), '')
-        .trim();
-    if (newWord.isNotEmpty) {
-      setState(() => _settings.customWakeWord = newWord);
-      await _saveSettings();
-      await _speak("تَمَام $userTitle، كَلِمَة السِّرْ بَقَتْ $newWord.");
-      return;
-    }
-  }
-
-  // 13. استعادة الإعدادات الافتراضية
-  if (_hasAny(cmd, ['استعيد الإعدادات الافتراضية', 'رجع كل حاجة زي الأول', 'امسح الإعدادات', 'استعيدي الإعدادات'])) {
-    setState(() {
-      _settings = AppSettings();
-      _ttsVolume = 1.0;
-    });
-    await _saveSettings();
-    await _configureVoice(skipGreeting: true);
-    widget.onThemeChanged(false);
-    _initShakeDetector();
-    _scheduleAdhan30Days();
-    _scheduleSalatAlaNabi();
-    await _speak("تَمَام $userTitle، تَمَّتْ اِسْتِعَادَة كُلِّ الإِعْدَادَات الِافْتِرَاضِيَّة.");
-    return;
-  }
-  // 14. تغيير النغمات الافتراضية (المنبه، الجدول، المناسبات)
-
-// --- أ. نغمة المنبه الافتراضية ---
-if (_hasAny(cmd, [
-  'غير صوت المنبه', 'غيري صوت المنبه', 'خلي صوت المنبه', 'غير نغمة المنبه', 'خلي نغمة المنبه', 
-  'غير صوت منبه المهام', 'غير نغمة منبه المهام', 'خلي نغمة منبه المهام', 'خلي صوت منبه المهام',
-  'خلي النغمة الافتراضية للمهام', 'خلي النغمة الافتراضي للمهام', 'خلي الصوت الافتراضي للمهام',
-  'غير النغمة الافتراضية للمهام', 'غير النغمة الافتراضي للمهام', 'غير الصوت الافتراضي للمهام',
-  'خلي نغمة المهام', 'غير نغمة المهام', 'خلي صوت المهام', 'غير صوت المهام'
-])) {
-  final sound = _parseSoundFromVoice(cmd);
-  if (sound != 'use_default') {
-    final prefs = await SharedPreferences.getInstance();
-    if (sound == 'secretary') {
-      await prefs.remove('default_alarm_sound');
-    } else {
-      await prefs.setString('default_alarm_sound', sound!);
-    }
-    setState(() {}); 
-    await _speak("تَمَام $userTitle، خَلِّيتْ نَغْمَة مِنْبِه الْمَهَام ${sound == 'secretary' ? 'صَوْت السِّكْرِتِير' : _getSoundName(sound)}.");
-    return;
-  } else {
-    await _speak("مَعْلِشْ $userTitle، مَفْهَمْتِشْ النَّغْمَة. قُولْ مَثَلًا: مَرْعِب، ايفون، صَحْيَان، أَوْ صَوْت السِّكْرِتِير.");
-    return;
-  }
-}
-
-// --- ب. نغمة الجدول الأسبوعي ---
-if (_hasAny(cmd, [
-  'غير صوت الجدول', 'غيري صوت الجدول', 'خلي صوت الجدول', 'غير نغمة الجدول', 'خلي نغمة الجدول', 
-  'غير صوت منبه الجدول', 'خلي صوت منبه الجدول', 'غير نغمة منبه الجدول', 'خلي نغمة منبه الجدول',
-  'خلي النغمة الافتراضية للجدول', 'خلي الصوت الافتراضي للجدول', 'غير النغمة الافتراضية للجدول',
-  'غير النغمة الافتراضية للجدول الأسبوعي', 'خلي نغمة الجدول الأسبوعي'
-])) {
-  final sound = _parseSoundFromVoice(cmd);
-  if (sound != 'use_default') {
-    final prefs = await SharedPreferences.getInstance();
-    if (sound == 'secretary') {
-      await prefs.remove('default_weekly_sound');
-    } else {
-      await prefs.setString('default_weekly_sound', sound!);
-    }
-    setState(() {});
-    await _speak("تَمَام $userTitle، خَلِّيتْ نَغْمَة مِنْبِه الْجَدْوَل ${sound == 'secretary' ? 'صَوْت السِّكْرِتِير' : _getSoundName(sound)}.");
-    return;
-  } else {
-    await _speak("مَعْلِشْ $userTitle، مَفْهَمْتِشْ النَّغْمَة. قُولْ مَثَلًا: مَرْعِب، ايفون، صَحْيَان، أَوْ صَوْت السِّكْرِتِير.");
-    return;
-  }
-}
-
-// --- ج. نغمة المناسبات ---
-if (_hasAny(cmd, [
-  'غير صوت المناسبات', 'غيري صوت المناسبات', 'خلي صوت المناسبات', 'غير نغمة المناسبات', 'خلي نغمة المناسبات',
-  'خلي النغمة الافتراضية للمناسبات', 'خلي الصوت الافتراضي للمناسبات', 'غير النغمة الافتراضية للمناسبات',
-  'غير نغمة منبه المناسبات', 'خلي نغمة منبه المناسبات'
-])) {
-  final sound = _parseSoundFromVoice(cmd);
-  if (sound != 'use_default') {
-    final prefs = await SharedPreferences.getInstance();
-    if (sound == 'secretary') {
-      await prefs.remove('default_event_sound');
-    } else {
-      await prefs.setString('default_event_sound', sound!);
-    }
-    setState(() {});
-    await _speak("تَمَام $userTitle، خَلِّيتْ نَغْمَة الْمُنَاسَبَات ${sound == 'secretary' ? 'صَوْت السِّكْرِتِير' : _getSoundName(sound)}.");
-    return;
-  } else {
-    await _speak("مَعْلِشْ $userTitle، مَفْهَمْتِشْ النَّغْمَة. قُولْ مَثَلًا: مَرْعِب، ايفون، صَحْيَان، أَوْ صَوْت السِّكْرِتِير.");
-    return;
-  }
-}
-
-  // 👈 ==========================================
-  // 👈 نهاية الأوامر الصوتية للإعدادات
-  // 👈 ==========================================
-
-  // 👈 التعديل رقم 13: التعرف العالمي على أوامر إيقاف التسجيل
-  if (_hasAny(cmd, [
-    'وقف تسجيل', 'وقف التسجيل', 'وقفي تسجيل', 'وقفي التسجيل',
-    'اوقف تسجيل', 'اوقف التسجيل', 'أوقف تسجيل', 'أوقف التسجيل',
-    'خلص تسجيل', 'خلص التسجيل', 'خلصت تسجيل', 'خلصت التسجيل',
-    'انهي التسجيل', 'انهي تسجيل', 'أنهي التسجيل', 'بطل تسجيل', 'بطل التسجيل',
-    'اقفل التسجيل', 'اقفلي التسجيل', 'كفاية تسجيل', 'كفاية التسجيل', 'ستوب', 'stop'
-  ])) {
-    bool stopped = false;
-    if (_isRecording) {
-      await _stopRecording();
-      stopped = true;
-    }
-    if (_DiaryPageState.activeInstance != null) {
-      _DiaryPageState.activeInstance!.stopRecordingByVoice();
-      stopped = true;
+    // 1. تغيير اسم السكرتير
+    if (_hasAny(cmd, ['غير اسم السكرتير', 'غيري اسم السكرتير', 'غير اسمك', 'غيري اسمك', 'من دلوقتي اسمك', 'خلي اسمك'])) {
+      String newName = rawCommand
+          .replaceAll(RegExp(r'^(?:يا\s+)?(?:سكرتير|سكرتيرة)\s*'), '')
+          .replaceAll(RegExp(r'(?:غير|غيري)\s+اسم(?:ك| السكرتير| السكرتيرة)\s+(?:لـ|إلى|الى)?\s*'), '')
+          .replaceAll(RegExp(r'(?:من دلوقتي|من دلوقتى)\s+اسمك\s*'), '')
+          .replaceAll(RegExp(r'خلي\s+اسمك\s*'), '')
+          .trim();
+      if (newName.isNotEmpty) {
+        setState(() => _secretaryName = newName);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('secretary_name', newName);
+        await _speak("تَمَام $userTitle، مِنْ دِلْوَقْتِي اِسْمِي $newName.");
+        return;
+      }
     }
 
-    if (stopped) {
-      await _speak("تَمَّ إِيقَافُ التَّسْجِيل $_userTitle.");
-    } else {
-      await _speak("مَفِيشْ تَسْجِيل شَغَّال دِلْوَقْتِي $_userTitle.");
-    }
-    return;
-  }
-
-  // 0. الحوار الذكي (خطوة بخطوة) للمناسبات
-  if (_pendingVoiceAction != null && _pendingVoiceAction!.startsWith('event_')) {
-    if (_hasAny(cmd, ['إلغاء', 'الغي', 'خلاص', 'كفاية'])) { _pendingVoiceAction = null; _pendingEventData = null; await _speak("تَمَّ إِلْغَاءُ إِضَافَةِ المُنَاسَبَةِ $_userTitle."); return; }
-    if (_pendingVoiceAction == 'event_name') { _pendingEventData!['title'] = rawCommand; _pendingVoiceAction = 'event_date'; await _speak("تَمَام $_userTitle. تَارِيخُ المُنَاسَبَةِ إِيهْ؟"); _listenVoiceCommand(); return; }
-    if (_pendingVoiceAction == 'event_date') {
-      final parsedDate = _parseDiaryDate(cmd);
-      if (parsedDate != null) { _pendingEventData!['eventDate'] = parsedDate.toIso8601String(); } else { await _speak("مَعْلِشْ مَفْهَمْتِشْ التَّارِيخْ $_userTitle."); _listenVoiceCommand(); return; }
-      _pendingVoiceAction = 'event_time'; await _speak("السَّاعَةِ كَامْ $_userTitle؟"); _listenVoiceCommand(); return;
-    }
-    if (_pendingVoiceAction == 'event_time') {
-      final hour = _parseHour(cmd); final minute = _parseMinute(cmd);
-      if (hour != null) { _pendingEventData!['reminderHour'] = hour; _pendingEventData!['reminderMinute'] = minute; _pendingVoiceAction = 'event_advance'; await _speak("التَّذْكِيرُ قَبْلَهَا بِقَدْ إِيهْ؟"); _listenVoiceCommand(); return; } else { await _speak("مَفْهَمْتِشْ السَّاعَة $_userTitle."); _listenVoiceCommand(); return; }
-    }
-    if (_pendingVoiceAction == 'event_advance') {
-      String advance = 'قبلها بيوم';
-      if (_hasAny(cmd, ['نفس اليوم', 'في نفس اليوم'])) advance = 'في نفس اليوم';
-      else if (_hasAny(cmd, ['اسبوع', 'أسبوع'])) advance = 'قبلها بأسبوع';
-      _pendingEventData!['advanceReminder'] = advance; _pendingEventData!['repeatInterval'] = 'مرة واحدة'; _pendingEventData!['repeatType'] = 'سنوي'; _pendingEventData!['sound'] = null;
-      setState(() { _specialEvents.add(_pendingEventData!); }); _saveData(); _scheduleEventReminder(_pendingEventData!);
-      await _speak("تَمَّتْ إِضَافَةُ مُنَاسَبَةِ: ${_pendingEventData!['title']} بِنَجَاح $_userTitle.");
-      _pendingVoiceAction = null; _pendingEventData = null; return;
-    }
-  }
-
-  // 1. تأكيد تداخل المواعيد
-  if (_pendingVoiceAction == 'confirm_time_conflict') {
-    _pendingActionTimer?.cancel();
-    if (_hasAny(cmd, ['احفظ', 'حفظ', 'احفظهم', 'خليهم', 'سيبهم', 'موافق', 'ايوه', 'أيوة', 'تمام', 'ماشي', 'احفظهم الاتنين'])) {
-      _handleConflictResolution(true);
-    } else {
-      _handleConflictResolution(false);
-    }
-    return;
-  }
-
-  // 2. تأكيد مسح كل اليوميات
-  if (_pendingVoiceAction == 'confirm_delete_all_diaries') {
-    _pendingActionTimer?.cancel();
-    _pendingVoiceAction = null;
-    if (_hasAny(cmd, ['ايوه', 'أيوة', 'تمام', 'موافق', 'امسح'])) {
+    // 2. تغيير نوع السكرتير (ذكر/أنثى)
+    if (_hasAny(cmd, ['خليك سكرتير', 'خليك راجل', 'رجع صوتك رجالي', 'خليكي راجل', 'غير نوعك لذكر'])) {
       setState(() {
-        _diaries.clear();
+        _settings.voiceGender = 'ذكر';
+        final newNames = _getNamesForGender('ذكر');
+        if (!newNames.contains(_secretaryName)) _secretaryName = 'محمد';
       });
-      await _saveData();
-      await _speak("تَمَّ مَسْحُ كُلِّ اليَوْمِيَّاتِ بِنَجَاح $_userTitle.");
-    } else {
-      await _speak("تَمَّ إِلْغَاءُ المَسْح $_userTitle.");
+      await _saveSettings();
+      await _configureVoice(skipGreeting: true);
+      await _speak("تَمَام $userTitle، دِلْوَقْتِي أَنَا سِكْرِتِير ذَكَر.");
+      return;
     }
-    return;
-  }
+    if (_hasAny(cmd, ['خليك سكرتيرة', 'خليك بنت', 'رجع صوتك نسائي', 'خليكي سكرتيرة', 'غير نوعك لانثى', 'غيري نوعك لانثى'])) {
+      setState(() {
+        _settings.voiceGender = 'أنثى';
+        final newNames = _getNamesForGender('أنثى');
+        if (!newNames.contains(_secretaryName)) _secretaryName = 'سارة';
+      });
+      await _saveSettings();
+      await _configureVoice(skipGreeting: true);
+      await _speak("تَمَام $userTitle، دِلْوَقْتِي أَنَا سِكْرِتِيرَة.");
+      return;
+    }
 
-  // 3. إلغاء الحوار
-  if (_hasAny(cmd, ['خلاص', 'إلغاء', 'الغي', 'كفاية', 'كفايه'])) {
-    if (_pendingVoiceAction != null) {
+    // 3. تغيير لقب المستخدم
+    if (_hasAny(cmd, ['غير لقبي', 'غيري لقبي', 'ناديني', 'خلي لقبي', 'خليكي تناديني'])) {
+      String newTitle = rawCommand
+          .replaceAll(RegExp(r'^(?:يا\s+)?(?:سكرتير|سكرتيرة)\s*'), '')
+          .replaceAll(RegExp(r'(?:غير|غيري)\s+لقبي\s+(?:لـ|إلى|الى)?\s*'), '')
+          .replaceAll(RegExp(r'(?:ناديني|ناديني)\s*'), '')
+          .replaceAll(RegExp(r'خلي(?:كي)?\s+لقبي\s*'), '')
+          .trim();
+      if (newTitle.isNotEmpty) {
+        setState(() => _settings.customUserTitle = newTitle);
+        await _saveSettings();
+        await _speak("تَمَام $userTitle، مِنْ دِلْوَقْتِي هَنَادِيك $newTitle.");
+        return;
+      }
+    }
+
+    // 4. تغيير لقب السكرتير
+    if (_hasAny(cmd, ['غير لقبك', 'غيري لقبك', 'غير لقب السكرتير', 'غيري لقب السكرتير', 'غير لقب السكرتيرة'])) {
+      String newTitle = rawCommand
+          .replaceAll(RegExp(r'^(?:يا\s+)?(?:سكرتير|سكرتيرة)\s*'), '')
+          .replaceAll(RegExp(r'(?:غير|غيري)\s+لقب(?:ك| السكرتير| السكرتيرة)\s+(?:لـ|إلى|الى)?\s*'), '')
+          .trim();
+      if (newTitle.isNotEmpty) {
+        setState(() => _settings.customSecTitle = newTitle);
+        await _saveSettings();
+        await _speak("تَمَام $userTitle، مِنْ دِلْوَقْتِي لَقَبِي $newTitle.");
+        return;
+      }
+    }
+
+    // 5. سرعة الصوت
+    if (_hasAny(cmd, ['خلي سرعة الصوت سريعة', 'خلي الصوت سريع', 'كلمني بسرعة'])) {
+      setState(() => _settings.voiceLevel = 'سريع');
+      await _saveSettings();
+      await _speak("تَمَام $userTitle، خَلِّيتْ سُرْعَة الصَّوْت سَرِيعَة.");
+      return;
+    }
+    if (_hasAny(cmd, ['خلي سرعة الصوت متوسطة', 'خلي الصوت متوسط'])) {
+      setState(() => _settings.voiceLevel = 'متوسط');
+      await _saveSettings();
+      await _speak("تَمَام $userTitle، خَلِّيتْ سُرْعَة الصَّوْت مُتَوَسِّطَة.");
+      return;
+    }
+    if (_hasAny(cmd, ['خلي سرعة الصوت بطيئة', 'خلي الصوت بطيء', 'كلمني بالراحة'])) {
+      setState(() => _settings.voiceLevel = 'بطيء');
+      await _saveSettings();
+      await _speak("تَمَام $userTitle، خَلِّيتْ سُرْعَة الصَّوْت بَطِيئَة.");
+      return;
+    }
+
+    // 6. تنبيه الأذان
+    if (_hasAny(cmd, ['شغل الأذان', 'فعل تنبيه الأذان', 'شغلي الأذان'])) {
+      setState(() => _settings.adhanAlertEnabled = true);
+      await _saveSettings();
+      _scheduleAdhan30Days();
+      await _speak("تَمَام $userTitle، تَمَّ تَشْغِيل تَنْبِيهَات الأَذَان.");
+      return;
+    }
+    if (_hasAny(cmd, ['اقفل الأذان', 'الغي الأذان', 'اقفلي الأذان', 'وقف الأذان', 'قفل تنبيه الأذان'])) {
+      setState(() => _settings.adhanAlertEnabled = false);
+      await _saveSettings();
+      await _speak("تَمَام $userTitle، تَمَّ إِلْغَاء تَنْبِيهَات الأَذَان.");
+      return;
+    }
+
+    // 7. الصلاة على النبي
+    if (_hasAny(cmd, ['شغل الصلاة على النبي', 'فعل الصلاة على النبي', 'شغلي الصلاة على النبي'])) {
+      setState(() => _settings.salatAlaNabiEnabled = true);
+      await _saveSettings();
+      _scheduleSalatAlaNabi();
+      await _speak("تَمَام $userTitle، تَمَّ تَشْغِيل تَذْكِير الصَّلَاة عَلَى النَّبِيّ.");
+      return;
+    }
+    if (_hasAny(cmd, ['اقفل الصلاة على النبي', 'وقف التذكير', 'اقفلي الصلاة على النبي'])) {
+      setState(() => _settings.salatAlaNabiEnabled = false);
+      await _saveSettings();
+      _scheduleSalatAlaNabi();
+      await _speak("تَمَام $userTitle، تَمَّ إِلْغَاء تَذْكِير الصَّلَاة عَلَى النَّبِيّ.");
+      return;
+    }
+
+    // 8. تغيير الوضع الليلي
+    if (_hasAny(cmd, ['شغل الوضع الليلي', 'فعل الوضع الداكن', 'شغلي الوضع الليلي'])) {
+      setState(() => _settings.isDarkMode = true);
+      await _saveSettings();
+      widget.onThemeChanged(true);
+      await _speak("تَمَام $userTitle، تَمَّ تَشْغِيل الوَضْع اللَّيْلِيّ.");
+      return;
+    }
+    if (_hasAny(cmd, ['اقفل الوضع الليلي', 'شغل الوضع النهاري', 'اقفلي الوضع الليلي'])) {
+      setState(() => _settings.isDarkMode = false);
+      await _saveSettings();
+      widget.onThemeChanged(false);
+      await _speak("تَمَام $userTitle، تَمَّ تَشْغِيل الوَضْع النَّهَارِيّ.");
+      return;
+    }
+
+    // 9. شاشة القفل
+    if (_hasAny(cmd, ['شغل شاشة القفل', 'خلي التطبيق يظهر فوق شاشة القفل', 'شغلي شاشة القفل'])) {
+      setState(() => _settings.showAboveLockScreen = true);
+      await _saveSettings();
+      try { await _lockScreenChannel.invokeMethod('enableShowWhenLocked'); } catch (_) {}
+      await _speak("تَمَام $userTitle، التَّطْبِيق هَيَظْهَر فَوْقَ شَاشَة القَفْل.");
+      return;
+    }
+    if (_hasAny(cmd, ['اقفل شاشة القفل', 'خلي التطبيق ميبانش فوق شاشة القفل', 'اقفلي شاشة القفل'])) {
+      setState(() => _settings.showAboveLockScreen = false);
+      await _saveSettings();
+      try { await _lockScreenChannel.invokeMethod('disableShowWhenLocked'); } catch (_) {}
+      await _speak("تَمَام $userTitle، التَّطْبِيق مِشْ هَيَظْهَر فَوْقَ شَاشَة القَفْل.");
+      return;
+    }
+
+    // 10. الهز
+    if (_hasAny(cmd, ['شغل الهز', 'فعل الهز', 'شغلي الهز'])) {
+      setState(() => _settings.shakeMode = 'app_open');
+      await _saveSettings();
+      _initShakeDetector();
+      await _speak("تَمَام $userTitle، تَمَّ تَشْغِيل الهَز.");
+      return;
+    }
+    if (_hasAny(cmd, ['اقفل الهز', 'وقف الهز', 'اقفلي الهز'])) {
+      setState(() => _settings.shakeMode = 'off');
+      await _saveSettings();
+      _initShakeDetector();
+      try { await _shakeChannel.invokeMethod('stopShakeService'); } catch (_) {}
+      await _speak("تَمَام $userTitle، تَمَّ إِلْغَاء الهَز.");
+      return;
+    }
+    if (_hasAny(cmd, ['خلي الهز دايماً', 'خلي الهز دائمًا', 'خلي الهز في الخلفية'])) {
+      setState(() => _settings.shakeMode = 'always');
+      await _saveSettings();
+      _initShakeDetector();
+      await _speak("تَمَام $userTitle، الهَزْ شَغَّال دَايْمًا.");
+      return;
+    }
+
+    // 11. إيقاف التسجيل
+    if (_hasAny(cmd, ['خلي ايقاف التسجيل بالهز', 'خلي إيقاف التسجيل بالهز'])) {
+      setState(() => _settings.stopRecordMode = 'shake_only');
+      await _saveSettings();
+      await _speak("تَمَام $userTitle، إِيقَاف التَّسْجِيل هَيَكُون بِالهَز.");
+      return;
+    }
+    if (_hasAny(cmd, ['خلي ايقاف التسجيل بالزرار', 'خلي إيقاف التسجيل بالزرار'])) {
+      setState(() => _settings.stopRecordMode = 'manual_only');
+      await _saveSettings();
+      await _speak("تَمَام $userTitle، إِيقَاف التَّسْجِيل هَيَكُون بِالأَزْرَار.");
+      return;
+    }
+
+    // 12. كلمة السر للنداء
+    if (_hasAny(cmd, ['غير كلمة السر', 'غيري كلمة السر', 'غير كلمة النداء'])) {
+      String newWord = rawCommand
+          .replaceAll(RegExp(r'^(?:يا\s+)?(?:سكرتير|سكرتيرة)\s*'), '')
+          .replaceAll(RegExp(r'(?:غير|غيري)\s+كلمة\s+(?:السر|النداء)\s+(?:لـ|إلى|الى)?\s*'), '')
+          .trim();
+      if (newWord.isNotEmpty) {
+        setState(() => _settings.customWakeWord = newWord);
+        await _saveSettings();
+        await _speak("تَمَام $userTitle، كَلِمَة السِّرْ بَقَتْ $newWord.");
+        return;
+      }
+    }
+
+    // 13. استعادة الإعدادات الافتراضية
+    if (_hasAny(cmd, ['استعيد الإعدادات الافتراضية', 'رجع كل حاجة زي الأول', 'امسح الإعدادات', 'استعيدي الإعدادات'])) {
+      setState(() {
+        _settings = AppSettings();
+        _ttsVolume = 1.0;
+      });
+      await _saveSettings();
+      await _configureVoice(skipGreeting: true);
+      widget.onThemeChanged(false);
+      _initShakeDetector();
+      _scheduleAdhan30Days();
+      _scheduleSalatAlaNabi();
+      await _speak("تَمَام $userTitle، تَمَّتْ اِسْتِعَادَة كُلِّ الإِعْدَادَات الِافْتِرَاضِيَّة.");
+      return;
+    }
+
+    // 14. تغيير النغمات الافتراضية
+    // --- أ. نغمة المنبه الافتراضية ---
+    if (_hasAny(cmd, [
+      'غير صوت المنبه', 'غيري صوت المنبه', 'خلي صوت المنبه', 'غير نغمة المنبه', 'خلي نغمة المنبه',
+      'غير صوت منبه المهام', 'غير نغمة منبه المهام', 'خلي نغمة منبه المهام', 'خلي صوت منبه المهام',
+      'خلي النغمة الافتراضية للمهام', 'خلي النغمة الافتراضي للمهام', 'خلي الصوت الافتراضي للمهام',
+      'غير النغمة الافتراضية للمهام', 'غير النغمة الافتراضي للمهام', 'غير الصوت الافتراضي للمهام',
+      'خلي نغمة المهام', 'غير نغمة المهام', 'خلي صوت المهام', 'غير صوت المهام'
+    ])) {
+      final sound = _parseSoundFromVoice(cmd);
+      if (sound != 'use_default') {
+        final prefs = await SharedPreferences.getInstance();
+        if (sound == 'secretary') {
+          await prefs.remove('default_alarm_sound');
+        } else {
+          await prefs.setString('default_alarm_sound', sound!);
+        }
+        setState(() {});
+        await _speak("تَمَام $userTitle، خَلِّيتْ نَغْمَة مِنْبِه الْمَهَام ${sound == 'secretary' ? 'صَوْت السِّكْرِتِير' : _getSoundName(sound)}.");
+        return;
+      } else {
+        await _speak("مَعْلِشْ $userTitle، مَفْهَمْتِشْ النَّغْمَة. قُولْ مَثَلًا: مَرْعِب، ايفون، صَحْيَان، أَوْ صَوْت السِّكْرِتِير.");
+        return;
+      }
+    }
+
+    // --- ب. نغمة الجدول الأسبوعي ---
+    if (_hasAny(cmd, [
+      'غير صوت الجدول', 'غيري صوت الجدول', 'خلي صوت الجدول', 'غير نغمة الجدول', 'خلي نغمة الجدول',
+      'غير صوت منبه الجدول', 'خلي صوت منبه الجدول', 'غير نغمة منبه الجدول', 'خلي نغمة منبه الجدول',
+      'خلي النغمة الافتراضية للجدول', 'خلي الصوت الافتراضي للجدول', 'غير النغمة الافتراضية للجدول',
+      'غير النغمة الافتراضية للجدول الأسبوعي', 'خلي نغمة الجدول الأسبوعي'
+    ])) {
+      final sound = _parseSoundFromVoice(cmd);
+      if (sound != 'use_default') {
+        final prefs = await SharedPreferences.getInstance();
+        if (sound == 'secretary') {
+          await prefs.remove('default_weekly_sound');
+        } else {
+          await prefs.setString('default_weekly_sound', sound!);
+        }
+        setState(() {});
+        await _speak("تَمَام $userTitle، خَلِّيتْ نَغْمَة مِنْبِه الْجَدْوَل ${sound == 'secretary' ? 'صَوْت السِّكْرِتِير' : _getSoundName(sound)}.");
+        return;
+      } else {
+        await _speak("مَعْلِشْ $userTitle، مَفْهَمْتِشْ النَّغْمَة. قُولْ مَثَلًا: مَرْعِب، ايفون، صَحْيَان، أَوْ صَوْت السِّكْرِتِير.");
+        return;
+      }
+    }
+
+    // --- ج. نغمة المناسبات ---
+    if (_hasAny(cmd, [
+      'غير صوت المناسبات', 'غيري صوت المناسبات', 'خلي صوت المناسبات', 'غير نغمة المناسبات', 'خلي نغمة المناسبات',
+      'خلي النغمة الافتراضية للمناسبات', 'خلي الصوت الافتراضي للمناسبات', 'غير النغمة الافتراضية للمناسبات',
+      'غير نغمة منبه المناسبات', 'خلي نغمة منبه المناسبات'
+    ])) {
+      final sound = _parseSoundFromVoice(cmd);
+      if (sound != 'use_default') {
+        final prefs = await SharedPreferences.getInstance();
+        if (sound == 'secretary') {
+          await prefs.remove('default_event_sound');
+        } else {
+          await prefs.setString('default_event_sound', sound!);
+        }
+        setState(() {});
+        await _speak("تَمَام $userTitle، خَلِّيتْ نَغْمَة الْمُنَاسَبَات ${sound == 'secretary' ? 'صَوْت السِّكْرِتِير' : _getSoundName(sound)}.");
+        return;
+      } else {
+        await _speak("مَعْلِشْ $userTitle، مَفْهَمْتِشْ النَّغْمَة. قُولْ مَثَلًا: مَرْعِب، ايفون، صَحْيَان، أَوْ صَوْت السِّكْرِتِير.");
+        return;
+      }
+    }
+
+    // 👈 ==========================================
+    // 👈 نهاية الأوامر الصوتية للإعدادات
+    // 👈 ==========================================
+
+    // 👈 التعرف العالمي على أوامر إيقاف التسجيل
+    if (_hasAny(cmd, [
+      'وقف تسجيل', 'وقف التسجيل', 'وقفي تسجيل', 'وقفي التسجيل',
+      'اوقف تسجيل', 'اوقف التسجيل', 'أوقف تسجيل', 'أوقف التسجيل',
+      'خلص تسجيل', 'خلص التسجيل', 'خلصت تسجيل', 'خلصت التسجيل',
+      'انهي التسجيل', 'انهي تسجيل', 'أنهي التسجيل', 'بطل تسجيل', 'بطل التسجيل',
+      'اقفل التسجيل', 'اقفلي التسجيل', 'كفاية تسجيل', 'كفاية التسجيل', 'ستوب', 'stop'
+    ])) {
+      bool stopped = false;
+      if (_isRecording) {
+        await _stopRecording();
+        stopped = true;
+      }
+      if (_DiaryPageState.activeInstance != null) {
+        _DiaryPageState.activeInstance!.stopRecordingByVoice();
+        stopped = true;
+      }
+
+      if (stopped) {
+        await _speak("تَمَّ إِيقَافُ التَّسْجِيل $_userTitle.");
+      } else {
+        await _speak("مَفِيشْ تَسْجِيل شَغَّال دِلْوَقْتِي $_userTitle.");
+      }
+      return;
+    }
+
+// ══════════════════════════════════════════════════════
+// نهاية PART 5 / 8
+// ══════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
+// PART 6 / 8
+// _processSmartVoiceCommand (تكملة) + التعديل ب (قراءة المواقيت
+// والوقت المتبقي والصلاة الجاية) + التعديل أ (منبه الصلاة)
+// + _listTodayTasks + _listWeeklySchedule + _listDayTasks
+// ══════════════════════════════════════════════════════
+
+    // 0. الحوار الذكي (خطوة بخطوة) للمناسبات
+    if (_pendingVoiceAction != null && _pendingVoiceAction!.startsWith('event_')) {
+      if (_hasAny(cmd, ['إلغاء', 'الغي', 'خلاص', 'كفاية'])) { _pendingVoiceAction = null; _pendingEventData = null; await _speak("تَمَّ إِلْغَاءُ إِضَافَةِ المُنَاسَبَةِ $_userTitle."); return; }
+      if (_pendingVoiceAction == 'event_name') { _pendingEventData!['title'] = rawCommand; _pendingVoiceAction = 'event_date'; await _speak("تَمَام $_userTitle. تَارِيخُ المُنَاسَبَةِ إِيهْ؟"); _listenVoiceCommand(); return; }
+      if (_pendingVoiceAction == 'event_date') {
+        final parsedDate = _parseDiaryDate(cmd);
+        if (parsedDate != null) { _pendingEventData!['eventDate'] = parsedDate.toIso8601String(); } else { await _speak("مَعْلِشْ مَفْهَمْتِشْ التَّارِيخْ $_userTitle."); _listenVoiceCommand(); return; }
+        _pendingVoiceAction = 'event_time'; await _speak("السَّاعَةِ كَامْ $_userTitle؟"); _listenVoiceCommand(); return;
+      }
+      if (_pendingVoiceAction == 'event_time') {
+        final hour = _parseHour(cmd); final minute = _parseMinute(cmd);
+        if (hour != null) { _pendingEventData!['reminderHour'] = hour; _pendingEventData!['reminderMinute'] = minute; _pendingVoiceAction = 'event_advance'; await _speak("التَّذْكِيرُ قَبْلَهَا بِقَدْ إِيهْ؟"); _listenVoiceCommand(); return; } else { await _speak("مَفْهَمْتِشْ السَّاعَة $_userTitle."); _listenVoiceCommand(); return; }
+      }
+      if (_pendingVoiceAction == 'event_advance') {
+        String advance = 'قبلها بيوم';
+        if (_hasAny(cmd, ['نفس اليوم', 'في نفس اليوم'])) advance = 'في نفس اليوم';
+        else if (_hasAny(cmd, ['اسبوع', 'أسبوع'])) advance = 'قبلها بأسبوع';
+        _pendingEventData!['advanceReminder'] = advance; _pendingEventData!['repeatInterval'] = 'مرة واحدة'; _pendingEventData!['repeatType'] = 'سنوي'; _pendingEventData!['sound'] = null;
+        setState(() { _specialEvents.add(_pendingEventData!); }); _saveData(); _scheduleEventReminder(_pendingEventData!);
+        await _speak("تَمَّتْ إِضَافَةُ مُنَاسَبَةِ: ${_pendingEventData!['title']} بِنَجَاح $_userTitle.");
+        _pendingVoiceAction = null; _pendingEventData = null; return;
+      }
+    }
+
+    // 1. تأكيد تداخل المواعيد
+    if (_pendingVoiceAction == 'confirm_time_conflict') {
+      _pendingActionTimer?.cancel();
+      if (_hasAny(cmd, ['احفظ', 'حفظ', 'احفظهم', 'خليهم', 'سيبهم', 'موافق', 'ايوه', 'أيوة', 'تمام', 'ماشي', 'احفظهم الاتنين'])) {
+        _handleConflictResolution(true);
+      } else {
+        _handleConflictResolution(false);
+      }
+      return;
+    }
+
+    // 2. تأكيد مسح كل اليوميات
+    if (_pendingVoiceAction == 'confirm_delete_all_diaries') {
+      _pendingActionTimer?.cancel();
+      _pendingVoiceAction = null;
+      if (_hasAny(cmd, ['ايوه', 'أيوة', 'تمام', 'موافق', 'امسح'])) {
+        setState(() {
+          _diaries.clear();
+        });
+        await _saveData();
+        await _speak("تَمَّ مَسْحُ كُلِّ اليَوْمِيَّاتِ بِنَجَاح $_userTitle.");
+      } else {
+        await _speak("تَمَّ إِلْغَاءُ المَسْح $_userTitle.");
+      }
+      return;
+    }
+
+    // 3. إلغاء الحوار
+    if (_hasAny(cmd, ['خلاص', 'إلغاء', 'الغي', 'كفاية', 'كفايه'])) {
+      if (_pendingVoiceAction != null) {
+        _pendingVoiceAction = null;
+        _pendingRawCommand = null;
+        _pendingActionTimer?.cancel();
+        await _speak("تَمَام $_userTitle، لَغِيت الأَمْر.");
+        return;
+      }
+    }
+
+    // 4. متابعة الحوار
+    if (_pendingVoiceAction != null && _pendingRawCommand != null) {
+      final combined = '$_pendingRawCommand $rawCommand';
+      final action = _pendingVoiceAction;
       _pendingVoiceAction = null;
       _pendingRawCommand = null;
       _pendingActionTimer?.cancel();
-      await _speak("تَمَام $_userTitle، لَغِيت الأَمْر.");
-      return;
+
+      if (action == 'alarm_time') {
+        await _createAlarmFromVoice(combined, _norm(combined));
+        return;
+      } else if (action == 'weekly_day' || action == 'weekly_time') {
+        await _createWeeklyAlarmFromVoice(combined, _norm(combined));
+        return;
+      }
     }
+
+    // 5. أوامر اليوميات
+    final isWritingToDiary = _hasAny(cmd, [
+    'اكتب في اليوميات', 'اكتب في يومياتي', 'سجل في اليوميات', 'سجل في يومياتي',
+    'اكتب يومية', 'سجل يومية', 'سجل عندك في يومية',
+    'اكتب عندك في يومية', 'اكتب عندك', 'اكتبلي في يومية', 'اكتبلي يومية', 'سجللي يومية',
+    'سجل عندك', 'اكتب في المذكرة', 'سجل في المذكرة', 'اكتبي عندك', 'اكتبي', 'اكتب', 'سجلي', 'سجل'
+  ]);
+
+    if (!isWritingToDiary && _hasAny(cmd, ['يوميات', 'يوميه', 'يومية', 'مفكره', 'مفكرة'])) {
+  if (_DiaryPageState.activeInstance == null) {
+    _openDiaryPage(DateTime.now());
+    await Future.delayed(const Duration(milliseconds: 500));
   }
 
-  // 4. متابعة الحوار
-  if (_pendingVoiceAction != null && _pendingRawCommand != null) {
-    final combined = '$_pendingRawCommand $rawCommand';
-    final action = _pendingVoiceAction;
-    _pendingVoiceAction = null;
-    _pendingRawCommand = null;
-    _pendingActionTimer?.cancel();
-
-    if (action == 'alarm_time') {
-      await _createAlarmFromVoice(combined, _norm(combined));
-      return;
-    } else if (action == 'weekly_day' || action == 'weekly_time') {
-      await _createWeeklyAlarmFromVoice(combined, _norm(combined));
-      return;
-    }
-  }
-
-  // 5. أوامر اليوميات
-  final isWritingToDiary = _hasAny(cmd, [
-  'اكتب في اليوميات', 'اكتب في يومياتي', 'سجل في اليوميات', 'سجل في يومياتي', 
-  'اكتب يومية', 'سجل يومية', 'سجل عندك في يومية', 
-  'اكتب عندك في يومية', 'اكتب عندك', 'اكتبلي في يومية', 'اكتبلي يومية', 'سجللي يومية',
-  'سجل عندك', 'اكتب في المذكرة', 'سجل في المذكرة', 'اكتبي عندك', 'اكتبي', 'اكتب', 'سجلي', 'سجل'
-]);
-
-  if (!isWritingToDiary && _hasAny(cmd, ['يوميات', 'يوميه', 'يومية', 'مفكره', 'مفكرة'])) {
-if (_DiaryPageState.activeInstance == null) {
-  _openDiaryPage(DateTime.now());
-  await Future.delayed(const Duration(milliseconds: 500));
-}
-
-if (_DiaryPageState.activeInstance != null) {
-      if (_hasAny(cmd, ['ضيف مهمة', 'ضيفي مهمة', 'حط مهمة', 'أضف مهمة', 'ضيفلي مهمة', 'ضيفيلي مهمة'])) {
-        String text = rawCommand.trim();
-        text = text.replaceFirst(RegExp(r'^(?:(?:يا\s+)?(?:سكرتير|سكرتيرة)\s+)?(?:ضيف|ضيفي|حط|أضف|اضف|ضيفلي|ضيفيلي)\s+(?:مهمة\s+)?'), '');
-        text = text.replaceFirst(RegExp(r'^(?:في\s+)?(?:اليوميات|يومياتي|يوميتي|يومية|مفكرة|المفكرة)\s+'), '');
-        text = text.replaceAll(RegExp(r'\s+(?:يا\s+)?(?:سكرتير|سكرتيرة)\s*$'), '');
-        text = text.trim();
-        _diaryVoiceStream.add({'action': 'add_todo', 'text': text.isEmpty ? 'مهمة جديدة' : text});
-        await _speak("تَمَام $_userTitle، ضِفْتْ المُهِمَّة فِي اليَوْمِيَّة.");
-        return;
-      }
-      if (_hasAny(cmd, ['اكتب', 'سجل نص', 'ضيف ملاحظة', 'اكتبلي'])) {
-        String text = rawCommand.replaceFirst(RegExp(r'^(?:(?:يا\s+)?(?:سكرتير|سكرتيرة)\s+)?(?:اكتب|سجل|ضيف|اكتبلي|سجلي)\s+(?:ملاحظة\s+)?'), '');
-        text = text.replaceAll(RegExp(r'\s+(?:في|على)\s+(?:اليوميات|يومياتي|يوميتي|يومية|مفكرة|المفكرة)\s*'), ' ');
-        text = _cleanDateWordsFromText(text);
-
-        if (text.isNotEmpty) {
-          _diaryVoiceStream.add({'action': 'add_text_note', 'text': text});
-          await _speak("تَمَام $_userTitle، كَتَبْتْ النَّصْ.");
+  if (_DiaryPageState.activeInstance != null) {
+        if (_hasAny(cmd, ['ضيف مهمة', 'ضيفي مهمة', 'حط مهمة', 'أضف مهمة', 'ضيفلي مهمة', 'ضيفيلي مهمة'])) {
+          String text = rawCommand.trim();
+          text = text.replaceFirst(RegExp(r'^(?:(?:يا\s+)?(?:سكرتير|سكرتيرة)\s+)?(?:ضيف|ضيفي|حط|أضف|اضف|ضيفلي|ضيفيلي)\s+(?:مهمة\s+)?'), '');
+          text = text.replaceFirst(RegExp(r'^(?:في\s+)?(?:اليوميات|يومياتي|يوميتي|يومية|مفكرة|المفكرة)\s+'), '');
+          text = text.replaceAll(RegExp(r'\s+(?:يا\s+)?(?:سكرتير|سكرتيرة)\s*$'), '');
+          text = text.trim();
+          _diaryVoiceStream.add({'action': 'add_todo', 'text': text.isEmpty ? 'مهمة جديدة' : text});
+          await _speak("تَمَام $_userTitle، ضِفْتْ المُهِمَّة فِي اليَوْمِيَّة.");
           return;
         }
-      }
-      if (_hasAny(cmd, ['خلصت رقم', 'عملت رقم', 'تم رقم', 'done رقم'])) {
-        final m = RegExp(r'رقم\s*(\d+)').firstMatch(rawCommand);
-        if (m != null) {
-          final idx = int.parse(m.group(1)!) - 1;
-          _diaryVoiceStream.add({'action': 'mark_done', 'index': idx});
-          await _speak("تَمَام $_userTitle، عَلَّمْتْ عَلَى المُهِمَّة رَقْم ${idx + 1}.");
-          return;
-        }
-      }
-      if (_hasAny(cmd, ['ضيف صورة', 'ضيفي صورة', 'أضف صورة'])) {
-        _diaryVoiceStream.add({'action': 'add_image'});
-        await _speak("اخْتَارْ الصُّورَة يَا $_userTitle.");
-        return;
-      }
-      if (_hasAny(cmd, ['وقف تسجيل', 'وقفي تسجيل', 'خلصت تسجيل', 'انهي تسجيل', 'انهي التسجيل'])) {
-        _diaryVoiceStream.add({'action': 'stop_recording'});
-        await _speak("تَمَّ إِيقَافُ التَّسْجِيل.");
-        return;
-      }
-      if (_hasAny(cmd, ['سجل صوت', 'سجلي صوت', 'ابدأ تسجيل', 'ابدأ التسجيل'])) {
-        _diaryVoiceStream.add({'action': 'start_recording'});
-        await _speak("بَدَأْتْ التَّسْجِيل يَا $_userTitle.");
-        return;
-      }
-      if (_hasAny(cmd, ['امسح اليومية', 'امسح اليوميه', 'افرغ اليومية', 'مسح اليومية', 'امسح كل حاجه في اليومية'])) {
-        _diaryVoiceStream.add({'action': 'clear_all'});
-        await _speak("تَمَّ مَسْحُ كُلِّ مَحْتُوِيَّاتِ اليَوْمِيَّةِ $_userTitle.");
-        return;
-      }
-      if (_hasAny(cmd, ['اقرا اليوميات', 'قولي اليوميات', 'اللي في اليوميات'])) {
-        final readableText = _DiaryPageState.activeInstance!.getReadableText();
-        await _speak(readableText.isEmpty ? "اليَوْمِيَّة فَاضْيَة $_userTitle." : readableText);
-        return;
-      }
-      if (_hasAny(cmd, ['امسح اخر مهمة', 'احذف اخر مهمة'])) {
-        _diaryVoiceStream.add({'action': 'delete_last_task'});
-        await _speak("تَمَّ مَسْحُ آخِرْ مُهِمَّة $_userTitle.");
-        return;
-      }
-      if (_hasAny(cmd, ['عدل مهمة', 'عدل المهمة', 'عدلي مهمة', 'تعديل مهمة', 'عدل ملاحظة', 'عدل الملاحظة'])) {
-        final numMatch = RegExp(r'رقم\s*(\d+)').firstMatch(rawCommand);
-        if (numMatch != null) {
-          final taskNum = int.parse(numMatch.group(1)!);
-          String newText = rawCommand
-              .replaceFirst(RegExp(r'^(?:(?:يا\s+)?(?:سكرتير|سكرتيرة)\s+)?(?:عدل|عدلي)\s+(?:مهمة|المهمة|ملاحظة|الملاحظة)\s+رقم\s*\d+\s*(?:خليها|خليه|لـ|إلى|الى)\s*'), '')
-              .trim();
-          if (newText.isNotEmpty) {
-            _diaryVoiceStream.add({'action': 'edit_task_by_number', 'index': taskNum - 1, 'text': newText});
-            await _speak("تَمَام $_userTitle، تَمَّ تَعْدِيلُ المَهَامِّ رَقْم $taskNum.");
+        if (_hasAny(cmd, ['اكتب', 'سجل نص', 'ضيف ملاحظة', 'اكتبلي'])) {
+          String text = rawCommand.replaceFirst(RegExp(r'^(?:(?:يا\s+)?(?:سكرتير|سكرتيرة)\s+)?(?:اكتب|سجل|ضيف|اكتبلي|سجلي)\s+(?:ملاحظة\s+)?'), '');
+          text = text.replaceAll(RegExp(r'\s+(?:في|على)\s+(?:اليوميات|يومياتي|يوميتي|يومية|مفكرة|المفكرة)\s*'), ' ');
+          text = _cleanDateWordsFromText(text);
+
+          if (text.isNotEmpty) {
+            _diaryVoiceStream.add({'action': 'add_text_note', 'text': text});
+            await _speak("تَمَام $_userTitle، كَتَبْتْ النَّصْ.");
             return;
           }
         }
-      }
+        if (_hasAny(cmd, ['خلصت رقم', 'عملت رقم', 'تم رقم', 'done رقم'])) {
+          final m = RegExp(r'رقم\s*(\d+)').firstMatch(rawCommand);
+          if (m != null) {
+            final idx = int.parse(m.group(1)!) - 1;
+            _diaryVoiceStream.add({'action': 'mark_done', 'index': idx});
+            await _speak("تَمَام $_userTitle، عَلَّمْتْ عَلَى المُهِمَّة رَقْم ${idx + 1}.");
+            return;
+          }
+        }
+        if (_hasAny(cmd, ['ضيف صورة', 'ضيفي صورة', 'أضف صورة'])) {
+          _diaryVoiceStream.add({'action': 'add_image'});
+          await _speak("اخْتَارْ الصُّورَة يَا $_userTitle.");
+          return;
+        }
+        if (_hasAny(cmd, ['وقف تسجيل', 'وقفي تسجيل', 'خلصت تسجيل', 'انهي تسجيل', 'انهي التسجيل'])) {
+          _diaryVoiceStream.add({'action': 'stop_recording'});
+          await _speak("تَمَّ إِيقَافُ التَّسْجِيل.");
+          return;
+        }
+        if (_hasAny(cmd, ['سجل صوت', 'سجلي صوت', 'ابدأ تسجيل', 'ابدأ التسجيل'])) {
+          _diaryVoiceStream.add({'action': 'start_recording'});
+          await _speak("بَدَأْتْ التَّسْجِيل يَا $_userTitle.");
+          return;
+        }
+        if (_hasAny(cmd, ['امسح اليومية', 'امسح اليوميه', 'افرغ اليومية', 'مسح اليومية', 'امسح كل حاجه في اليومية'])) {
+          _diaryVoiceStream.add({'action': 'clear_all'});
+          await _speak("تَمَّ مَسْحُ كُلِّ مَحْتُوِيَّاتِ اليَوْمِيَّةِ $_userTitle.");
+          return;
+        }
+        if (_hasAny(cmd, ['اقرا اليوميات', 'قولي اليوميات', 'اللي في اليوميات'])) {
+          final readableText = _DiaryPageState.activeInstance!.getReadableText();
+          await _speak(readableText.isEmpty ? "اليَوْمِيَّة فَاضْيَة $_userTitle." : readableText);
+          return;
+        }
+        if (_hasAny(cmd, ['امسح اخر مهمة', 'احذف اخر مهمة'])) {
+          _diaryVoiceStream.add({'action': 'delete_last_task'});
+          await _speak("تَمَّ مَسْحُ آخِرْ مُهِمَّة $_userTitle.");
+          return;
+        }
+        if (_hasAny(cmd, ['عدل مهمة', 'عدل المهمة', 'عدلي مهمة', 'تعديل مهمة', 'عدل ملاحظة', 'عدل الملاحظة'])) {
+          final numMatch = RegExp(r'رقم\s*(\d+)').firstMatch(rawCommand);
+          if (numMatch != null) {
+            final taskNum = int.parse(numMatch.group(1)!);
+            String newText = rawCommand
+                .replaceFirst(RegExp(r'^(?:(?:يا\s+)?(?:سكرتير|سكرتيرة)\s+)?(?:عدل|عدلي)\s+(?:مهمة|المهمة|ملاحظة|الملاحظة)\s+رقم\s*\d+\s*(?:خليها|خليه|لـ|إلى|الى)\s*'), '')
+                .trim();
+            if (newText.isNotEmpty) {
+              _diaryVoiceStream.add({'action': 'edit_task_by_number', 'index': taskNum - 1, 'text': newText});
+              await _speak("تَمَام $_userTitle، تَمَّ تَعْدِيلُ المَهَامِّ رَقْم $taskNum.");
+              return;
+            }
+          }
+        }
 
-      if (_hasAny(cmd, ['امسح كل اليوميات', 'امسح اليوميات كلها', 'احذف كل اليوميات', 'افرغ كل اليوميات'])) {
-        await _speak("هَلْ أَنْتَ مُتَأَكِّدٌ أَنَّكَ تُرِيدُ مَسْحَ كُلِّ اليَوْمِيَّاتِ $_userTitle؟ قُلْ أَيْوَة لِلتَّأْكِيد.");
-        _pendingVoiceAction = 'confirm_delete_all_diaries';
+        if (_hasAny(cmd, ['امسح كل اليوميات', 'امسح اليوميات كلها', 'احذف كل اليوميات', 'افرغ كل اليوميات'])) {
+          await _speak("هَلْ أَنْتَ مُتَأَكِّدٌ أَنَّكَ تُرِيدُ مَسْحَ كُلِّ اليَوْمِيَّاتِ $_userTitle؟ قُلْ أَيْوَة لِلتَّأْكِيد.");
+          _pendingVoiceAction = 'confirm_delete_all_diaries';
+          _listenVoiceCommand();
+          return;
+        }
+
+        final requestedDate = _parseDiaryDate(cmd);
+        if (requestedDate != null) {
+          _openDiaryPage(requestedDate);
+          await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ ${DateFormat('EEEE، dd MMMM', 'ar').format(requestedDate)} $_userTitle.");
+        } else {
+          setState(() => _currentIndex = 1);
+          await _speak("تَمَّ فَتْحُ قِسْمِ اليَوْمِيَّاتِ $_userTitle، اخْتَارْ اليَوْمَ اللي تِحِبَّهْ.");
+        }
+        return;
+      }
+    }
+
+    // 6. إيقاف المنبه
+    if (_hasAny(cmd, ['خلاص', 'صحيت', 'صحيتي', 'قومت', 'قومتي', 'فوقت', 'فوقتي', 'اقفل', 'اقفلي', 'كفاية', 'كفايه', 'إيقاف', 'ايقاف', 'إلغاء', 'الغي', 'بس'])) {
+      if (_isAlarmDialogOpen) {
+        _activeAlarmLoopTimer?.cancel();
+        _alarmVoiceSafetyTimer?.cancel();
+        _alarmVoiceSafetyTimer = null;
+        if (_activeAlarmLoopTimer != null) _activeTimers.remove(_activeAlarmLoopTimer!);
+        _activeAlarmLoopTimer = null;
+
+        _tts.stop();
+        try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
+        WakelockPlus.disable();
+        _isAlarmDialogOpen = false;
+
+        final stoppedTitle = _activeAlarmTitle;
+        final stoppedRepeat = _activeAlarmRepeat;
+        final stoppedInterval = _activeAlarmInterval;
+        final stoppedCustomDays = List<String>.from(_activeAlarmCustomDays);
+        final stoppedScheduled = _activeAlarmScheduledTime;
+        final stoppedSound = _activeAlarmSoundUri;
+        final stoppedCtx = _alarmDialogContext;
+
+        _activeAlarmTitle = null;
+        _alarmDialogContext = null;
+
+        if (stoppedTitle != null) {
+          try { await _notifications.cancel(stoppedTitle.hashCode + 1000); } catch (_) {}
+        }
+        try { await _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
+
+        if (stoppedTitle != null) {
+          if (stoppedRepeat == 'مرة واحدة' || stoppedRepeat == null) {
+            final idx = _tasks.indexWhere((t) => t['task'] == stoppedTitle);
+            if (idx != -1) {
+              setState(() => _tasks.removeAt(idx));
+              _saveData();
+            }
+            try { await _cancelNativeAlarm(stoppedTitle); } catch (_) {}
+          } else if (stoppedScheduled != null) {
+            _rescheduleRepeating(stoppedTitle, stoppedRepeat!, stoppedInterval ?? 'بدون تنبيه', stoppedCustomDays, stoppedScheduled, stoppedSound);
+          }
+        }
+        SharedPreferences.getInstance().then((p) => p.remove('pending_alarm'));
+        if (stoppedCtx != null) {
+          try { Navigator.of(stoppedCtx).pop(); } catch (_) {}
+        }
+        await _speak("تَمَّ إِيقَافُ المُنَبِّه $_userTitle");
+        return;
+      }
+    }
+
+    // 7. تأجيل المنبه
+    if (_hasAny(cmd, [
+      'فكرني', 'أجله', 'أجلي', 'صحيني', 'نومة', 'قيلولة', 'استنى', 'استني',
+      '5 دقايق', 'خمس دقايق', '10 دقايق', 'عشر دقايق', 'عشر دقائق',
+      'ربع ساعة', 'تلت ساعة', 'ثلث ساعة', 'نص ساعة', 'نصف ساعة', 'نصايه',
+      '20 دقيقة', 'عشرين دقيقة', 'ساعة'
+    ])) {
+      if (_isAlarmDialogOpen || _activeAlarmTitle != null) {
+        int minutes = 5;
+
+        if (cmd.contains('نص ساعه') || cmd.contains('نصف ساعه') || cmd.contains('نصايه')) minutes = 30;
+        else if (cmd.contains('ربع ساعه')) minutes = 15;
+        else if (cmd.contains('تلت ساعه') || cmd.contains('ثلث ساعه')) minutes = 20;
+        else if (cmd.contains('ساعه ونص') || cmd.contains('ساعة ونص') || cmd.contains('ساعه ونصف')) minutes = 90;
+        else if (cmd.contains('ساعه وربع') || cmd.contains('ساعة وربع')) minutes = 75;
+        else if (cmd.contains('ساعه وتلت') || cmd.contains('ساعة وتلت') || cmd.contains('ساعه وثلث')) minutes = 80;
+        else if (cmd.contains('ساعه وخمس') || cmd.contains('ساعة وخمس')) minutes = 65;
+        else if (cmd.contains('ساعه وعشر') || cmd.contains('ساعة وعشر')) minutes = 70;
+        else if (cmd.contains('ساعه الا خمس') || cmd.contains('ساعة الا خمس')) minutes = 55;
+        else if (cmd.contains('ساعه الا عشر') || cmd.contains('ساعة الا عشر')) minutes = 50;
+        else if (cmd.contains('ساعه الا ربع') || cmd.contains('ساعة الا ربع')) minutes = 45;
+        else if (cmd.contains('ساعه الا تلت') || cmd.contains('ساعة الا تلت')) minutes = 40;
+        else if (cmd.contains('ساعه الا نص') || cmd.contains('ساعة الا نص')) minutes = 30;
+        else if (cmd.contains('ساعتين') || cmd.contains('ساعتان')) minutes = 120;
+        else if (cmd.contains('تلات ساعات') || cmd.contains('ثلاث ساعات') || cmd.contains('3 ساعات')) minutes = 180;
+        else if (cmd.contains('اربع ساعات') || cmd.contains('أربع ساعات') || cmd.contains('4 ساعات')) minutes = 240;
+        else if (cmd.contains('ساعه')) minutes = 60;
+        else if (cmd.contains('خمستاشر') || cmd.contains('خمسه عشر') || cmd.contains('خمسة عشر') || cmd.contains('15')) minutes = 15;
+        else if (cmd.contains('تلاتين') || cmd.contains('ثلاثين') || cmd.contains('30')) minutes = 30;
+        else if (cmd.contains('خمسه واربعين') || cmd.contains('خمسة وأربعين') || cmd.contains('45')) minutes = 45;
+        else if (cmd.contains('عشرين') || cmd.contains('20')) minutes = 20;
+        else if (cmd.contains('عشر') || cmd.contains('10')) minutes = 10;
+        else if (cmd.contains('خمسه') || cmd.contains('خمس') || cmd.contains('5')) minutes = 5;
+        else if (cmd.contains('دقيقتين')) minutes = 2;
+
+        final originalTitle = _activeAlarmTitle ?? 'المنبه';
+        final snoozeTime = DateTime.now().add(Duration(minutes: minutes));
+        final snoozeTimestamp = DateTime.now().millisecondsSinceEpoch;
+
+        _scheduleContinuousAlarm(
+          originalTitle,
+          snoozeTime,
+          'مرة واحدة',
+          'كل 10 ثواني',
+          [],
+          customId: snoozeTimestamp,
+          customNotificationId: snoozeTimestamp + 1000000,
+          soundUri: _activeAlarmSoundUri,
+        );
+
+        if (_activeAlarmRepeat != null && _activeAlarmRepeat != 'مرة واحدة' && _activeAlarmScheduledTime != null) {
+          _rescheduleRepeating(
+            originalTitle,
+            _activeAlarmRepeat!,
+            _activeAlarmInterval ?? 'بدون تنبيه',
+            _activeAlarmCustomDays,
+            _activeAlarmScheduledTime!,
+            _activeAlarmSoundUri
+          );
+        }
+
+        if (_isAlarmDialogOpen) {
+           _activeAlarmLoopTimer?.cancel();
+           _alarmVoiceSafetyTimer?.cancel();
+           _alarmVoiceSafetyTimer = null;
+           _tts.stop();
+           WakelockPlus.disable();
+           if (_alarmDialogContext != null) Navigator.pop(_alarmDialogContext!);
+           _isAlarmDialogOpen = false;
+           _activeAlarmTitle = null;
+           _alarmDialogContext = null;
+        }
+
+        String timeText;
+        if (minutes == 30) {
+          timeText = 'نص ساعة';
+        } else if (minutes == 60) {
+          timeText = 'ساعة';
+        } else if (minutes == 20) {
+          timeText = 'تلت ساعة';
+        } else if (minutes == 1) {
+          timeText = 'دقيقة واحدة';
+        } else if (minutes == 2) {
+          timeText = 'دقيقتين';
+        } else if (minutes >= 3 && minutes <= 10) {
+          timeText = '$minutes دقائق';
+        } else {
+          timeText = '$minutes دقيقة';
+        }
+        await _speak("حَاضِرْ $_userTitle، هَفَكَّرَكْ تَانِي عَلَى $originalTitle بَعْد $timeText.");
+        return;
+      }
+    }
+
+    // 8. إضافة مناسبة شات (جملة واحدة)
+    if (_hasAny(cmd, ['ضيف مناسبة', 'اضف مناسبة', 'ضيفي مناسبة', 'اضيفي مناسبة', 'عايز اضيف مناسبة', 'عايزة اضيف مناسبة', 'ضيفلي مناسبة', 'ضيفلي مناسبه', 'فكرني بمناسبة', 'فكرني ب مناسبة', 'مناسبة', 'مناسبه'])) {
+      DateTime? parsedEventDate = _parseFullDate(cmd);
+      int? eventDay = parsedEventDate?.day;
+      int? hour = _parseHour(cmd);
+      int minute = _parseMinute(cmd);
+      String advance = 'قبلها بيوم';
+      if (_hasAny(cmd, ['قبلها بأسبوع', 'قبلها اسبوع'])) advance = 'قبلها بأسبوع';
+
+      String title = rawCommand;
+      final removeWords = ['ضيف', 'مناسبة', 'فكرني', 'ذكرني', 'يوم', 'الساعة', 'الساعه', 'مساء', 'مساءً', 'صباحا', 'صباحاً', 'قبلها', 'بيوم', 'بأسبوع', 'اسبوع', 'أيام', 'ايام', 'في', 'نفس', 'اليوم', 'يا', 'سكرتير', 'سكرتيرة', 'يناير','فبراير','مارس','ابريل','أبريل','مايو','يونيو','يوليو','اغسطس','أغسطس','سبتمبر','اكتوبر','أكتوبر','نوفمبر','ديسمبر'];
+      for (var w in removeWords) { title = title.replaceAll(w, ''); }
+      title = title.replaceAll(RegExp(r'\d+'), '').trim();
+
+      if (title.isEmpty) title = 'مناسبة';
+
+      if (parsedEventDate == null || hour == null) {
+        _pendingEventData = {'title': title};
+        _pendingVoiceAction = 'event_date';
+        await _speak("حَاضِرْ $_userTitle، التَّارِيخِ أَوِ الوَقْتِ مُشْ وَاضِحْ. تَارِيخُ المُنَاسَبَةِ إِيهْ؟");
         _listenVoiceCommand();
         return;
       }
+      if (hour < 12 && _hasAny(cmd, ['مساء', 'بالليل', 'الليل'])) hour += 12;
 
-      final requestedDate = _parseDiaryDate(cmd);
-      if (requestedDate != null) {
-        _openDiaryPage(requestedDate);
-        await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ ${DateFormat('EEEE، dd MMMM', 'ar').format(requestedDate)} $_userTitle.");
-      } else {
-        setState(() => _currentIndex = 1);
-        await _speak("تَمَّ فَتْحُ قِسْمِ اليَوْمِيَّاتِ $_userTitle، اخْتَارْ اليَوْمَ اللي تِحِبَّهْ.");
-      }
+      final newEvent = {'title': title, 'detail': 'مناسبة سنوية', 'phone': '', 'advanceReminder': advance, 'eventDate': parsedEventDate.toIso8601String(), 'reminderHour': hour, 'reminderMinute': minute, 'repeatInterval': 'مرة واحدة', 'repeatType': 'سنوي', 'sound': 'default'};
+      setState(() { _specialEvents.add(newEvent); }); _sortByTime(_specialEvents); _saveData(); _scheduleEventReminder(newEvent);
+      final formattedHour = hour % 12 == 0 ? 12 : hour % 12;
+      final period = hour >= 12 ? 'مَسَاءً' : 'صَبَاحاً';
+      await _speak("تَمَّتْ إِضَافَةُ: $title يَوْمْ $eventDay السَّاعَة $formattedHour $period، وَالتَّذْكِيرُ $advance $_userTitle.");
       return;
     }
-  }
 
-  // 6. إيقاف المنبه
-  if (_hasAny(cmd, ['خلاص', 'صحيت', 'صحيتي', 'قومت', 'قومتي', 'فوقت', 'فوقتي', 'اقفل', 'اقفلي', 'كفاية', 'كفايه', 'إيقاف', 'ايقاف', 'إلغاء', 'الغي', 'بس'])) {
-    if (_isAlarmDialogOpen) {
-      _activeAlarmLoopTimer?.cancel();
-      _alarmVoiceSafetyTimer?.cancel(); 
-      _alarmVoiceSafetyTimer = null; 
-      if (_activeAlarmLoopTimer != null) _activeTimers.remove(_activeAlarmLoopTimer!);
-      _activeAlarmLoopTimer = null;
+    // 9. تعديل موعد شات (جملة واحدة)
+    if (_hasAny(cmd, ['عدل موعد', 'عدلي موعد', 'تعديل موعد', 'غير موعد', 'غيري موعد'])) {
+      String searchTerm = cmd.replaceAll('عدل', '').replaceAll('موعد', '').replaceAll('غير', '').trim();
+      searchTerm = searchTerm.split('وخليه').first.trim(); searchTerm = searchTerm.split('الساعة').first.trim();
+      if (searchTerm.isEmpty) { await _speak("قُولِّي أَعَدِّلْ أَنَّهِي مَوْعِدْ $_userTitle؟"); return; }
+      final matches = _tasks.where((t) { final taskName = _norm(t['task'].toString()); return taskName.contains(_norm(searchTerm)) || _norm(searchTerm).contains(taskName); }).toList();
+      if (matches.isEmpty) { await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ $_userTitle."); return; }
 
-      _tts.stop();
-      try { _soundChannel.invokeMethod('stopPreview'); } catch (_) {}
-      WakelockPlus.disable();
-      _isAlarmDialogOpen = false;
+      final task = matches.first; final index = _tasks.indexOf(task);
+      final newHour = _parseHour(cmd);
+      if (newHour == null) { await _speak("مَفْهَمْتِشْ الوَقْتْ الجَدِيدْ $_userTitle."); return; }
 
-      final stoppedTitle = _activeAlarmTitle;
-      final stoppedRepeat = _activeAlarmRepeat;
-      final stoppedInterval = _activeAlarmInterval;
-      final stoppedCustomDays = List<String>.from(_activeAlarmCustomDays);
-      final stoppedScheduled = _activeAlarmScheduledTime;
-      final stoppedSound = _activeAlarmSoundUri;
-      final stoppedCtx = _alarmDialogContext;
+      final newMinute = _parseMinute(cmd);
+      DateTime newDate = DateTime.parse(task['scheduled']);
+      if (cmd.contains('بكره') || cmd.contains('بكرة')) { newDate = newDate.add(const Duration(days: 1)); }
+      final scheduled = DateTime(newDate.year, newDate.month, newDate.day, newHour, newMinute);
 
-      _activeAlarmTitle = null;
-      _alarmDialogContext = null;
+      setState(() { _tasks[index] = {...task, 'scheduled': scheduled.toIso8601String(), 'time': DateFormat('hh:mm a', 'ar').format(scheduled)}; });
+      _saveData(); await _cancelNativeAlarm(task['task'].toString());
+      if (task['repeatInterval'] != 'بدون تنبيه') { _scheduleContinuousAlarm(task['task'].toString(), scheduled, task['repeat'] ?? 'مرة واحدة', task['repeatInterval'] ?? 'بدون تنبيه', List<String>.from(task['customDays'] ?? []), soundUri: task['sound']); }
+      await _speak("تَمَّ تَعْدِيلُ مَوْعِدْ ${task['task']} إِلَى السَّاعَة ${newHour}:${newMinute.toString().padLeft(2, '0')} $_userTitle.");
+      return;
+    }
 
-      if (stoppedTitle != null) {
-        try { await _notifications.cancel(stoppedTitle.hashCode + 1000); } catch (_) {}
-      }
-      try { await _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
-
-      if (stoppedTitle != null) {
-        if (stoppedRepeat == 'مرة واحدة' || stoppedRepeat == null) {
-          final idx = _tasks.indexWhere((t) => t['task'] == stoppedTitle);
-          if (idx != -1) {
-            setState(() => _tasks.removeAt(idx));
-            _saveData();
+    // 10. قراءة اليوميات
+    if (_hasAny(cmd, ['اقرا يومية', 'اقرا يوميات', 'قولي يومية', 'اللي في يومية', 'اقرالي يومية', 'اقرا اليومية', 'قولي اليومية'])) {
+      final targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
+      final key = DateFormat('yyyy-MM-dd').format(targetDate);
+      if (_diaries.containsKey(key)) {
+        final data = _diaries[key]; String readable = "";
+        if (data['text'] != null && data['text'].toString().isNotEmpty) readable += "النَّصْ: ${data['text']}. ";
+        if (data['entries'] != null) {
+          final entries = List<Map<String, dynamic>>.from(data['entries']);
+          if (entries.isNotEmpty) {
+            readable += "وَالمُحْتَوَيَاتْ: ";
+            for (var e in entries) { if (e['type'] == 'todo') readable += "مُهِمَّة: ${e['content']} ${e['done'] == true ? '(تَمَّتْ)' : '(لَمْ تَتِمَّ)'}. "; if (e['type'] == 'image') readable += "صُورَة. "; if (e['type'] == 'audio') readable += "تَسْجِيلٌ صَوْتِيٌّ. "; }
           }
-          try { await _cancelNativeAlarm(stoppedTitle); } catch (_) {}
-        } else if (stoppedScheduled != null) {
-          _rescheduleRepeating(stoppedTitle, stoppedRepeat!, stoppedInterval ?? 'بدون تنبيه', stoppedCustomDays, stoppedScheduled, stoppedSound);
         }
-      }
-      SharedPreferences.getInstance().then((p) => p.remove('pending_alarm'));
-      if (stoppedCtx != null) {
-        try { Navigator.of(stoppedCtx).pop(); } catch (_) {}
-      }
-      await _speak("تَمَّ إِيقَافُ المُنَبِّه $_userTitle");
+        await _speak(readable.trim().isNotEmpty ? readable : "اليَوْمِيَّةُ فَاضْيَة يَا $_userTitle.");
+      } else { await _speak("مَفِيشْ يَوْمِيَّة مَكْتُوبَة فِي اليَوْمَ دَه يَا $_userTitle."); }
       return;
     }
+
+    // 11. كتابة اليوميات
+  if (isWritingToDiary) {
+    String textToWrite = rawCommand;
+    final removeWords = ['اكتب', 'اكتبي', 'اكتبلي', 'سجل', 'سجلي', 'سجللي', 'في', 'اليوميات', 'يومياتي', 'يوميتي', 'يومية', 'يوميه', 'يا', 'سكرتير', 'سكرتيرة', 'عندك', 'عندي'];
+    for (var w in removeWords) { textToWrite = textToWrite.replaceAll(w, ''); }
+    textToWrite = _cleanDateWordsFromText(textToWrite);
+
+    if (textToWrite.isNotEmpty) {
+       if (_DiaryPageState.activeInstance != null) {
+         _diaryVoiceStream.add({'action': 'add_text_note', 'text': textToWrite});
+         await _speak("تَمَام $_userTitle، كَتَبْتْ النَّصْ فِي اليَوْمِيَّة الْمَفْتُوحَة.");
+       } else {
+         DateTime targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
+         final key = DateFormat('yyyy-MM-dd').format(targetDate);
+         final existing = _diaries[key] ?? {'text': '', 'entries': []};
+         existing['text'] = (existing['text'] ?? '') + '\n' + textToWrite;
+         setState(() => _diaries[key] = existing); _saveData();
+         await _speak("تَمَّ كِتَابَةُ اليَوْمِيَّةِ بِنَجَاح $_userTitle.");
+       }
+    } else {
+       if (mounted) _openDiaryPage(DateTime.now());
+       await _speak("اتْفَضَّلْ $_userTitle، اكْتُبْ يَوْمِيَّاتَك.");
+    }
+    return;
   }
 
-  // 7. تأجيل المنبه
-  if (_hasAny(cmd, [
-    'فكرني', 'أجله', 'أجلي', 'صحيني', 'نومة', 'قيلولة', 'استنى', 'استني',
-    '5 دقايق', 'خمس دقايق', '10 دقايق', 'عشر دقايق', 'عشر دقائق',
-    'ربع ساعة', 'تلت ساعة', 'ثلث ساعة', 'نص ساعة', 'نصف ساعة', 'نصايه',
-    '20 دقيقة', 'عشرين دقيقة', 'ساعة'
-  ])) {
-    if (_isAlarmDialogOpen || _activeAlarmTitle != null) {
-      int minutes = 5;
+    // 12. أوامر الإعدادات والوضع الليلي (القديمة كاحتياطي)
+    if (_hasAny(cmd, ['افتح الإعدادات', 'افتحي الإعدادات', 'الإعدادات', 'اعدادات', 'الاعدادات', 'افتح الاعدادات'])) { _openSettingsScreen(); await _speak("تَمَّ فَتْحُ الإِعْدَادَاتِ $_userTitle."); return; }
 
-      if (cmd.contains('نص ساعه') || cmd.contains('نصف ساعه') || cmd.contains('نصايه')) minutes = 30;
-      else if (cmd.contains('ربع ساعه')) minutes = 15;
-      else if (cmd.contains('تلت ساعه') || cmd.contains('ثلث ساعه')) minutes = 20;
-      else if (cmd.contains('ساعه ونص') || cmd.contains('ساعة ونص') || cmd.contains('ساعه ونصف')) minutes = 90;
-      else if (cmd.contains('ساعه وربع') || cmd.contains('ساعة وربع')) minutes = 75;
-      else if (cmd.contains('ساعه وتلت') || cmd.contains('ساعة وتلت') || cmd.contains('ساعه وثلث')) minutes = 80;
-      else if (cmd.contains('ساعه وخمس') || cmd.contains('ساعة وخمس')) minutes = 65;
-      else if (cmd.contains('ساعه وعشر') || cmd.contains('ساعة وعشر')) minutes = 70;
-      else if (cmd.contains('ساعه الا خمس') || cmd.contains('ساعة الا خمس')) minutes = 55;
-      else if (cmd.contains('ساعه الا عشر') || cmd.contains('ساعة الا عشر')) minutes = 50;
-      else if (cmd.contains('ساعه الا ربع') || cmd.contains('ساعة الا ربع')) minutes = 45;
-      else if (cmd.contains('ساعه الا تلت') || cmd.contains('ساعة الا تلت')) minutes = 40;
-      else if (cmd.contains('ساعه الا نص') || cmd.contains('ساعة الا نص')) minutes = 30;
-      else if (cmd.contains('ساعتين') || cmd.contains('ساعتان')) minutes = 120;
-      else if (cmd.contains('تلات ساعات') || cmd.contains('ثلاث ساعات') || cmd.contains('3 ساعات')) minutes = 180;
-      else if (cmd.contains('اربع ساعات') || cmd.contains('أربع ساعات') || cmd.contains('4 ساعات')) minutes = 240;
-      else if (cmd.contains('ساعه')) minutes = 60;
-      else if (cmd.contains('خمستاشر') || cmd.contains('خمسه عشر') || cmd.contains('خمسة عشر') || cmd.contains('15')) minutes = 15;
-      else if (cmd.contains('تلاتين') || cmd.contains('ثلاثين') || cmd.contains('30')) minutes = 30;
-      else if (cmd.contains('خمسه واربعين') || cmd.contains('خمسة وأربعين') || cmd.contains('45')) minutes = 45;
-      else if (cmd.contains('عشرين') || cmd.contains('20')) minutes = 20;
-      else if (cmd.contains('عشر') || cmd.contains('10')) minutes = 10;
-      else if (cmd.contains('خمسه') || cmd.contains('خمس') || cmd.contains('5')) minutes = 5;
-      else if (cmd.contains('دقيقتين')) minutes = 2;
-
-      final originalTitle = _activeAlarmTitle ?? 'المنبه';
-      final snoozeTime = DateTime.now().add(Duration(minutes: minutes));
-      final snoozeTimestamp = DateTime.now().millisecondsSinceEpoch;
-
-      _scheduleContinuousAlarm(
-        originalTitle,
-        snoozeTime,
-        'مرة واحدة',
-        'كل 10 ثواني',
-        [],
-        customId: snoozeTimestamp,
-        customNotificationId: snoozeTimestamp + 1000000,
-        soundUri: _activeAlarmSoundUri,
-      );
-
-      if (_activeAlarmRepeat != null && _activeAlarmRepeat != 'مرة واحدة' && _activeAlarmScheduledTime != null) {
-        _rescheduleRepeating(
-          originalTitle,
-          _activeAlarmRepeat!,
-          _activeAlarmInterval ?? 'بدون تنبيه',
-          _activeAlarmCustomDays,
-          _activeAlarmScheduledTime!,
-          _activeAlarmSoundUri
-        );
-      }
-
-      if (_isAlarmDialogOpen) {
-         _activeAlarmLoopTimer?.cancel();
-         _alarmVoiceSafetyTimer?.cancel(); 
-         _alarmVoiceSafetyTimer = null; 
-         _tts.stop();
-         WakelockPlus.disable();
-         if (_alarmDialogContext != null) Navigator.pop(_alarmDialogContext!);
-         _isAlarmDialogOpen = false;
-         _activeAlarmTitle = null;
-         _alarmDialogContext = null;
-      }
-
-      String timeText;
-      if (minutes == 30) {
-        timeText = 'نص ساعة';
-      } else if (minutes == 60) {
-        timeText = 'ساعة';
-      } else if (minutes == 20) {
-        timeText = 'تلت ساعة';
-      } else if (minutes == 1) {
-        timeText = 'دقيقة واحدة';
-      } else if (minutes == 2) {
-        timeText = 'دقيقتين';
-      } else if (minutes >= 3 && minutes <= 10) {
-        timeText = '$minutes دقائق';
-      } else {
-        timeText = '$minutes دقيقة';
-      }
-      await _speak("حَاضِرْ $_userTitle، هَفَكَّرَكْ تَانِي عَلَى $originalTitle بَعْد $timeText.");
+    // 13. وضع التركيز
+    if (_hasAny(cmd, ['وضع التركيز', 'فوكس', 'ركز معايا'])) {
+      setState(() => _settings.wakeWordMode = 'off');
+      await _saveSettings();
+      try { await _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
+      await _speak("تَمَّ تَفْعِيلُ وَضْعِ التَّرْكِيز $_userTitle، هَلْتَزِمْ الصَّمْت.");
       return;
     }
-  }
 
-  // 8. إضافة مناسبة شات (جملة واحدة)
-  if (_hasAny(cmd, ['ضيف مناسبة', 'اضف مناسبة', 'ضيفي مناسبة', 'اضيفي مناسبة', 'عايز اضيف مناسبة', 'عايزة اضيف مناسبة', 'ضيفلي مناسبة', 'ضيفلي مناسبه', 'فكرني بمناسبة', 'فكرني ب مناسبة', 'مناسبة', 'مناسبه'])) {
-    DateTime? parsedEventDate = _parseFullDate(cmd);
-    int? eventDay = parsedEventDate?.day;
-    int? hour = _parseHour(cmd);
-    int minute = _parseMinute(cmd);
-    String advance = 'قبلها بيوم';
-    if (_hasAny(cmd, ['قبلها بأسبوع', 'قبلها اسبوع'])) advance = 'قبلها بأسبوع';
-
-    String title = rawCommand;
-    final removeWords = ['ضيف', 'مناسبة', 'فكرني', 'ذكرني', 'يوم', 'الساعة', 'الساعه', 'مساء', 'مساءً', 'صباحا', 'صباحاً', 'قبلها', 'بيوم', 'بأسبوع', 'اسبوع', 'أيام', 'ايام', 'في', 'نفس', 'اليوم', 'يا', 'سكرتير', 'سكرتيرة', 'يناير','فبراير','مارس','ابريل','أبريل','مايو','يونيو','يوليو','اغسطس','أغسطس','سبتمبر','اكتوبر','أكتوبر','نوفمبر','ديسمبر'];
-    for (var w in removeWords) { title = title.replaceAll(w, ''); }
-    title = title.replaceAll(RegExp(r'\d+'), '').trim();
-
-    if (title.isEmpty) title = 'مناسبة';
-
-    if (parsedEventDate == null || hour == null) {
-      _pendingEventData = {'title': title};
-      _pendingVoiceAction = 'event_date';
-      await _speak("حَاضِرْ $_userTitle، التَّارِيخِ أَوِ الوَقْتِ مُشْ وَاضِحْ. تَارِيخُ المُنَاسَبَةِ إِيهْ؟");
+    // 14. وضع التسبيح
+    if (_hasAny(cmd, ['وضع التسبيح', 'افتحي التسبيح', 'افتح التسبيح', 'ابدأ التسبيح'])) {
+      setState(() {
+        _currentIndex = 2;
+        _prayerSubView = 'tasbeeh';
+        _isTasbeehMode = true;
+        _isAdhkarMode = false;
+      });
+      await _speak("تَمَّ فَتْحُ وَضْعِ التَّسْبِيح $_userTitle.");
       _listenVoiceCommand();
       return;
     }
-    if (hour < 12 && _hasAny(cmd, ['مساء', 'بالليل', 'الليل'])) hour += 12;
 
-    final newEvent = {'title': title, 'detail': 'مناسبة سنوية', 'phone': '', 'advanceReminder': advance, 'eventDate': parsedEventDate.toIso8601String(), 'reminderHour': hour, 'reminderMinute': minute, 'repeatInterval': 'مرة واحدة', 'repeatType': 'سنوي', 'sound': 'default'};
-    setState(() { _specialEvents.add(newEvent); }); _sortByTime(_specialEvents); _saveData(); _scheduleEventReminder(newEvent);
-    final formattedHour = hour % 12 == 0 ? 12 : hour % 12;
-    final period = hour >= 12 ? 'مَسَاءً' : 'صَبَاحاً';
-    await _speak("تَمَّتْ إِضَافَةُ: $title يَوْمْ $eventDay السَّاعَة $formattedHour $period، وَالتَّذْكِيرُ $advance $_userTitle.");
-    return;
-  }
-
-  // 9. تعديل موعد شات (جملة واحدة)
-  if (_hasAny(cmd, ['عدل موعد', 'عدلي موعد', 'تعديل موعد', 'غير موعد', 'غيري موعد'])) {
-    String searchTerm = cmd.replaceAll('عدل', '').replaceAll('موعد', '').replaceAll('غير', '').trim();
-    searchTerm = searchTerm.split('وخليه').first.trim(); searchTerm = searchTerm.split('الساعة').first.trim();
-    if (searchTerm.isEmpty) { await _speak("قُولِّي أَعَدِّلْ أَنَّهِي مَوْعِدْ $_userTitle؟"); return; }
-    final matches = _tasks.where((t) { final taskName = _norm(t['task'].toString()); return taskName.contains(_norm(searchTerm)) || _norm(searchTerm).contains(taskName); }).toList();
-    if (matches.isEmpty) { await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ $_userTitle."); return; }
-
-    final task = matches.first; final index = _tasks.indexOf(task);
-    final newHour = _parseHour(cmd);
-    if (newHour == null) { await _speak("مَفْهَمْتِشْ الوَقْتْ الجَدِيدْ $_userTitle."); return; }
-
-    final newMinute = _parseMinute(cmd);
-    DateTime newDate = DateTime.parse(task['scheduled']);
-    if (cmd.contains('بكره') || cmd.contains('بكرة')) { newDate = newDate.add(const Duration(days: 1)); }
-    final scheduled = DateTime(newDate.year, newDate.month, newDate.day, newHour, newMinute);
-
-    setState(() { _tasks[index] = {...task, 'scheduled': scheduled.toIso8601String(), 'time': DateFormat('hh:mm a', 'ar').format(scheduled)}; });
-    _saveData(); await _cancelNativeAlarm(task['task'].toString());
-    if (task['repeatInterval'] != 'بدون تنبيه') { _scheduleContinuousAlarm(task['task'].toString(), scheduled, task['repeat'] ?? 'مرة واحدة', task['repeatInterval'] ?? 'بدون تنبيه', List<String>.from(task['customDays'] ?? []), soundUri: task['sound']); }
-    await _speak("تَمَّ تَعْدِيلُ مَوْعِدْ ${task['task']} إِلَى السَّاعَة ${newHour}:${newMinute.toString().padLeft(2, '0')} $_userTitle.");
-    return;
-  }
-
-  // 10. قراءة اليوميات
-  if (_hasAny(cmd, ['اقرا يومية', 'اقرا يوميات', 'قولي يومية', 'اللي في يومية', 'اقرالي يومية', 'اقرا اليومية', 'قولي اليومية'])) {
-    final targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
-    final key = DateFormat('yyyy-MM-dd').format(targetDate);
-    if (_diaries.containsKey(key)) {
-      final data = _diaries[key]; String readable = "";
-      if (data['text'] != null && data['text'].toString().isNotEmpty) readable += "النَّصْ: ${data['text']}. ";
-      if (data['entries'] != null) {
-        final entries = List<Map<String, dynamic>>.from(data['entries']);
-        if (entries.isNotEmpty) {
-          readable += "وَالمُحْتَوَيَاتْ: ";
-          for (var e in entries) { if (e['type'] == 'todo') readable += "مُهِمَّة: ${e['content']} ${e['done'] == true ? '(تَمَّتْ)' : '(لَمْ تَتِمَّ)'}. "; if (e['type'] == 'image') readable += "صُورَة. "; if (e['type'] == 'audio') readable += "تَسْجِيلٌ صَوْتِيٌّ. "; }
-        }
-      }
-      await _speak(readable.trim().isNotEmpty ? readable : "اليَوْمِيَّةُ فَاضْيَة يَا $_userTitle.");
-    } else { await _speak("مَفِيشْ يَوْمِيَّة مَكْتُوبَة فِي اليَوْمَ دَه يَا $_userTitle."); }
-    return;
-  }
-
-  // 11. كتابة اليوميات
-if (isWritingToDiary) {
-  String textToWrite = rawCommand;
-  final removeWords = ['اكتب', 'اكتبي', 'اكتبلي', 'سجل', 'سجلي', 'سجللي', 'في', 'اليوميات', 'يومياتي', 'يوميتي', 'يومية', 'يوميه', 'يا', 'سكرتير', 'سكرتيرة', 'عندك', 'عندي'];
-  for (var w in removeWords) { textToWrite = textToWrite.replaceAll(w, ''); }
-  textToWrite = _cleanDateWordsFromText(textToWrite);
-
-  if (textToWrite.isNotEmpty) {
-     if (_DiaryPageState.activeInstance != null) {
-       _diaryVoiceStream.add({'action': 'add_text_note', 'text': textToWrite});
-       await _speak("تَمَام $_userTitle، كَتَبْتْ النَّصْ فِي اليَوْمِيَّة الْمَفْتُوحَة.");
-     } else {
-       DateTime targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
-       final key = DateFormat('yyyy-MM-dd').format(targetDate);
-       final existing = _diaries[key] ?? {'text': '', 'entries': []};
-       existing['text'] = (existing['text'] ?? '') + '\n' + textToWrite;
-       setState(() => _diaries[key] = existing); _saveData();
-       await _speak("تَمَّ كِتَابَةُ اليَوْمِيَّةِ بِنَجَاح $_userTitle.");
-     }
-  } else { 
-     if (mounted) _openDiaryPage(DateTime.now()); 
-     await _speak("اتْفَضَّلْ $_userTitle، اكْتُبْ يَوْمِيَّاتَك."); 
-  }
-  return;
-}
-
-  // 12. أوامر الإعدادات والوضع الليلي (القديمة كاحتياطي)
-  if (_hasAny(cmd, ['افتح الإعدادات', 'افتحي الإعدادات', 'الإعدادات', 'اعدادات', 'الاعدادات', 'افتح الاعدادات'])) { _openSettingsScreen(); await _speak("تَمَّ فَتْحُ الإِعْدَادَاتِ $_userTitle."); return; }
-
-  // 13. وضع التركيز
-  if (_hasAny(cmd, ['وضع التركيز', 'فوكس', 'ركز معايا'])) {
-    setState(() => _settings.wakeWordMode = 'off');
-    await _saveSettings();
-    try { await _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
-    await _speak("تَمَّ تَفْعِيلُ وَضْعِ التَّرْكِيز $_userTitle، هَلْتَزِمْ الصَّمْت.");
-    return;
-  }
-
-  // 14. وضع التسبيح
-  if (_hasAny(cmd, ['وضع التسبيح', 'افتحي التسبيح', 'افتح التسبيح', 'ابدأ التسبيح'])) {
-    setState(() {
-      _currentIndex = 2;
-      _prayerSubView = 'tasbeeh';
-      _isTasbeehMode = true;
-      _isAdhkarMode = false;
-    });
-    await _speak("تَمَّ فَتْحُ وَضْعِ التَّسْبِيح $_userTitle.");
-    _listenVoiceCommand();
-    return;
-  }
-
-  if (_hasAny(cmd, ['اقفلي التسبيح', 'اقفل التسبيح', 'قفلي التسبيح', 'قفل التسبيح', 'خلص تسبيح'])) {
-    setState(() => _isTasbeehMode = false);
-    await _speak("تَمَّ إِغْلَاقُ وَضْعِ التَّسْبِيح $_userTitle.");
-    return;
-  }
-
-  if (_hasAny(cmd, ['صفري', 'امسحي العداد', 'امسحي التسبيح', 'صفر العداد'])) {
-    setState(() {
-      _tasbeehCount = 0;
-      _tasbeehSubCounts.clear();
-    });
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('tasbeeh_count', 0);
-    for (var item in _tasbeehItems) {
-      await prefs.setInt('tasbeeh_${item['key']}', 0);
-    }
-    await _speak("تَمَّ تَصْفِيرُ كُلِّ العَدَّادَات $_userTitle.");
-    return;
-  }
-
-  if (_hasAny(cmd, ['سبحان الله', 'الحمد لله', 'الله اكبر', 'لا اله الا الله'])) {
-    if (_isTasbeehMode) {
-      _handleTasbeehResult(rawCommand);
+    if (_hasAny(cmd, ['اقفلي التسبيح', 'اقفل التسبيح', 'قفلي التسبيح', 'قفل التسبيح', 'خلص تسبيح'])) {
+      setState(() => _isTasbeehMode = false);
+      await _speak("تَمَّ إِغْلَاقُ وَضْعِ التَّسْبِيح $_userTitle.");
       return;
     }
-  }
 
-  // 15. وضع الأذكار
-  if (_hasAny(cmd, ['وضع الأذكار', 'افتح الأذكار', 'ابدأ الأذكار', 'تشغيل وضع الأذكار'])) {
-    setState(() {
-      _currentIndex = 2;
-      _prayerSubView = 'adhkar';
-      _isAdhkarMode = true;
-      _isTasbeehMode = false;
-    });
-    await _speak("تَمَّ فَتْحُ وَضْعِ الأَذْكَارِ $_userTitle.");
-    _listenVoiceCommand();
-    return;
-  }
-
-  if (_hasAny(cmd, ['اقفلي الأذكار', 'اقفل الأذكار', 'قفلي الأذكار', 'قفل الأذكار', 'خلص أذكار'])) {
-    setState(() => _isAdhkarMode = false);
-    await _speak("تَمَّ إِغْلَاقُ وَضْعِ الأذْكَارِ $_userTitle.");
-    return;
-  }
-
-  if (await _handleSocialReply(cmd)) return;
-
-  if (cmd.contains('اكتب') && cmd.contains('يوميات')) {
-    if (mounted) _openDiaryPage(DateTime.now());
-    await _speak("اتْفَضَّلْ $_userTitle، اكْتُبْ يَوْمِيَّاتَك.");
-    return;
-  }
-  if (cmd.contains('امسح') && cmd.contains('يوميات')) {
-    final key = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    if (_diaries.containsKey(key)) {
-      setState(() => _diaries.remove(key));
-      _saveData();
-      await _speak("تَمَّ مَسْحُ يَوْمِيَّةِ النَّهَارْدَة $_userTitle.");
-    } else {
-      await _speak("مَفِيشْ يَوْمِيَّةِ النَّهَارْدَة $_userTitle.");
-    }
-    return;
-  }
-  if (cmd.contains('دور') && (cmd.contains('يوميات') || cmd.contains('مفكرة'))) {
-    final keyword = rawCommand.replaceAll(RegExp(r'(دور|على|ابحث|عن|في|يوميات|مفكرة)'), '').trim();
-    if (keyword.isNotEmpty) {
-      final results = _diaries.entries.where((e) => e.value['text'] != null && e.value['text'].toString().contains(keyword)).toList();
-      if (results.isEmpty) {
-        await _speak("مَفِيشْ يَوْمِيَّات فِيهَا كَلِمَة $keyword $_userTitle.");
-      } else {
-        await _speak("لَقِيتْ $keyword فِي ${results.length} يَوْمِيَّات. أَوَّلْ وَاحْدَة كَانَتْ يَوْم ${DateFormat('dd MMMM', 'ar').format(DateTime.parse(results.first.key))}.");
+    if (_hasAny(cmd, ['صفري', 'امسحي العداد', 'امسحي التسبيح', 'صفر العداد'])) {
+      setState(() {
+        _tasbeehCount = 0;
+        _tasbeehSubCounts.clear();
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('tasbeeh_count', 0);
+      for (var item in _tasbeehItems) {
+        await prefs.setInt('tasbeeh_${item['key']}', 0);
       }
+      await _speak("تَمَّ تَصْفِيرُ كُلِّ العَدَّادَات $_userTitle.");
       return;
     }
-  }
 
-  final weeklyIndicators = [
-    'الجدول', 'جدول', 'الجدول الاسبوعي', 'الجدول الأسبوعي', 'جدول اسبوعي', 'جدول أسبوعي',
-    'الجدول بتاع الاسبوع', 'الجدول بتاع الأسبوع', 'الجدول بتاعى', 'الجدول بتاعي',
-    'الجدول بتاعنا', 'جدول الأسبوع', 'جدولي', 'جدولى', 'جدولي الاسبوعي', 'جدولي الأسبوعي',
-    'جدولى الاسبوعي', 'جدولى الأسبوعي', 'في جدولي', 'في جدولى', 'من جدولي', 'من جدولى',
-    'البرنامج الاسبوعي', 'البرنامج الأسبوعي', 'برنامجي الاسبوعي', 'برنامجي الأسبوعي',
-    'برنامج الاسبوع', 'برنامج الأسبوع', 'خطة الاسبوع', 'خطة الأسبوع',
-    'الخطة الاسبوعية', 'الخطة الأسبوعية', 'خطتي الاسبوعية', 'خطتي الأسبوعية',
-    'اجندة الاسبوع', 'أجندة الأسبوع', 'الاجندة الاسبوعية', 'الأجندة الأسبوعية',
-    'اجندتي الاسبوعية', 'أجندتي الأسبوعية', 'مواعيد الاسبوع', 'مواعيد الأسبوع',
-    'المواعيد الاسبوعية', 'المواعيد الأسبوعية', 'مواعيدي الاسبوعية', 'مواعيدي الأسبوعية',
-    'مهام الاسبوع', 'مهام الأسبوع', 'المهام الاسبوعية', 'المهام الأسبوعية',
-    'في الجدول', 'من الجدول', 'على الجدول', 'علي الجدول', 'في جدول', 'من جدول',
-    'التخطيط الاسبوعي', 'التخطيط الأسبوعي', 'التقويم الاسبوعي', 'التقويم الأسبوعي',
-  ];
-  final isWeeklyCmd = _hasAny(cmd, weeklyIndicators);
-
-  final isAdding = _hasAny(cmd, [
-    'ضفلي', 'ضف', 'ضفيه', 'ضيفه',
-    'ضيف', 'ضيفي', 'ضيفلي', 'ضيفيلي', 'ضيفيه', 'اضف', 'أضف', 'اضفي', 'أضفي', 'اضفلي', 'أضفلي',
-    'حط', 'حطي', 'حطلي', 'حطيلي', 'حطه', 'حطيها',
-    'سجل', 'سجلي', 'سجللي', 'سجليلي', 'سجله', 'اعمل', 'اعملي', 'اعمللي', 'اعمليلي', 'اعمله',
-    'ظبط', 'ظبطي', 'ظبطلي', 'ظبطيلي', 'ضبط', 'ضبطي', 'ضبطلي', 'ضبطيلي', 'اضبط', 'أضبط', 'اضبطي', 'أضبطي',
-    'اظبط', 'أظبط', 'اظبطي', 'أظبطي', 'عايز اضيف', 'عايز أضيف', 'عايزة اضيف', 'عايزة أضيف',
-    'عاوز اضيف', 'عاوز أضيف', 'عاوزة اضيف', 'عاوزة أضيف', 'عايز احط', 'عايز أحط', 'عايزة احط', 'عايزة أحط',
-    'عاوز احط', 'عاوز أحط', 'عاوزة احط', 'عاوزة أحط', 'عايز اسجل', 'عايز أسجل', 'عايزة اسجل', 'عايزة أسجل',
-    'عاوز اسجل', 'عاوز أسجل', 'عاوزة اسجل', 'عاوزة أسجل', 'حدد لي', 'حددلي', 'حدديلي', 'حددلي موعد',
-  ]);
-
-  final isDeleting = _hasAny(cmd, [
-    'امسح', 'امسحي', 'امسحلي', 'امسحيلي', 'امسحه', 'امسحيها', 'أمسح', 'امسحى', 'مسح', 'مسحي', 'مسحلي', 'مسحيلي', 'مسحه',
-    'احذف', 'احذفي', 'احذفلي', 'احذفيلي', 'احذفه', 'احذفيها', 'أحذف', 'حذف', 'حذفي', 'حذفلي', 'حذفيلي', 'حذفه',
-    'شيل', 'شيلي', 'شيللي', 'شيليلي', 'شيله', 'شيليها', 'أشيل', 'اشيل', 'أشيله', 'اشيله',
-    'الغي', 'الغى', 'الغيلي', 'الغيه', 'ألغي', 'ألغى', 'ألغيه', 'إلغاء', 'إلغى', 'الغاء',
-    'كانسل', 'كنسل', 'كنسلي', 'كانسلي', 'كنسله', 'وقف', 'وقفي', 'اوقف', 'أوقف', 'اوقفه', 'أوقفه',
-    'ازيل', 'أزيل', 'ازيلي', 'أزيلي', 'ازيله', 'أزيله', 'مش عايز', 'مش عاوز', 'مش عايزة', 'مش عاوزة', 'بلاش', 'بلاشه', 'بلاشيها',
-  ]);
-
-  final isEditing = _hasAny(cmd, [
-    'عدل', 'عدلي', 'عدللي', 'عدليلي', 'عدله', 'عدليها', 'تعدل', 'تعدلي', 'أعدل', 'اعدل',
-    'غير', 'غيري', 'غيرلي', 'غيريلي', 'غيره', 'غيريها', 'تغير', 'تغيري', 'أغير', 'اغير',
-    'غيّر', 'غيّري', 'غيّره', 'غيّريها', 'بدل', 'بدلي', 'بدللي', 'بدليلي', 'بدله', 'بدليها',
-    'تبدل', 'تبدلي', 'حرك', 'حركي', 'حركه', 'حركيها', 'أخر', 'أخري', 'أخره', 'أخريها',
-    'أجل', 'أجّل', 'أجلي', 'أجّلي', 'أجله', 'تعديل', 'تعديلي', 'تعديله', 'غير الوقت', 'غيري الوقت',
-    'عدل الوقت', 'عدلي الوقت', 'عدل الميعاد', 'غير الميعاد', 'خلي الميعاد', 'خلي الوقت',
-  ]);
-
-  if (_hasAny(cmd, [
-    "امسح", "امسحي", "امسحلي", "امسحيلي", "أمسح", "أمسحي",
-    "مسح", "مسحي", "مسحلي", "مسحيلي",
-    "احذف", "احذفي", "احذفلي", "احذفيلي", "أحذف", "أحذفي",
-    "حذف", "حذفي", "حذفلي", "حذفيلي",
-    "شيل", "شيلي", "شيللي", "شيليلي", "أشيل",
-    "الغي", "الغى", "ألغي", "ألغى", "الغيلي", "ألغيلي",
-    "إلغاء", "إلغى", "كانسل", "كنسل", "كنسلي", "كانسلي",
-    "وقف المنبه", "وقفي المنبه", "اوقف المنبه", "أوقف المنبه",
-    "اقفل المنبه", "اقفلي المنبه", "الغي المنبه", "ألغي المنبه",
-  ])) {
-
-    if (isWeeklyCmd) {
-      if (_hasAny(cmd, ['كل', 'كله', 'الكل', 'كلها', 'جميع', 'كل مواعيد', 'كل المواعيد']) ||
-          (!_hasAny(cmd, ['موعد', 'ميعاد', 'مهام', 'درس']) && _hasAny(cmd, ['الجدول', 'جدول']))) {
-        await _deleteAllWeeklyTasks();
+    if (_hasAny(cmd, ['سبحان الله', 'الحمد لله', 'الله اكبر', 'لا اله الا الله'])) {
+      if (_isTasbeehMode) {
+        _handleTasbeehResult(rawCommand);
         return;
       }
-      await _deleteWeeklyTaskByVoice(rawCommand, cmd);
+    }
+
+    // 15. وضع الأذكار
+    if (_hasAny(cmd, ['وضع الأذكار', 'افتح الأذكار', 'ابدأ الأذكار', 'تشغيل وضع الأذكار'])) {
+      setState(() {
+        _currentIndex = 2;
+        _prayerSubView = 'adhkar';
+        _isAdhkarMode = true;
+        _isTasbeehMode = false;
+      });
+      await _speak("تَمَّ فَتْحُ وَضْعِ الأَذْكَارِ $_userTitle.");
+      _listenVoiceCommand();
       return;
     }
-    else {
-      await _deleteTaskByVoice(cmd);
+
+    if (_hasAny(cmd, ['اقفلي الأذكار', 'اقفل الأذكار', 'قفلي الأذكار', 'قفل الأذكار', 'خلص أذكار'])) {
+      setState(() => _isAdhkarMode = false);
+      await _speak("تَمَّ إِغْلَاقُ وَضْعِ الأذْكَارِ $_userTitle.");
       return;
     }
-  }
 
-  if (!isAdding && !isDeleting && !isEditing &&
-      _hasAny(cmd, [
-        'افتح الجدول', 'افتحي الجدول', 'افتحلي الجدول', 'افتحيلي الجدول',
-        'افتح الجدول الاسبوعي', 'افتحي الجدول الأسبوعي',
-        'افتح جدولي', 'افتحي جدولي', 'افتح لي الجدول',
-        'فتح الجدول', 'فتحي الجدول', 'فتحلي الجدول', 'فتحيلي الجدول',
-        'وريني الجدول', 'وريني الجدول الاسبوعي', 'وريني الجدول الأسبوعي',
-        'وريني جدولي', 'وريني جدولى',
-        'اعرض الجدول', 'اعرضي الجدول', 'اعرضيلي الجدول',
-        'اعرض الجدول الاسبوعي', 'اعرض الجدول الأسبوعي',
-        'عرض الجدول', 'عرضي الجدول', 'عرض الجدول الاسبوعي',
-        'هات الجدول', 'هاتي الجدول', 'هاتيلي الجدول', 'هاتلي الجدول',
-        'هات الجدول الاسبوعي', 'هاتي الجدول الأسبوعي',
-        'شوف الجدول', 'شوفي الجدول', 'شوفيلي الجدول',
-        'روح للجدول', 'روحي للجدول', 'روح على الجدول', 'روحي على الجدول',
-        'دخل الجدول', 'دخلي الجدول', 'دخلني الجدول', 'دخليني الجدول',
-        'خلي الجدول', 'خليكي الجدول',
-        'الجدول الاسبوعي', 'الجدول الأسبوعي',
-        'جدول اسبوعي', 'جدول أسبوعي',
-        'جدولي الاسبوعي', 'جدولي الأسبوعي',
-        'البرنامج الاسبوعي', 'البرنامج الأسبوعي',
-        'عرض الجدول', 'اعرض لي الجدول',
-        'ايه في الجدول', 'إيه في الجدول', 'ايه في الجدول الاسبوعي', 'إيه في الجدول الأسبوعي',
-        'ايه اللي في الجدول', 'إيه اللي في الجدول',
-        'ايه عندي في الجدول', 'إيه عندي في الجدول',
-        'اللي في الجدول', 'اللي عندي في الجدول',
-        'عندي ايه في الجدول', 'عندي إيه في الجدول',
-        'ايه مواعيدي', 'إيه مواعيدي', 'ايه مواعيدي الاسبوعية', 'إيه مواعيدي الأسبوعية',
-        'المواعيد الاسبوعية', 'المواعيد الأسبوعية',
-        'مواعيد الجدول', 'مواعيد الاسبوع',
-        'مهام الجدول', 'مهام الاسبوع', 'مهامي في الجدول',
-        'المهام الاسبوعية', 'المهام الأسبوعية',
-        'اقرالي الجدول', 'اقرأيلي الجدول', 'اقرا الجدول', 'اقرأي الجدول',
-        'اقرالي الجدول الاسبوعي', 'اقرأيلي الجدول الأسبوعي',
-        'احكيلي الجدول', 'احكي الجدول', 'احكيلي عن الجدول',
-        'اخبريني الجدول', 'قوليلي الجدول', 'قولي الجدول',
-        'علميني الجدول', 'عرفيني الجدول',
-        'قوليلي عندي ايه في الجدول', 'قولي عندي ايه',
-      ])) {
-    await _listWeeklySchedule();
-    return;
-  }
+    // ==========================================
+    // 👈 التعديل ب: الوقت المتبقي + الصلاة الجاية + قراءة المواقيت
+    // ==========================================
 
-  if (isWeeklyCmd && isAdding) {
-    await _createWeeklyAlarmFromVoice(rawCommand, cmd);
-    return;
-  }
+    // ⏳ الوقت المتبقي
+    final targetPrayerKey = _parsePrayerName(cmd);
+    if (targetPrayerKey != null && _hasAny(cmd, ['فاضل', 'باقي', 'كام خالص', 'بعد كام', 'قد ايه', 'اد ايه'])) {
+      final times = await _calculatePrayerTimes();
+      final timeStr = times[targetPrayerKey] ?? '';
+      if (timeStr.isNotEmpty) {
+        final parts = timeStr.split(':');
+        final now = DateTime.now();
+        var dt = DateTime(now.year, now.month, now.day, int.parse(parts[0]), int.parse(parts[1]));
+        if (dt.isBefore(now)) dt = dt.add(const Duration(days: 1));
+        final diff = dt.difference(now);
+        final hours = diff.inHours;
+        final minutes = diff.inMinutes % 60;
+        String remainingText;
+        if (hours > 0 && minutes > 0) remainingText = 'فَاضِلْ $hours سَاعَة و $minutes دَقِيقَة';
+        else if (hours > 0) remainingText = 'فَاضِلْ $hours سَاعَة';
+        else if (minutes > 0) remainingText = 'فَاضِلْ $minutes دَقِيقَة';
+        else remainingText = 'فَاضِلْ أَقَلْ مِنْ دَقِيقَة';
+        final prayerNames = {
+          'fajr': 'الفَجْر', 'dhuhr': 'الظُّهْر', 'asr': 'العَصْر',
+          'maghrib': 'المَغْرِب', 'isha': 'العِشَاء', 'sunrise': 'الشُّرُوق'
+        };
+        await _speak("$remainingText عَلَى صَلَاةِ ${prayerNames[targetPrayerKey]} $_userTitle.");
+        return;
+      }
+    }
 
-  if (isWeeklyCmd && isEditing) {
-    await _editWeeklyTaskByVoice(rawCommand, cmd);
-    return;
-  }
+    // 🕌 الصلاة الجاية
+    if (_hasAny(cmd, [
+      'الصلاة الجاية', 'الصلاة القادمة', 'الاذان الجاي', 'امتى الصلاة الجاية',
+      'الصلاة اللي جاية', 'الصلاة الجاية امتى', 'الصلاة الجاية كام', 'الاذان القادم',
+      'صلاة ايه الجاية', 'ايه الصلاة الجاية'
+    ])) {
+      final times = await _calculatePrayerTimes();
+      final now = DateTime.now();
+      final prayerKeys = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
+      final prayerNames = {
+        'fajr': 'الفَجْر', 'dhuhr': 'الظُّهْر', 'asr': 'العَصْر',
+        'maghrib': 'المَغْرِب', 'isha': 'العِشَاء'
+      };
+      String nextKey = 'fajr';
+      DateTime? nextTime;
+      for (final key in prayerKeys) {
+        final timeStr = times[key] ?? '';
+        if (timeStr.isEmpty) continue;
+        final parts = timeStr.split(':');
+        final dt = DateTime(now.year, now.month, now.day, int.parse(parts[0]), int.parse(parts[1]));
+        if (dt.isAfter(now)) {
+          nextKey = key;
+          nextTime = dt;
+          break;
+        }
+      }
+      final speechTime = _formatTimeForSpeech(times[nextKey] ?? '');
+      final tomorrowText = nextTime == null ? 'بُكْرَة ' : '';
+      await _speak("الصَّلَاةُ الجَايَةُ هِيَ ${prayerNames[nextKey]} $tomorrowText$speechTime $_userTitle.");
+      return;
+    }
 
-  final askingAboutDay = _hasAny(cmd, [
-    'عندي ايه يوم', 'عندي إيه يوم', 'عندي ايه في يوم', 'عندي إيه في يوم',
-    'ماذا لدي يوم', 'ماذا لدي في يوم', 'ماذا لدي يوم ال',
-    'ماذا لديك يوم', 'ماذا لديك في يوم', 'ماذا لديك يوم ال',
-    'ماذا عندي يوم', 'ماذا عندي في يوم', 'ماذا عندك يوم', 'ماذا عندك في يوم',
-    'ايه عندي يوم', 'إيه عندي يوم', 'ايه عندي في يوم', 'إيه عندي في يوم',
-    'ايه لدي يوم', 'إيه لدي يوم', 'ايه لدي في يوم', 'إيه لدي في يوم',
-    'ورايا ايه يوم', 'ورايا إيه يوم', 'ورايا ايه في يوم', 'ورايا إيه في يوم',
-    'ايه ورايا يوم', 'إيه ورايا يوم', 'ايه ورايا في يوم', 'إيه ورايا في يوم',
-    'عندي ايه نهار', 'عندي إيه نهار', 'ايه يوم', 'إيه يوم',
-    'مهام يوم', 'مواعيد يوم', 'جدول يوم', 'الجدول يوم',
-    'قولي عندي ايه يوم', 'قوليلي عندي ايه يوم',
-    'قولي عندي ايه في يوم', 'قوليلي عندي ايه في يوم',
-    'قوليلي ماذا لدي يوم', 'قوليلي ايه عندي يوم',
-    'عندي ايه يوم ال', 'عندي إيه يوم ال',
-    'ايه اللي عندي يوم', 'إيه اللي عندي يوم',
-    'ايه اللي عندي في يوم', 'إيه اللي عندي في يوم',
-    'ايه مواعيدي يوم', 'إيه مواعيدي يوم',
-    'ايه مهامي يوم', 'إيه مهامي يوم',
-    'اعرض يوم', 'اعرضي يوم', 'وريني يوم', 'وريني مهام يوم',
-    'عرض يوم', 'عرضي يوم',
-  ]);
-  final dayInQuestion = _extractWeeklyDaysFromCmd(cmd);
-  if (dayInQuestion.isNotEmpty && (askingAboutDay || _hasAny(cmd, ['عندي ايه', 'عندي إيه', 'ايه عندي', 'إيه عندي', 'ورايا ايه', 'ورايا إيه', 'ايه ورايا', 'إيه ورايا', 'ايه مهامي', 'إيه مهامي', 'ايه مواعيدي', 'إيه مواعيدي']))) {
-    await _listDayTasks(dayInQuestion.first);
-    return;
-  }
+    // 🕌 الفجر
+    if (_hasAny(cmd, [
+      'امتى الفجر', 'امتا الفجر', 'إمتى الفجر', 'إمتا الفجر',
+      'الفجر امتى', 'الفجر امتا', 'الفجر إمتى',
+      'الفجر كام', 'كام الفجر', 'الفجر الساعة كام',
+      'وقت الفجر', 'ميعاد الفجر', 'موعد الفجر', 'معاد الفجر',
+      'امتى اذان الفجر', 'اذان الفجر امتى', 'امتى اذن الفجر', 'اذن الفجر امتى',
+      'امتى يأذن الفجر', 'الفجر بيأذن امتى', 'هيأذن الفجر امتى',
+      'امتى صلاة الفجر', 'صلاة الفجر امتى',
+      'اقولي الفجر', 'قوليلي الفجر', 'قولي الفجر', 'قوللي الفجر', 'قولى الفجر',
+    ])) {
+      await _speakPrayerTimes(specificPrayer: 'fajr', name: 'الفَجْر');
+      return;
+    }
 
-  if (_hasAny(cmd, [
-    'ماذا لدي بكرة', 'ماذا لدي بكره', 'ماذا لدي بكرا', 'ماذا لدي غدا', 'ماذا لدي غداً',
-    'ماذا لديك بكرة', 'ماذا لديك بكره', 'ماذا لديك غدا', 'ماذا لديك غداً',
-    'ماذا عندي بكرة', 'ماذا عندي بكره', 'ماذا عندي غدا', 'ماذا عندك بكرة', 'ماذا عندك بكره', 'ماذا عندك غدا',
-    'مهام بكرة', 'مهام بكره', 'مهام بكرا', 'مهام غدا', 'مهام غداً', 'مهامي بكرة', 'مهامي بكره', 'مهامي غدا',
-    'مواعيد بكرة', 'مواعيد بكره', 'مواعيد غدا', 'مواعيد غداً',
-    'عندي ايه بكرة', 'عندي ايه بكره', 'عندي ايه بكرا', 'عندي ايه غدا', 'عندي إيه بكرة', 'عندي إيه بكره', 'عندي إيه غدا',
-    'ايه عندي بكرة', 'ايه عندي بكره', 'ايه عندي غدا', 'إيه عندي بكرة', 'إيه عندي بكره', 'إيه عندي غدا',
-    'ايه ورايا بكرة', 'ايه ورايا بكره', 'ايه ورايا غدا', 'إيه ورايا بكرة', 'إيه ورايا بكره', 'إيه ورايا غدا',
-    'ايه مهامي بكرة', 'ايه مهامي بكره', 'ايه مهامي غدا', 'اللي عندي بكرة', 'اللي عندي بكره', 'اللي عندي غدا',
-    'عندي ايه بكرا', 'ايه لدي بكرة', 'ايه لدي غدا',
-  ])) {
-    await _listTodayTasks(targetDate: DateTime.now().add(const Duration(days: 1)));
-    return;
-  }
+    // 🕌 الظهر
+    if (_hasAny(cmd, [
+      'امتى الظهر', 'امتا الظهر', 'الظهر امتى', 'الظهر امتا',
+      'الظهر كام', 'كام الظهر', 'الظهر الساعة كام',
+      'وقت الظهر', 'ميعاد الظهر', 'موعد الظهر',
+      'امتى اذان الظهر', 'اذان الظهر امتى',
+      'امتى يأذن الظهر', 'الظهر بيأذن امتى', 'هيأذن الظهر امتى',
+      'امتى صلاة الظهر', 'صلاة الظهر امتى',
+      'اقولي الظهر', 'قوليلي الظهر', 'قولي الظهر', 'قوللي الظهر',
+    ])) {
+      await _speakPrayerTimes(specificPrayer: 'dhuhr', name: 'الظُّهْر');
+      return;
+    }
 
-  if (_hasAny(cmd, [
-    'ماذا لدي امبارح', 'ماذا لدي امبارحه', 'ماذا لدي البارحة', 'ماذا لدي البارحه', 'ماذا لدي امس',
-    'ماذا لديك امبارح', 'ماذا لديك البارحة', 'ماذا لديك امس', 'ماذا عندي امبارح', 'ماذا عندي البارحة', 'ماذا عندي امس',
-    'ماذا عندك امبارح', 'ماذا عندك البارحة', 'ماذا عندك امس', 'مهام امبارح', 'مهام امبارحه', 'مهام البارحة', 'مهام البارحه', 'مهام امس',
-    'مهامي امبارح', 'مهامي البارحة', 'مهامي امس', 'مواعيد امبارح', 'مواعيد البارحة', 'مواعيد امس',
-    'عندي ايه امبارح', 'عندي ايه البارحة', 'عندي ايه امس', 'عندي إيه امبارح', 'عندي إيه البارحة', 'عندي إيه امس',
-    'ايه عندي امبارح', 'ايه عندي البارحة', 'ايه عندي امس', 'إيه عندي امبارح', 'إيه عندي البارحة', 'إيه عندي امس',
-    'ايه ورايا امبارح', 'ايه ورايا البارحة', 'ايه ورايا امس', 'إيه ورايا امبارح', 'إيه ورايا البارحة', 'إيه ورايا امس',
-    'ايه مهامي امبارح', 'ايه مهامي البارحة', 'ايه مهامي امس', 'اللي عندي امبارح', 'اللي عندي البارحة', 'اللي عندي امس',
-    'ايه لدي امبارح', 'ايه لدي امس',
-  ])) {
-    await _listTodayTasks(targetDate: DateTime.now().subtract(const Duration(days: 1)));
-    return;
-  }
+    // 🕌 العصر
+    if (_hasAny(cmd, [
+      'امتى العصر', 'امتا العصر', 'العصر امتى', 'العصر امتا',
+      'العصر كام', 'كام العصر', 'العصر الساعة كام',
+      'وقت العصر', 'ميعاد العصر', 'موعد العصر',
+      'امتى اذان العصر', 'اذان العصر امتى',
+      'امتى يأذن العصر', 'العصر بيأذن امتى', 'هيأذن العصر امتى',
+      'امتى صلاة العصر', 'صلاة العصر امتى',
+      'اقولي العصر', 'قوليلي العصر', 'قولي العصر', 'قوللي العصر',
+    ])) {
+      await _speakPrayerTimes(specificPrayer: 'asr', name: 'العَصْر');
+      return;
+    }
 
-  if (_hasAny(cmd, [
-    'مهام النهاردة', 'مهام اليوم', 'مهام النهارده', 'مهام انهاردة', 'مهامي النهاردة', 'مهامي اليوم', 'مهامي النهارده', 'مهامي انهاردة',
-    'المهام النهاردة', 'المهام اليوم', 'المهام النهارده', 'المهام انهاردة', 'ماذا لدي اليوم', 'ماذا لدي النهاردة', 'ماذا لدي النهارده', 'ماذا لدي انهاردة',
-    'ماذا لديك اليوم', 'ماذا لديك النهاردة', 'ماذا لديك النهارده', 'ماذا لديك انهاردة', 'ماذا عندي اليوم', 'ماذا عندي النهاردة', 'ماذا عندي النهارده',
-    'ماذا عندك اليوم', 'ماذا عندك النهاردة', 'ماذا عندك النهارده', 'عندي ايه مهام', 'عندي إيه مهام', 'عندي ايه مهام النهاردة', 'عندي إيه مهام النهاردة',
-    'ايه مهامي', 'إيه مهامي', 'ايه مهامي النهاردة', 'إيه مهامي النهاردة', 'ايه مهامي النهارده', 'إيه مهامي النهارده', 'ايه مهامي انهاردة',
-    'ايه اللي عندي النهاردة', 'إيه اللي عندي النهاردة', 'ايه اللي عندي النهارده', 'إيه اللي عندي النهارده', 'اللي عندي النهاردة', 'اللي عندي اليوم', 'اللي عندي النهارده',
-    'عندي ايه النهاردة', 'عندي إيه النهاردة', 'عندي ايه النهارده', 'عندي إيه النهارده', 'عندي ايه انهاردة', 'عندي إيه انهاردة',
-    'ايه عندي النهاردة', 'إيه عندي النهاردة', 'ايه عندي النهارده', 'إيه عندي النهارده', 'ايه عندي انهاردة', 'إيه عندي انهاردة',
-    'ايه عندي اليوم', 'إيه عندي اليوم', 'ايه عندي النهارده', 'ايه لدي اليوم', 'إيه لدي اليوم', 'ايه لدي النهاردة', 'إيه لدي النهاردة',
-    'ايه لدي النهارده', 'إيه لدي النهارده', 'عندي ايه مهام النهارده', 'عندي إيه مهام النهارده', 'قولي مهامي', 'قوليلي مهامي', 'قوليلي ايه عندي',
-    'قولي عندي ايه', 'قوليلي عندي ايه', 'قوليلي ايه اللي عندي', 'اعرض مهامي', 'اعرضي مهامي', 'اعرضي ايه عندي', 'هات مهامي', 'هاتي مهامي', 'هاتي ايه عندي',
-    'ايه ورايا النهاردة', 'إيه ورايا النهاردة', 'ايه ورايا النهارده', 'ورايا ايه النهاردة', 'ورايا إيه النهاردة', 'ورايا ايه النهارده',
-    'ايه ورايا', 'إيه ورايا', 'ايه ورايا اليوم', 'إيه ورايا اليوم', 'مهامي', 'المهام بتاعتي', 'المهام بتاعتى',
-    'مواعيدي النهاردة', 'مواعيدي اليوم', 'مواعيدي النهارده', 'ايه مواعيدي', 'إيه مواعيدي', 'ايه مواعيدي النهاردة',
-  ])) {
-    await _listTodayTasks();
-    return;
-  }
+    // 🕌 المغرب
+    if (_hasAny(cmd, [
+      'امتى المغرب', 'امتا المغرب', 'المغرب امتى', 'المغرب امتا',
+      'المغرب كام', 'كام المغرب', 'المغرب الساعة كام',
+      'وقت المغرب', 'ميعاد المغرب', 'موعد المغرب',
+      'امتى اذان المغرب', 'اذان المغرب امتى',
+      'امتى يأذن المغرب', 'المغرب بيأذن امتى', 'هيأذن المغرب امتى',
+      'امتى صلاة المغرب', 'صلاة المغرب امتى',
+      'اقولي المغرب', 'قوليلي المغرب', 'قولي المغرب', 'قوللي المغرب',
+    ])) {
+      await _speakPrayerTimes(specificPrayer: 'maghrib', name: 'المَغْرِب');
+      return;
+    }
 
-  final alarmKeywords = [
-    "فكرني", "فكريني", "فكروني", "فكرنى", "تفكرني", "تفكريني", "هتفكرني", "هتفكريني",
-    "افتكرني", "افتكريني", "افتكرلي", "افتكرى لي", "هفتكرك",
-    "ذكرني", "ذكريني", "ذكروني", "ذكرنى", "تذكرني", "تذكريني", "هتذكرني", "هتذكريني",
-    "نبهني", "نبهيني", "نبهوني", "نبهنى", "تنبهني", "تنبهيني", "تنبيهي", "تنبيهني",
-    "منبه", "منبّه", "منبهني", "منبهلي", "منبهيلي", "المنبه", "نبّهني",
-    "اضبطلي", "اظبطلي", "اضبطيلي", "اظبطيلي", "ظبطلي", "ظبطيلي",
-    "ضبطلي", "ضبطيلي", "اضبط", "اظبط", "اضبطي", "اظبطي", "ظبط", "ظبطي",
-    "ضبط", "ضبطي", "اضبطيلى",
-    "سجل عندك", "سجلي عندك", "سجللي", "سجليلي", "سجللى", "سجلى لى",
-    "حطلي", "حطلى", "حطيلي", "حطى لي", "حطني", "حطيني",
-    "اعمللي", "اعمليلي", "اعمللى", "اعملى لي", "اعملني", "اعمليني", "اعمليلى",
-    "عايز", "عاوز", "عايزة", "عاوزة", "عايزك", "عاوزك", "عايزاك", "عاوزاك",
-    "عايز افتكر", "عاوز افتكر", "عايزة افتكر", "عاوزة افتكر",
-    "عايز منبه", "عاوز منبه", "عايزة منبه", "عاوزة منبه",
-    "عايز تذكير", "عاوز تذكير", "عايزة تذكير", "عاوزة تذكير",
-    "عايز اضبط", "عايزة اضبط", "عاوز اضبط", "عاوزة اضبط",
-    "صحيني", "صحيني الصبح", "صحيني بكرة", "صحوني", "صحى", "تصحيني",
-    "صحي", "صحيلي", "أصحى", "صيحيني", "صحيلى",
-    "ورايا", "ورايه", "ورايا حاجه", "ورايا حاجة", "وراك", "وراك حاجة",
-    "ورايا حاجه مهمه", "ورايا حاجة مهمة",
-    "دبرلي", "دبريلي", "دبرلى", "دبرى لي",
-    "رتبلي", "رتبيلي", "رتبلى", "رتبى لي",
-    "جهزلي", "جهزيلي", "جهزلى", "جهزى لي",
-    "علمني", "علميني",
-    "خلي بالك", "خليكي بالك", "خد بالك", "خدي بالك",
-    "ما تنساني", "ماتنساني", "متنساني", "ماتنسانيش", "متنسانيش",
-    "ماتنساش", "متنساش", "ماتنساشي", "متنساشي",
-    "ماتنسى", "متنسى", "ماتنسيش", "متنسيش",
-    "موعد", "ميعاد", "موعدي", "ميعادي", "حددلي موعد", "حددلي ميعاد",
-    "حدديلي موعد", "حدديلي ميعاد",
-    "تنبيه", "التنبيه", "هنسى", "هنسي", "هنساه",
-    "خايف أنسى", "خايفة أنسى", "خايف انسى", "خايفة انسى",
-    "جهز نفسك", "خليك جاهز", "خليكي جاهزة",
-    "ساعدني", "ساعديني", "تساعدني", "تساعديني",
-    "تذكره", "تذكرة", "تذكيري", "تذكيرى",
-    "بفكرك", "بتفكرني", "تفتكر", "تفكر",
-  ];
+    // 🕌 العشاء
+    if (_hasAny(cmd, [
+      'امتى العشاء', 'امتا العشاء', 'العشاء امتى', 'العشاء امتا',
+      'امتى العشا', 'العشا امتى', 'العشا كام', 'كام العشا',
+      'العشاء كام', 'كام العشاء', 'العشاء الساعة كام',
+      'وقت العشاء', 'وقت العشا', 'ميعاد العشاء', 'موعد العشاء',
+      'امتى اذان العشاء', 'اذان العشاء امتى',
+      'امتى يأذن العشاء', 'العشاء بيأذن امتى', 'هيأذن العشاء امتى',
+      'امتى صلاة العشاء', 'صلاة العشاء امتى',
+      'اقولي العشاء', 'قوليلي العشاء', 'قولي العشاء', 'قوللي العشاء',
+    ])) {
+      await _speakPrayerTimes(specificPrayer: 'isha', name: 'العِشَاء');
+      return;
+    }
 
-  if (_hasAny(cmd, alarmKeywords)) {
-    await _createAlarmFromVoice(rawCommand, cmd);
-    return;
-  }
+    // 🌅 الشروق
+    if (_hasAny(cmd, [
+      'امتى الشروق', 'الشروق امتى', 'الشروق كام',
+      'وقت الشروق', 'ميعاد الشروق', 'موعد الشروق',
+      'امتى يطلع الشروق', 'الشروق بيطلع امتى',
+      'اقولي الشروق', 'قوليلي الشروق',
+    ])) {
+      await _speakPrayerTimes(specificPrayer: 'sunrise', name: 'الشُّرُوق');
+      return;
+    }
 
-  final editKeywords = [
-    "عدل", "عدلي", "عدللي", "عدليلي", "تعدل", "تعدلي", "تعديل", "تعديلي", "أعدل", "اعدل",
-    "غير", "غيري", "غيرلي", "غيريلي", "تغير", "تغيري", "غيّر", "غيّري", "تغيير", "تغييري",
-    "بدل", "بدلي", "بدللي", "بدليلي", "تبدل", "تبدلي", "حرك", "حركي", "أخر", "أخري",
-  ];
+    // 🕌 كل المواقيت
+    if (_hasAny(cmd, [
+      'مواقيت الصلاة', 'مواعيد الصلاة', 'مواقيت الصلوات', 'مواعيد الصلوات',
+      'قوليلي مواقيت', 'قوليلي مواعيد', 'اقولي المواقيت', 'اقولي المواعيد',
+      'اقرا المواقيت', 'اقرا المواعيد', 'قوليلي الصلوات', 'اقولي الصلوات',
+      'امتى الصلوات', 'الصلوات امتى', 'امتى الاذان', 'الاذان امتى',
+      'مواقيت النهاردة', 'مواعيد النهاردة', 'الصلوات النهاردة',
+      'مواقيت الصلاة النهاردة', 'مواعيد الصلاة النهاردة',
+      'عايز اعرف مواقيت الصلاة', 'عايز اعرف مواعيد الصلاة',
+      'عايزة اعرف مواقيت الصلاة', 'عايزة اعرف مواعيد الصلاة',
+      'قوليلي مواقيت الصلاة', 'قوليلي مواعيد الصلاة',
+      'اقولي مواقيت الصلاة', 'اقولي مواعيد الصلاة',
+    ])) {
+      await _speakPrayerTimes();
+      return;
+    }
 
-  if (_hasAny(cmd, editKeywords)) {
-    await _editTaskByVoice(cmd);
-    return;
-  }
+    if (await _handleSocialReply(cmd)) return;
 
-  final prayerKeywords = ["صلوات", "صلاة", "صلاه", "الصلاة", "مواقيت", "اذان", "أذان", "الفجر", "الظهر", "العصر", "المغرب", "العشاء"];
-  final diaryKeywords = ["يوميات", "يوميه", "يومية", "اليوميات", "مفكرة", "مفكرتي", "المفكرة", "مذكرة", "مذكرتي", "تدوين", "خواطر", "اكتبلي", "اكتبيلي"];
-  final eventKeywords = ["مناسبات", "مناسباتي", "المناسبات", "مناسبة", "مناسبه", "عيد", "العيد", "أعياد", "اعياد", "ذكرى", "الذكرى", "احتفال", "حفلة"];
-  final openRecorderKeywords = [
-    "افتح المسجل", "افتح مسجل", "افتحلي المسجل", "افتحي المسجل", "افتحيلى المسجل", "المسجل", "مسجل", "المسجل الصوتي",
-    "سجل صوت", "سجل صوتي", "سجلي صوت", "سجلي صوتي", "التسجيلات", "تسجيلات", "تسجيلاتي", "صوتيات", "الصوتيات", "المذكرات الصوتيه", "مذكرات صوتيه", "المذكرات الصوتية",
-  ];
-  final startRecordKeywords = [
-    "ابدأ تسجيل", "ابدأ التسجيل", "ابدئي تسجيل", "ابدئي التسجيل", "ابدا تسجيل", "ابدا التسجيل", "سجل دلوقتي", "سجل حالا", "سجل حالاً",
-    "سجلي دلوقتي", "سجلي حالا", "سجلي حالاً", "سجللي دلوقتي", "سجليلي دلوقتي", "سجللي حالا", "سجليلي حالا", "ابدأ دلوقتي", "ابدئي دلوقتي",
-    "ابدأ سجل", "ابدئي سجل", "عايز أسجل", "عايز اسجل", "عاوز أسجل", "عاوز اسجل", "عايزة أسجل", "عايزة اسجل", "عاوزة أسجل", "عاوزة اسجل",
-    "شغل التسجيل", "شغلي التسجيل", "شغل المسجل", "شغلي المسجل", "ابدأ التسجيل دلوقتي", "ابدئي التسجيل دلوقتي", "سجل يلا", "سجلي يلا", "سجل بسرعة", "سجلي بسرعة",
-  ];
-  final stopRecordKeywords = [
-    "وقف تسجيل", "وقف التسجيل", "وقفي تسجيل", "وقفي التسجيل", "اوقف تسجيل", "اوقف التسجيل", "أوقف تسجيل", "أوقف التسجيل", "وقفت تسجيل", "وقفت التسجيل",
-    "خلاص وقف تسجيل", "خلاص وقف التسجيل", "خلاص وقفي تسجيل", "خلاص وقفي التسجيل", "خلاص وقف", "خلاص وقفي", "خلاص اوقف", "خلاص أوقف", "خلاص ايقاف", "خلاص إيقاف",
-    "خلاص كفاية", "خلاص كفايه", "خلاص بلاها", "خلاص بلاش", "خلاص انتهي", "خلاص انتهى", "خلاص اقفل التسجيل", "خلاص اقفلي التسجيل", "خلص تسجيل", "خلص التسجيل",
-    "خلصي تسجيل", "خلصي التسجيل", "خلصت تسجيل", "خلصت التسجيل", "خلص خلاص", "خلصي خلاص", "بطل تسجيل", "بطل التسجيل", "بطلي تسجيل", "بطلي التسجيل",
-    "بطل بقي", "بطلي بقي", "انهي التسجيل", "انهي تسجيل", "أنهي التسجيل", "أنهي تسجيل", "اقفل التسجيل", "اقفلي التسجيل", "اقفل تسجيل", "اقفلي تسجيل",
-    "قفل التسجيل", "قفلي التسجيل", "كفاية تسجيل", "كفاية التسجيل", "كفايه تسجيل", "كفايه التسجيل", "كفاية كده", "كفايه كده", "كفاية خلاص", "كفايه خلاص",
-    "بس كده", "بس خلاص", "بس كفاية", "بس كفايه", "كده كفاية", "كده كفايه", "اوقف", "أوقف", "ايقاف", "إيقاف", "ستوب", "stop", "سيب التسجيل", "سيبي التسجيل",
-    "متسجلش", "ماتسجلش", "متسجليش", "ماتسجليش", "مش عايز اسجل", "مش عاوز اسجل", "مش عايزة اسجل", "مش عاوزة اسجل",
-  ];
-
-  if (_hasAny(cmd, prayerKeywords)) {
-    setState(() {
-      _currentIndex = 2;
-      _prayerSubView = 'times';
-    });
-    await _speak("تَمَّ الاِنْتِقَالُ لِمَوَاقِيتِ الصَّلَاة $_userTitle.");
-    return;
-  } else if (_hasAny(cmd, diaryKeywords)) {
-    setState(() => _currentIndex = 1);
-    await Future.delayed(const Duration(milliseconds: 300));
-    final requestedDate = _parseDiaryDate(cmd);
-    if (requestedDate != null) {
-      if (mounted) _openDiaryPage(requestedDate);
-      final dayName = DateFormat('EEEE، dd MMMM yyyy', 'ar').format(requestedDate);
-      await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ $dayName $_userTitle");
-    } else {
+    if (cmd.contains('اكتب') && cmd.contains('يوميات')) {
       if (mounted) _openDiaryPage(DateTime.now());
-      await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ النَّهَارْدَة $_userTitle");
+      await _speak("اتْفَضَّلْ $_userTitle، اكْتُبْ يَوْمِيَّاتَك.");
+      return;
     }
-    return;
-  } else if (_hasAny(cmd, eventKeywords)) {
-    setState(() => _currentIndex = 3);
-    await _speak("تَمَّ الاِنْتِقَالُ لِلْمُنَاسَبَاتِ السَّنَوِيَّة $_userTitle.");
-    return;
-  } else if (_hasAny(cmd, stopRecordKeywords)) {
-    if (_isRecording) {
-      await _stopRecording();
-      await _speak("تَمَّ إِيقَافُ التَّسْجِيل $_userTitle.");
+    if (cmd.contains('امسح') && cmd.contains('يوميات')) {
+      final key = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      if (_diaries.containsKey(key)) {
+        setState(() => _diaries.remove(key));
+        _saveData();
+        await _speak("تَمَّ مَسْحُ يَوْمِيَّةِ النَّهَارْدَة $_userTitle.");
+      } else {
+        await _speak("مَفِيشْ يَوْمِيَّةِ النَّهَارْدَة $_userTitle.");
+      }
+      return;
+    }
+    if (cmd.contains('دور') && (cmd.contains('يوميات') || cmd.contains('مفكرة'))) {
+      final keyword = rawCommand.replaceAll(RegExp(r'(دور|على|ابحث|عن|في|يوميات|مفكرة)'), '').trim();
+      if (keyword.isNotEmpty) {
+        final results = _diaries.entries.where((e) => e.value['text'] != null && e.value['text'].toString().contains(keyword)).toList();
+        if (results.isEmpty) {
+          await _speak("مَفِيشْ يَوْمِيَّات فِيهَا كَلِمَة $keyword $_userTitle.");
+        } else {
+          await _speak("لَقِيتْ $keyword فِي ${results.length} يَوْمِيَّات. أَوَّلْ وَاحْدَة كَانَتْ يَوْم ${DateFormat('dd MMMM', 'ar').format(DateTime.parse(results.first.key))}.");
+        }
+        return;
+      }
+    }
+
+    final weeklyIndicators = [
+      'الجدول', 'جدول', 'الجدول الاسبوعي', 'الجدول الأسبوعي', 'جدول اسبوعي', 'جدول أسبوعي',
+      'الجدول بتاع الاسبوع', 'الجدول بتاع الأسبوع', 'الجدول بتاعى', 'الجدول بتاعي',
+      'الجدول بتاعنا', 'جدول الأسبوع', 'جدولي', 'جدولى', 'جدولي الاسبوعي', 'جدولي الأسبوعي',
+      'جدولى الاسبوعي', 'جدولى الأسبوعي', 'في جدولي', 'في جدولى', 'من جدولي', 'من جدولى',
+      'البرنامج الاسبوعي', 'البرنامج الأسبوعي', 'برنامجي الاسبوعي', 'برنامجي الأسبوعي',
+      'برنامج الاسبوع', 'برنامج الأسبوع', 'خطة الاسبوع', 'خطة الأسبوع',
+      'الخطة الاسبوعية', 'الخطة الأسبوعية', 'خطتي الاسبوعية', 'خطتي الأسبوعية',
+      'اجندة الاسبوع', 'أجندة الأسبوع', 'الاجندة الاسبوعية', 'الأجندة الأسبوعية',
+      'اجندتي الاسبوعية', 'أجندتي الأسبوعية', 'مواعيد الاسبوع', 'مواعيد الأسبوع',
+      'المواعيد الاسبوعية', 'المواعيد الأسبوعية', 'مواعيدي الاسبوعية', 'مواعيدي الأسبوعية',
+      'مهام الاسبوع', 'مهام الأسبوع', 'المهام الاسبوعية', 'المهام الأسبوعية',
+      'في الجدول', 'من الجدول', 'على الجدول', 'علي الجدول', 'في جدول', 'من جدول',
+      'التخطيط الاسبوعي', 'التخطيط الأسبوعي', 'التقويم الاسبوعي', 'التقويم الأسبوعي',
+    ];
+    final isWeeklyCmd = _hasAny(cmd, weeklyIndicators);
+
+    final isAdding = _hasAny(cmd, [
+      'ضفلي', 'ضف', 'ضفيه', 'ضيفه',
+      'ضيف', 'ضيفي', 'ضيفلي', 'ضيفيلي', 'ضيفيه', 'اضف', 'أضف', 'اضفي', 'أضفي', 'اضفلي', 'أضفلي',
+      'حط', 'حطي', 'حطلي', 'حطيلي', 'حطه', 'حطيها',
+      'سجل', 'سجلي', 'سجللي', 'سجليلي', 'سجله', 'اعمل', 'اعملي', 'اعمللي', 'اعمليلي', 'اعمله',
+      'ظبط', 'ظبطي', 'ظبطلي', 'ظبطيلي', 'ضبط', 'ضبطي', 'ضبطلي', 'ضبطيلي', 'اضبط', 'أضبط', 'اضبطي', 'أضبطي',
+      'اظبط', 'أظبط', 'اظبطي', 'أظبطي', 'عايز اضيف', 'عايز أضيف', 'عايزة اضيف', 'عايزة أضيف',
+      'عاوز اضيف', 'عاوز أضيف', 'عاوزة اضيف', 'عاوزة أضيف', 'عايز احط', 'عايز أحط', 'عايزة احط', 'عايزة أحط',
+      'عاوز احط', 'عاوز أحط', 'عاوزة احط', 'عاوزة أحط', 'عايز اسجل', 'عايز أسجل', 'عايزة اسجل', 'عايزة أسجل',
+      'عاوز اسجل', 'عاوز أسجل', 'عاوزة اسجل', 'عاوزة أسجل', 'حدد لي', 'حددلي', 'حدديلي', 'حددلي موعد',
+    ]);
+
+    final isDeleting = _hasAny(cmd, [
+      'امسح', 'امسحي', 'امسحلي', 'امسحيلي', 'امسحه', 'امسحيها', 'أمسح', 'امسحى', 'مسح', 'مسحي', 'مسحلي', 'مسحيلي', 'مسحه',
+      'احذف', 'احذفي', 'احذفلي', 'احذفيلي', 'احذفه', 'احذفيها', 'أحذف', 'حذف', 'حذفي', 'حذفلي', 'حذفيلي', 'حذفه',
+      'شيل', 'شيلي', 'شيللي', 'شيليلي', 'شيله', 'شيليها', 'أشيل', 'اشيل', 'أشيله', 'اشيله',
+      'الغي', 'الغى', 'الغيلي', 'الغيه', 'ألغي', 'ألغى', 'ألغيه', 'إلغاء', 'إلغى', 'الغاء',
+      'كانسل', 'كنسل', 'كنسلي', 'كانسلي', 'كنسله', 'وقف', 'وقفي', 'اوقف', 'أوقف', 'اوقفه', 'أوقفه',
+      'ازيل', 'أزيل', 'ازيلي', 'أزيلي', 'ازيله', 'أزيله', 'مش عايز', 'مش عاوز', 'مش عايزة', 'مش عاوزة', 'بلاش', 'بلاشه', 'بلاشيها',
+    ]);
+
+    final isEditing = _hasAny(cmd, [
+      'عدل', 'عدلي', 'عدللي', 'عدليلي', 'عدله', 'عدليها', 'تعدل', 'تعدلي', 'أعدل', 'اعدل',
+      'غير', 'غيري', 'غيرلي', 'غيريلي', 'غيره', 'غيريها', 'تغير', 'تغيري', 'أغير', 'اغير',
+      'غيّر', 'غيّري', 'غيّره', 'غيّريها', 'بدل', 'بدلي', 'بدللي', 'بدليلي', 'بدله', 'بدليها',
+      'تبدل', 'تبدلي', 'حرك', 'حركي', 'حركه', 'حركيها', 'أخر', 'أخري', 'أخره', 'أخريها',
+      'أجل', 'أجّل', 'أجلي', 'أجّلي', 'أجله', 'تعديل', 'تعديلي', 'تعديله', 'غير الوقت', 'غيري الوقت',
+      'عدل الوقت', 'عدلي الوقت', 'عدل الميعاد', 'غير الميعاد', 'خلي الميعاد', 'خلي الوقت',
+    ]);
+
+    if (_hasAny(cmd, [
+      "امسح", "امسحي", "امسحلي", "امسحيلي", "أمسح", "أمسحي",
+      "مسح", "مسحي", "مسحلي", "مسحيلي",
+      "احذف", "احذفي", "احذفلي", "احذفيلي", "أحذف", "أحذفي",
+      "حذف", "حذفي", "حذفلي", "حذفيلي",
+      "شيل", "شيلي", "شيللي", "شيليلي", "أشيل",
+      "الغي", "الغى", "ألغي", "ألغى", "الغيلي", "ألغيلي",
+      "إلغاء", "إلغى", "كانسل", "كنسل", "كنسلي", "كانسلي",
+      "وقف المنبه", "وقفي المنبه", "اوقف المنبه", "أوقف المنبه",
+      "اقفل المنبه", "اقفلي المنبه", "الغي المنبه", "ألغي المنبه",
+    ])) {
+
+      if (isWeeklyCmd) {
+        if (_hasAny(cmd, ['كل', 'كله', 'الكل', 'كلها', 'جميع', 'كل مواعيد', 'كل المواعيد']) ||
+            (!_hasAny(cmd, ['موعد', 'ميعاد', 'مهام', 'درس']) && _hasAny(cmd, ['الجدول', 'جدول']))) {
+          await _deleteAllWeeklyTasks();
+          return;
+        }
+        await _deleteWeeklyTaskByVoice(rawCommand, cmd);
+        return;
+      }
+      else {
+        await _deleteTaskByVoice(cmd);
+        return;
+      }
+    }
+
+    if (!isAdding && !isDeleting && !isEditing &&
+        _hasAny(cmd, [
+          'افتح الجدول', 'افتحي الجدول', 'افتحلي الجدول', 'افتحيلي الجدول',
+          'افتح الجدول الاسبوعي', 'افتحي الجدول الأسبوعي',
+          'افتح جدولي', 'افتحي جدولي', 'افتح لي الجدول',
+          'فتح الجدول', 'فتحي الجدول', 'فتحلي الجدول', 'فتحيلي الجدول',
+          'وريني الجدول', 'وريني الجدول الاسبوعي', 'وريني الجدول الأسبوعي',
+          'وريني جدولي', 'وريني جدولى',
+          'اعرض الجدول', 'اعرضي الجدول', 'اعرضيلي الجدول',
+          'اعرض الجدول الاسبوعي', 'اعرض الجدول الأسبوعي',
+          'عرض الجدول', 'عرضي الجدول', 'عرض الجدول الاسبوعي',
+          'هات الجدول', 'هاتي الجدول', 'هاتيلي الجدول', 'هاتلي الجدول',
+          'هات الجدول الاسبوعي', 'هاتي الجدول الأسبوعي',
+          'شوف الجدول', 'شوفي الجدول', 'شوفيلي الجدول',
+          'روح للجدول', 'روحي للجدول', 'روح على الجدول', 'روحي على الجدول',
+          'دخل الجدول', 'دخلي الجدول', 'دخلني الجدول', 'دخليني الجدول',
+          'خلي الجدول', 'خليكي الجدول',
+          'الجدول الاسبوعي', 'الجدول الأسبوعي',
+          'جدول اسبوعي', 'جدول أسبوعي',
+          'جدولي الاسبوعي', 'جدولي الأسبوعي',
+          'البرنامج الاسبوعي', 'البرنامج الأسبوعي',
+          'عرض الجدول', 'اعرض لي الجدول',
+          'ايه في الجدول', 'إيه في الجدول', 'ايه في الجدول الاسبوعي', 'إيه في الجدول الأسبوعي',
+          'ايه اللي في الجدول', 'إيه اللي في الجدول',
+          'ايه عندي في الجدول', 'إيه عندي في الجدول',
+          'اللي في الجدول', 'اللي عندي في الجدول',
+          'عندي ايه في الجدول', 'عندي إيه في الجدول',
+          'ايه مواعيدي', 'إيه مواعيدي', 'ايه مواعيدي الاسبوعية', 'إيه مواعيدي الأسبوعية',
+          'المواعيد الاسبوعية', 'المواعيد الأسبوعية',
+          'مواعيد الجدول', 'مواعيد الاسبوع',
+          'مهام الجدول', 'مهام الاسبوع', 'مهامي في الجدول',
+          'المهام الاسبوعية', 'المهام الأسبوعية',
+          'اقرالي الجدول', 'اقرأيلي الجدول', 'اقرا الجدول', 'اقرأي الجدول',
+          'اقرالي الجدول الاسبوعي', 'اقرأيلي الجدول الأسبوعي',
+          'احكيلي الجدول', 'احكي الجدول', 'احكيلي عن الجدول',
+          'اخبريني الجدول', 'قوليلي الجدول', 'قولي الجدول',
+          'علميني الجدول', 'عرفيني الجدول',
+          'قوليلي عندي ايه في الجدول', 'قولي عندي ايه',
+        ])) {
+      await _listWeeklySchedule();
+      return;
+    }
+
+    if (isWeeklyCmd && isAdding) {
+      await _createWeeklyAlarmFromVoice(rawCommand, cmd);
+      return;
+    }
+
+    if (isWeeklyCmd && isEditing) {
+      await _editWeeklyTaskByVoice(rawCommand, cmd);
+      return;
+    }
+
+    final askingAboutDay = _hasAny(cmd, [
+      'عندي ايه يوم', 'عندي إيه يوم', 'عندي ايه في يوم', 'عندي إيه في يوم',
+      'ماذا لدي يوم', 'ماذا لدي في يوم', 'ماذا لدي يوم ال',
+      'ماذا لديك يوم', 'ماذا لديك في يوم', 'ماذا لديك يوم ال',
+      'ماذا عندي يوم', 'ماذا عندي في يوم', 'ماذا عندك يوم', 'ماذا عندك في يوم',
+      'ايه عندي يوم', 'إيه عندي يوم', 'ايه عندي في يوم', 'إيه عندي في يوم',
+      'ايه لدي يوم', 'إيه لدي يوم', 'ايه لدي في يوم', 'إيه لدي في يوم',
+      'ورايا ايه يوم', 'ورايا إيه يوم', 'ورايا ايه في يوم', 'ورايا إيه في يوم',
+      'ايه ورايا يوم', 'إيه ورايا يوم', 'ايه ورايا في يوم', 'إيه ورايا في يوم',
+      'عندي ايه نهار', 'عندي إيه نهار', 'ايه يوم', 'إيه يوم',
+      'مهام يوم', 'مواعيد يوم', 'جدول يوم', 'الجدول يوم',
+      'قولي عندي ايه يوم', 'قوليلي عندي ايه يوم',
+      'قولي عندي ايه في يوم', 'قوليلي عندي ايه في يوم',
+      'قوليلي ماذا لدي يوم', 'قوليلي ايه عندي يوم',
+      'عندي ايه يوم ال', 'عندي إيه يوم ال',
+      'ايه اللي عندي يوم', 'إيه اللي عندي يوم',
+      'ايه اللي عندي في يوم', 'إيه اللي عندي في يوم',
+      'ايه مواعيدي يوم', 'إيه مواعيدي يوم',
+      'ايه مهامي يوم', 'إيه مهامي يوم',
+      'اعرض يوم', 'اعرضي يوم', 'وريني يوم', 'وريني مهام يوم',
+      'عرض يوم', 'عرضي يوم',
+    ]);
+    final dayInQuestion = _extractWeeklyDaysFromCmd(cmd);
+    if (dayInQuestion.isNotEmpty && (askingAboutDay || _hasAny(cmd, ['عندي ايه', 'عندي إيه', 'ايه عندي', 'إيه عندي', 'ورايا ايه', 'ورايا إيه', 'ايه ورايا', 'إيه ورايا', 'ايه مهامي', 'إيه مهامي', 'ايه مواعيدي', 'إيه مواعيدي']))) {
+      await _listDayTasks(dayInQuestion.first);
+      return;
+    }
+
+    if (_hasAny(cmd, [
+      'ماذا لدي بكرة', 'ماذا لدي بكره', 'ماذا لدي بكرا', 'ماذا لدي غدا', 'ماذا لدي غداً',
+      'ماذا لديك بكرة', 'ماذا لديك بكره', 'ماذا لديك غدا', 'ماذا لديك غداً',
+      'ماذا عندي بكرة', 'ماذا عندي بكره', 'ماذا عندي غدا', 'ماذا عندك بكرة', 'ماذا عندك بكره', 'ماذا عندك غدا',
+      'مهام بكرة', 'مهام بكره', 'مهام بكرا', 'مهام غدا', 'مهام غداً', 'مهامي بكرة', 'مهامي بكره', 'مهامي غدا',
+      'مواعيد بكرة', 'مواعيد بكره', 'مواعيد غدا', 'مواعيد غداً',
+      'عندي ايه بكرة', 'عندي ايه بكره', 'عندي ايه بكرا', 'عندي ايه غدا', 'عندي إيه بكرة', 'عندي إيه بكره', 'عندي إيه غدا',
+      'ايه عندي بكرة', 'ايه عندي بكره', 'ايه عندي غدا', 'إيه عندي بكرة', 'إيه عندي بكره', 'إيه عندي غدا',
+      'ايه ورايا بكرة', 'ايه ورايا بكره', 'ايه ورايا غدا', 'إيه ورايا بكرة', 'إيه ورايا بكره', 'إيه ورايا غدا',
+      'ايه مهامي بكرة', 'ايه مهامي بكره', 'ايه مهامي غدا', 'اللي عندي بكرة', 'اللي عندي بكره', 'اللي عندي غدا',
+      'عندي ايه بكرا', 'ايه لدي بكرة', 'ايه لدي غدا',
+    ])) {
+      await _listTodayTasks(targetDate: DateTime.now().add(const Duration(days: 1)));
+      return;
+    }
+
+    if (_hasAny(cmd, [
+      'ماذا لدي امبارح', 'ماذا لدي امبارحه', 'ماذا لدي البارحة', 'ماذا لدي البارحه', 'ماذا لدي امس',
+      'ماذا لديك امبارح', 'ماذا لديك البارحة', 'ماذا لديك امس', 'ماذا عندي امبارح', 'ماذا عندي البارحة', 'ماذا عندي امس',
+      'ماذا عندك امبارح', 'ماذا عندك البارحة', 'ماذا عندك امس', 'مهام امبارح', 'مهام امبارحه', 'مهام البارحة', 'مهام البارحه', 'مهام امس',
+      'مهامي امبارح', 'مهامي البارحة', 'مهامي امس', 'مواعيد امبارح', 'مواعيد البارحة', 'مواعيد امس',
+      'عندي ايه امبارح', 'عندي ايه البارحة', 'عندي ايه امس', 'عندي إيه امبارح', 'عندي إيه البارحة', 'عندي إيه امس',
+      'ايه عندي امبارح', 'ايه عندي البارحة', 'ايه عندي امس', 'إيه عندي امبارح', 'إيه عندي البارحة', 'إيه عندي امس',
+      'ايه ورايا امبارح', 'ايه ورايا البارحة', 'ايه ورايا امس', 'إيه ورايا امبارح', 'إيه ورايا البارحة', 'إيه ورايا امس',
+      'ايه مهامي امبارح', 'ايه مهامي البارحة', 'ايه مهامي امس', 'اللي عندي امبارح', 'اللي عندي البارحة', 'اللي عندي امس',
+      'ايه لدي امبارح', 'ايه لدي امس',
+    ])) {
+      await _listTodayTasks(targetDate: DateTime.now().subtract(const Duration(days: 1)));
+      return;
+    }
+
+    if (_hasAny(cmd, [
+      'مهام النهاردة', 'مهام اليوم', 'مهام النهارده', 'مهام انهاردة', 'مهامي النهاردة', 'مهامي اليوم', 'مهامي النهارده', 'مهامي انهاردة',
+      'المهام النهاردة', 'المهام اليوم', 'المهام النهارده', 'المهام انهاردة', 'ماذا لدي اليوم', 'ماذا لدي النهاردة', 'ماذا لدي النهارده', 'ماذا لدي انهاردة',
+      'ماذا لديك اليوم', 'ماذا لديك النهاردة', 'ماذا لديك النهارده', 'ماذا لديك انهاردة', 'ماذا عندي اليوم', 'ماذا عندي النهاردة', 'ماذا عندي النهارده',
+      'ماذا عندك اليوم', 'ماذا عندك النهاردة', 'ماذا عندك النهارده', 'عندي ايه مهام', 'عندي إيه مهام', 'عندي ايه مهام النهاردة', 'عندي إيه مهام النهاردة',
+      'ايه مهامي', 'إيه مهامي', 'ايه مهامي النهاردة', 'إيه مهامي النهاردة', 'ايه مهامي النهارده', 'إيه مهامي النهارده', 'ايه مهامي انهاردة',
+      'ايه اللي عندي النهاردة', 'إيه اللي عندي النهاردة', 'ايه اللي عندي النهارده', 'إيه اللي عندي النهارده', 'اللي عندي النهاردة', 'اللي عندي اليوم', 'اللي عندي النهارده',
+      'عندي ايه النهاردة', 'عندي إيه النهاردة', 'عندي ايه النهارده', 'عندي إيه النهارده', 'عندي ايه انهاردة', 'عندي إيه انهاردة',
+      'ايه عندي النهاردة', 'إيه عندي النهاردة', 'ايه عندي النهارده', 'إيه عندي النهارده', 'ايه عندي انهاردة', 'إيه عندي انهاردة',
+      'ايه عندي اليوم', 'إيه عندي اليوم', 'ايه عندي النهارده', 'ايه لدي اليوم', 'إيه لدي اليوم', 'ايه لدي النهاردة', 'إيه لدي النهاردة',
+      'ايه لدي النهارده', 'إيه لدي النهارده', 'عندي ايه مهام النهارده', 'عندي إيه مهام النهارده', 'قولي مهامي', 'قوليلي مهامي', 'قوليلي ايه عندي',
+      'قولي عندي ايه', 'قوليلي عندي ايه', 'قوليلي ايه اللي عندي', 'اعرض مهامي', 'اعرضي مهامي', 'اعرضي ايه عندي', 'هات مهامي', 'هاتي مهامي', 'هاتي ايه عندي',
+      'ايه ورايا النهاردة', 'إيه ورايا النهاردة', 'ايه ورايا النهارده', 'ورايا ايه النهاردة', 'ورايا إيه النهاردة', 'ورايا ايه النهارده',
+      'ايه ورايا', 'إيه ورايا', 'ايه ورايا اليوم', 'إيه ورايا اليوم', 'مهامي', 'المهام بتاعتي', 'المهام بتاعتى',
+      'مواعيدي النهاردة', 'مواعيدي اليوم', 'مواعيدي النهارده', 'ايه مواعيدي', 'إيه مواعيدي', 'ايه مواعيدي النهاردة',
+    ])) {
+      await _listTodayTasks();
+      return;
+    }
+
+    final alarmKeywords = [
+      "فكرني", "فكريني", "فكروني", "فكرنى", "تفكرني", "تفكريني", "هتفكرني", "هتفكريني",
+      "افتكرني", "افتكريني", "افتكرلي", "افتكرى لي", "هفتكرك",
+      "ذكرني", "ذكريني", "ذكروني", "ذكرنى", "تذكرني", "تذكريني", "هتذكرني", "هتذكريني",
+      "نبهني", "نبهيني", "نبهوني", "نبهنى", "تنبهني", "تنبهيني", "تنبيهي", "تنبيهني",
+      "منبه", "منبّه", "منبهني", "منبهلي", "منبهيلي", "المنبه", "نبّهني",
+      "اضبطلي", "اظبطلي", "اضبطيلي", "اظبطيلي", "ظبطلي", "ظبطيلي",
+      "ضبطلي", "ضبطيلي", "اضبط", "اظبط", "اضبطي", "اظبطي", "ظبط", "ظبطي",
+      "ضبط", "ضبطي", "اضبطيلى",
+      "سجل عندك", "سجلي عندك", "سجللي", "سجليلي", "سجللى", "سجلى لى",
+      "حطلي", "حطلى", "حطيلي", "حطى لي", "حطني", "حطيني",
+      "اعمللي", "اعمليلي", "اعمللى", "اعملى لي", "اعملني", "اعمليني", "اعمليلى",
+      "عايز", "عاوز", "عايزة", "عاوزة", "عايزك", "عاوزك", "عايزاك", "عاوزاك",
+      "عايز افتكر", "عاوز افتكر", "عايزة افتكر", "عاوزة افتكر",
+      "عايز منبه", "عاوز منبه", "عايزة منبه", "عاوزة منبه",
+      "عايز تذكير", "عاوز تذكير", "عايزة تذكير", "عاوزة تذكير",
+      "عايز اضبط", "عايزة اضبط", "عاوز اضبط", "عاوزة اضبط",
+      "صحيني", "صحيني الصبح", "صحيني بكرة", "صحوني", "صحى", "تصحيني",
+      "صحي", "صحيلي", "أصحى", "صيحيني", "صحيلى",
+      "ورايا", "ورايه", "ورايا حاجه", "ورايا حاجة", "وراك", "وراك حاجة",
+      "ورايا حاجه مهمه", "ورايا حاجة مهمة",
+      "دبرلي", "دبريلي", "دبرلى", "دبرى لي",
+      "رتبلي", "رتبيلي", "رتبلى", "رتبى لي",
+      "جهزلي", "جهزيلي", "جهزلى", "جهزى لي",
+      "علمني", "علميني",
+      "خلي بالك", "خليكي بالك", "خد بالك", "خدي بالك",
+      "ما تنساني", "ماتنساني", "متنساني", "ماتنسانيش", "متنسانيش",
+      "ماتنساش", "متنساش", "ماتنساشي", "متنساشي",
+      "ماتنسى", "متنسى", "ماتنسيش", "متنسيش",
+      "موعد", "ميعاد", "موعدي", "ميعادي", "حددلي موعد", "حددلي ميعاد",
+      "حدديلي موعد", "حدديلي ميعاد",
+      "تنبيه", "التنبيه", "هنسى", "هنسي", "هنساه",
+      "خايف أنسى", "خايفة أنسى", "خايف انسى", "خايفة انسى",
+      "جهز نفسك", "خليك جاهز", "خليكي جاهزة",
+      "ساعدني", "ساعديني", "تساعدني", "تساعديني",
+      "تذكره", "تذكرة", "تذكيري", "تذكيرى",
+      "بفكرك", "بتفكرني", "تفتكر", "تفكر",
+    ];
+
+    // 👈 التعديل أ: منبه مرتبط بالصلاة (لازم يكون قبل alarmKeywords)
+    if (await _handlePrayerRelativeAlarm(rawCommand, cmd)) return;
+
+    if (_hasAny(cmd, alarmKeywords)) {
+      await _createAlarmFromVoice(rawCommand, cmd);
+      return;
+    }
+
+    final editKeywords = [
+      "عدل", "عدلي", "عدللي", "عدليلي", "تعدل", "تعدلي", "تعديل", "تعديلي", "أعدل", "اعدل",
+      "غير", "غيري", "غيرلي", "غيريلي", "تغير", "تغيري", "غيّر", "غيّري", "تغيير", "تغييري",
+      "بدل", "بدلي", "بدللي", "بدليلي", "تبدل", "تبدلي", "حرك", "حركي", "أخر", "أخري",
+    ];
+
+    if (_hasAny(cmd, editKeywords)) {
+      await _editTaskByVoice(cmd);
+      return;
+    }
+
+    final prayerKeywords = ["صلوات", "صلاة", "صلاه", "الصلاة", "مواقيت", "اذان", "أذان", "الفجر", "الظهر", "العصر", "المغرب", "العشاء"];
+    final diaryKeywords = ["يوميات", "يوميه", "يومية", "اليوميات", "مفكرة", "مفكرتي", "المفكرة", "مذكرة", "مذكرتي", "تدوين", "خواطر", "اكتبلي", "اكتبيلي"];
+    final eventKeywords = ["مناسبات", "مناسباتي", "المناسبات", "مناسبة", "مناسبه", "عيد", "العيد", "أعياد", "اعياد", "ذكرى", "الذكرى", "احتفال", "حفلة"];
+    final openRecorderKeywords = [
+      "افتح المسجل", "افتح مسجل", "افتحلي المسجل", "افتحي المسجل", "افتحيلى المسجل", "المسجل", "مسجل", "المسجل الصوتي",
+      "سجل صوت", "سجل صوتي", "سجلي صوت", "سجلي صوتي", "التسجيلات", "تسجيلات", "تسجيلاتي", "صوتيات", "الصوتيات", "المذكرات الصوتيه", "مذكرات صوتيه", "المذكرات الصوتية",
+    ];
+    final startRecordKeywords = [
+      "ابدأ تسجيل", "ابدأ التسجيل", "ابدئي تسجيل", "ابدئي التسجيل", "ابدا تسجيل", "ابدا التسجيل", "سجل دلوقتي", "سجل حالا", "سجل حالاً",
+      "سجلي دلوقتي", "سجلي حالا", "سجلي حالاً", "سجللي دلوقتي", "سجليلي دلوقتي", "سجللي حالا", "سجليلي حالا", "ابدأ دلوقتي", "ابدئي دلوقتي",
+      "ابدأ سجل", "ابدئي سجل", "عايز أسجل", "عايز اسجل", "عاوز أسجل", "عاوز اسجل", "عايزة أسجل", "عايزة اسجل", "عاوزة أسجل", "عاوزة اسجل",
+      "شغل التسجيل", "شغلي التسجيل", "شغل المسجل", "شغلي المسجل", "ابدأ التسجيل دلوقتي", "ابدئي التسجيل دلوقتي", "سجل يلا", "سجلي يلا", "سجل بسرعة", "سجلي بسرعة",
+    ];
+    final stopRecordKeywords = [
+      "وقف تسجيل", "وقف التسجيل", "وقفي تسجيل", "وقفي التسجيل", "اوقف تسجيل", "اوقف التسجيل", "أوقف تسجيل", "أوقف التسجيل", "وقفت تسجيل", "وقفت التسجيل",
+      "خلاص وقف تسجيل", "خلاص وقف التسجيل", "خلاص وقفي تسجيل", "خلاص وقفي التسجيل", "خلاص وقف", "خلاص وقفي", "خلاص اوقف", "خلاص أوقف", "خلاص ايقاف", "خلاص إيقاف",
+      "خلاص كفاية", "خلاص كفايه", "خلاص بلاها", "خلاص بلاش", "خلاص انتهي", "خلاص انتهى", "خلاص اقفل التسجيل", "خلاص اقفلي التسجيل", "خلص تسجيل", "خلص التسجيل",
+      "خلصي تسجيل", "خلصي التسجيل", "خلصت تسجيل", "خلصت التسجيل", "خلص خلاص", "خلصي خلاص", "بطل تسجيل", "بطل التسجيل", "بطلي تسجيل", "بطلي التسجيل",
+      "بطل بقي", "بطلي بقي", "انهي التسجيل", "انهي تسجيل", "أنهي التسجيل", "أنهي تسجيل", "اقفل التسجيل", "اقفلي التسجيل", "اقفل تسجيل", "اقفلي تسجيل",
+      "قفل التسجيل", "قفلي التسجيل", "كفاية تسجيل", "كفاية التسجيل", "كفايه تسجيل", "كفايه التسجيل", "كفاية كده", "كفايه كده", "كفاية خلاص", "كفايه خلاص",
+      "بس كده", "بس خلاص", "بس كفاية", "بس كفايه", "كده كفاية", "كده كفايه", "اوقف", "أوقف", "ايقاف", "إيقاف", "ستوب", "stop", "سيب التسجيل", "سيبي التسجيل",
+      "متسجلش", "ماتسجلش", "متسجليش", "ماتسجليش", "مش عايز اسجل", "مش عاوز اسجل", "مش عايزة اسجل", "مش عاوزة اسجل",
+    ];
+
+    if (_hasAny(cmd, prayerKeywords)) {
+      setState(() {
+        _currentIndex = 2;
+        _prayerSubView = 'times';
+      });
+      await _speak("تَمَّ الاِنْتِقَالُ لِمَوَاقِيتِ الصَّلَاة $_userTitle.");
+      return;
+    } else if (_hasAny(cmd, diaryKeywords)) {
+      setState(() => _currentIndex = 1);
+      await Future.delayed(const Duration(milliseconds: 300));
+      final requestedDate = _parseDiaryDate(cmd);
+      if (requestedDate != null) {
+        if (mounted) _openDiaryPage(requestedDate);
+        final dayName = DateFormat('EEEE، dd MMMM yyyy', 'ar').format(requestedDate);
+        await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ $dayName $_userTitle");
+      } else {
+        if (mounted) _openDiaryPage(DateTime.now());
+        await _speak("تَمَّ فَتْحُ يَوْمِيَّةِ النَّهَارْدَة $_userTitle");
+      }
+      return;
+    } else if (_hasAny(cmd, eventKeywords)) {
+      setState(() => _currentIndex = 3);
+      await _speak("تَمَّ الاِنْتِقَالُ لِلْمُنَاسَبَاتِ السَّنَوِيَّة $_userTitle.");
+      return;
+    } else if (_hasAny(cmd, stopRecordKeywords)) {
+      if (_isRecording) {
+        await _stopRecording();
+        await _speak("تَمَّ إِيقَافُ التَّسْجِيل $_userTitle.");
+      } else {
+        await _speak("مَفِيشْ تَسْجِيل شَغَّال دِلْوَقْتِي $_userTitle.");
+      }
+      return;
+    } else if (_hasAny(cmd, startRecordKeywords)) {
+      setState(() => _currentIndex = 4);
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!_isRecording) {
+        await _startRecording();
+        await _speak("بَدَأْتْ التَّسْجِيل $_userTitle.");
+      } else {
+        await _speak("التَّسْجِيل شَغَّال بِالفِعْل $_userTitle.");
+      }
+      return;
+    } else if (_hasAny(cmd, openRecorderKeywords)) {
+      setState(() => _currentIndex = 4);
+      await _speak("تَمَّ فَتْحُ قِسْمِ المُسَجِّل $_userTitle.");
+      return;
+    }
+
+    if (isCalledByName) {
+      await _speak("نَعَمْ $_userTitle! أَنَا أَسْمَعُكَ.");
     } else {
-      await _speak("مَفِيشْ تَسْجِيل شَغَّال دِلْوَقْتِي $_userTitle.");
+      await _speak("عُذْراً $_userTitle، لَمْ أَفْهَمِ الأَمْرَ.");
     }
-    return;
-  } else if (_hasAny(cmd, startRecordKeywords)) {
-    setState(() => _currentIndex = 4);
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!_isRecording) {
-      await _startRecording();
-      await _speak("بَدَأْتْ التَّسْجِيل $_userTitle.");
-    } else {
-      await _speak("التَّسْجِيل شَغَّال بِالفِعْل $_userTitle.");
+    if (_isAlarmDialogOpen && !_isListening && !_isRecording) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && _isAlarmDialogOpen && !_isListening && !_isRecording) _listenVoiceCommand();
+      });
     }
-    return;
-  } else if (_hasAny(cmd, openRecorderKeywords)) {
-    setState(() => _currentIndex = 4);
-    await _speak("تَمَّ فَتْحُ قِسْمِ المُسَجِّل $_userTitle.");
-    return;
   }
 
-  if (isCalledByName) {
-    await _speak("نَعَمْ $_userTitle! أَنَا أَسْمَعُكَ.");
-  } else {
-    await _speak("عُذْراً $_userTitle، لَمْ أَفْهَمِ الأَمْرَ.");
-  }
-  if (_isAlarmDialogOpen && !_isListening && !_isRecording) {
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted && _isAlarmDialogOpen && !_isListening && !_isRecording) _listenVoiceCommand();
-    });
-  }
-}
-      Future<void> _listTodayTasks({DateTime? targetDate}) async {
-    final userTitle = _userTitle;
-    final target = targetDate ?? DateTime.now();
-    final todayStr = DateFormat('yyyy-MM-dd').format(target);
-    final todayName = _weekDays[(target.weekday) % 7];
+    Future<void> _listTodayTasks({DateTime? targetDate}) async {
+      final userTitle = _userTitle;
+      final target = targetDate ?? DateTime.now();
+      final todayStr = DateFormat('yyyy-MM-dd').format(target);
+      final todayName = _weekDays[(target.weekday) % 7];
 
-    final todayTasks = _tasks.where((t) => t['date'] == todayStr).toList();
-    final weeklyToday = _weeklySchedule.where((t) => t['day'] == todayName).toList();
-    _sortByTime(todayTasks);
-    _sortByTime(weeklyToday);
+      final todayTasks = _tasks.where((t) => t['date'] == todayStr).toList();
+      final weeklyToday = _weeklySchedule.where((t) => t['day'] == todayName).toList();
+      _sortByTime(todayTasks);
+      _sortByTime(weeklyToday);
 
-    if (todayTasks.isEmpty && weeklyToday.isEmpty) {
-      final dayWord = targetDate == null ? 'النَّهَارْدَة' : 'اليَوْمَ دَهْ';
-      await _speak("مَفِيشْ عِنْدَكْ مَهَامْ $dayWord $_userTitle.");
-      return;
-    }
-
-    String reply = '';
-    if (todayTasks.isNotEmpty) {
-      final List<String> taskTexts = [];
-      for (final t in todayTasks) {
-        taskTexts.add("${t['task']} السَّاعَة ${t['time']}");
+      if (todayTasks.isEmpty && weeklyToday.isEmpty) {
+        final dayWord = targetDate == null ? 'النَّهَارْدَة' : 'اليَوْمَ دَهْ';
+        await _speak("مَفِيشْ عِنْدَكْ مَهَامْ $dayWord $_userTitle.");
+        return;
       }
-      reply += "عِنْدَكْ ${todayTasks.length} ${todayTasks.length == 1 ? "مُهِمَّة" : "مَهَامْ"}: ${taskTexts.join("، ")}.";
-    }
 
-    if (weeklyToday.isNotEmpty) {
-      if (reply.isNotEmpty) reply += " ";
-      final List<String> weeklyTexts = [];
-      for (final t in weeklyToday) {
-        weeklyTexts.add("${t['task']} السَّاعَة ${t['time']}");
+      String reply = '';
+      if (todayTasks.isNotEmpty) {
+        final List<String> taskTexts = [];
+        for (final t in todayTasks) {
+          taskTexts.add("${t['task']} السَّاعَة ${t['time']}");
+        }
+        reply += "عِنْدَكْ ${todayTasks.length} ${todayTasks.length == 1 ? "مُهِمَّة" : "مَهَامْ"}: ${taskTexts.join("، ")}.";
       }
-      reply += "وَفِي الجَدْوَلِ الأُسْبُوعِيِّ: ${weeklyTexts.join("، ")}.";
-    }
 
-    await _speak(reply);
-  }
-
-  Future<void> _listWeeklySchedule() async {
-    final userTitle = _userTitle;
-    setState(() {
-      _currentIndex = 0;
-      _calendarSubView = 'weekly';
-    });
-
-    if (_weeklySchedule.isEmpty) {
-      await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي $_userTitle.");
-      return;
-    }
-
-    final Map<String, List<Map<String, dynamic>>> byDay = {};
-    for (final t in _weeklySchedule) {
-      final day = t['day'].toString();
-      byDay.putIfAbsent(day, () => []).add(t);
-    }
-
-    final List<String> parts = [];
-    for (final day in _weekDays) {
-      if (!byDay.containsKey(day)) continue;
-      final dayList = byDay[day]!;
-      _sortByTime(dayList);
-      final List<String> dayTasks = [];
-      for (final t in dayList) {
-        dayTasks.add("${t['task']} السَّاعَة ${t['time']}");
+      if (weeklyToday.isNotEmpty) {
+        if (reply.isNotEmpty) reply += " ";
+        final List<String> weeklyTexts = [];
+        for (final t in weeklyToday) {
+          weeklyTexts.add("${t['task']} السَّاعَة ${t['time']}");
+        }
+        reply += "وَفِي الجَدْوَلِ الأُسْبُوعِيِّ: ${weeklyTexts.join("، ")}.";
       }
-      parts.add("يَوْمْ $day: ${dayTasks.join("، ")}");
+
+      await _speak(reply);
     }
 
-    await _speak("عِنْدَكْ فِي الجَدْوَلِ الأُسْبُوعِيِّ: ${parts.join(". ")}.");
-  }
+    Future<void> _listWeeklySchedule() async {
+      final userTitle = _userTitle;
+      setState(() {
+        _currentIndex = 0;
+        _calendarSubView = 'weekly';
+      });
 
-  Future<void> _listDayTasks(String day) async {
-    final userTitle = _userTitle;
-    final weeklyTasks = _weeklySchedule.where((t) => t['day'] == day).toList();
-    _sortByTime(weeklyTasks);
-
-    final today = DateTime.now();
-    final dayIndex = _weekDays.indexOf(day);
-    final todayIndex = (today.weekday) % 7;
-    final daysAhead = (dayIndex - todayIndex + 7) % 7;
-    final targetDate = today.add(Duration(days: daysAhead));
-    final targetDateStr = DateFormat('yyyy-MM-dd').format(targetDate);
-    final normalTasks = _tasks.where((t) => t['date'] == targetDateStr).toList();
-    _sortByTime(normalTasks);
-
-    if (weeklyTasks.isEmpty && normalTasks.isEmpty) {
-      await _speak("مَفِيشْ عِنْدَكْ مَوَاعِيد يَوْمْ $day $_userTitle.");
-      return;
-    }
-
-    String reply = '';
-    if (weeklyTasks.isNotEmpty) {
-      final List<String> texts = [];
-      for (final t in weeklyTasks) {
-        texts.add("${t['task']} السَّاعَة ${t['time']}");
+      if (_weeklySchedule.isEmpty) {
+        await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي $_userTitle.");
+        return;
       }
-      reply += "عِنْدَكْ فِي الجَدْوَلِ الأُسْبُوعِيِّ يَوْمْ $day: ${texts.join("، ")}.";
-    }
 
-    if (normalTasks.isNotEmpty) {
-      if (reply.isNotEmpty) reply += " ";
-      final List<String> texts = [];
-      for (final t in normalTasks) {
-        texts.add("${t['task']} السَّاعَة ${t['time']}");
+      final Map<String, List<Map<String, dynamic>>> byDay = {};
+      for (final t in _weeklySchedule) {
+        final day = t['day'].toString();
+        byDay.putIfAbsent(day, () => []).add(t);
       }
-      reply += "وَكَمَانْ عِنْدَكْ: ${texts.join("، ")}.";
+
+      final List<String> parts = [];
+      for (final day in _weekDays) {
+        if (!byDay.containsKey(day)) continue;
+        final dayList = byDay[day]!;
+        _sortByTime(dayList);
+        final List<String> dayTasks = [];
+        for (final t in dayList) {
+          dayTasks.add("${t['task']} السَّاعَة ${t['time']}");
+        }
+        parts.add("يَوْمْ $day: ${dayTasks.join("، ")}");
+      }
+
+      await _speak("عِنْدَكْ فِي الجَدْوَلِ الأُسْبُوعِيِّ: ${parts.join(". ")}.");
     }
 
-    await _speak(reply);
-  }
+    Future<void> _listDayTasks(String day) async {
+      final userTitle = _userTitle;
+      final weeklyTasks = _weeklySchedule.where((t) => t['day'] == day).toList();
+      _sortByTime(weeklyTasks);
+
+      final today = DateTime.now();
+      final dayIndex = _weekDays.indexOf(day);
+      final todayIndex = (today.weekday) % 7;
+      final daysAhead = (dayIndex - todayIndex + 7) % 7;
+      final targetDate = today.add(Duration(days: daysAhead));
+      final targetDateStr = DateFormat('yyyy-MM-dd').format(targetDate);
+      final normalTasks = _tasks.where((t) => t['date'] == targetDateStr).toList();
+      _sortByTime(normalTasks);
+
+      if (weeklyTasks.isEmpty && normalTasks.isEmpty) {
+        await _speak("مَفِيشْ عِنْدَكْ مَوَاعِيد يَوْمْ $day $_userTitle.");
+        return;
+      }
+
+      String reply = '';
+      if (weeklyTasks.isNotEmpty) {
+        final List<String> texts = [];
+        for (final t in weeklyTasks) {
+          texts.add("${t['task']} السَّاعَة ${t['time']}");
+        }
+        reply += "عِنْدَكْ فِي الجَدْوَلِ الأُسْبُوعِيِّ يَوْمْ $day: ${texts.join("، ")}.";
+      }
+
+      if (normalTasks.isNotEmpty) {
+        if (reply.isNotEmpty) reply += " ";
+        final List<String> texts = [];
+        for (final t in normalTasks) {
+          texts.add("${t['task']} السَّاعَة ${t['time']}");
+        }
+        reply += "وَكَمَانْ عِنْدَكْ: ${texts.join("، ")}.";
+      }
+
+      await _speak(reply);
+    }
+
+// ══════════════════════════════════════════════════════
+// نهاية PART 6 / 8
+// ══════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
+// PART 7 / 8
+// Delete/Edit/Create Alarms + Scheduling + Alarm Loop
+// + _calculatePrayerTimes + الدوال الخمسة الجديدة للصلاة
+// ══════════════════════════════════════════════════════
 
   Future<void> _deleteWeeklyTaskByVoice(String rawCommand, String cmd) async {
     final userTitle = _userTitle;
@@ -5427,8 +5661,8 @@ if (isWritingToDiary) {
 
   String? _parseSoundFromVoice(String cmd) {
     if (_hasAny(cmd, [
-      'صوت السكرتير', 'صوت السكرتيرة', 'الافتراضي', 'صوت عادي', 'من غير نغمة', 
-      'صوتك', 'بدون نغمة', 'بدون صوت', 'عادي', 'صوت طبيعي', 'مفيش نغمة', 
+      'صوت السكرتير', 'صوت السكرتيرة', 'الافتراضي', 'صوت عادي', 'من غير نغمة',
+      'صوتك', 'بدون نغمة', 'بدون صوت', 'عادي', 'صوت طبيعي', 'مفيش نغمة',
       'واقف', 'اسكت', 'صامت'
     ])) return 'secretary';
 
@@ -5441,7 +5675,7 @@ if (isWritingToDiary) {
     ])) return 'raw://alarm_scary2';
 
     if (_hasAny(cmd, [
-      'ايفون', 'آيفون', 'iphone', 'ايفون 1', 'آيفون 1', 'ايفون 2', 'آيفون 2', 
+      'ايفون', 'آيفون', 'iphone', 'ايفون 1', 'آيفون 1', 'ايفون 2', 'آيفون 2',
       'نغمة ايفون', 'رنة ايفون', 'صوت ايفون', 'تفاحة'
     ])) return 'raw://alarm_iphone';
 
@@ -5949,23 +6183,23 @@ if (isWritingToDiary) {
   }
 
   Future<void> _scheduleNativeAlarm(
-  String taskTitle,
-  DateTime scheduledDateTime, {
-  String prefix = 'حان الآن موعد: ',
-  int interval = 0,
-  int? customId,
-  String? soundUri,
-}) async {
-  try {
-    await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
-      'id': customId ?? (taskTitle.hashCode + 5000),
-      'title': taskTitle,
-      'timestamp': scheduledDateTime.millisecondsSinceEpoch,
-      'prefix': prefix,
-      'interval': interval,
-      'soundUri': soundUri,
-    });
-  } catch (_) {}
+    String taskTitle,
+    DateTime scheduledDateTime, {
+    String prefix = 'حان الآن موعد: ',
+    int interval = 0,
+    int? customId,
+    String? soundUri,
+  }) async {
+    try {
+      await _nativeAlarmChannel.invokeMethod('scheduleAlarm', {
+        'id': customId ?? (taskTitle.hashCode + 5000),
+        'title': taskTitle,
+        'timestamp': scheduledDateTime.millisecondsSinceEpoch,
+        'prefix': prefix,
+        'interval': interval,
+        'soundUri': soundUri,
+      });
+    } catch (_) {}
   }
 
   Future<void> _cancelNativeAlarm(String taskTitle) async {
@@ -6021,7 +6255,7 @@ if (isWritingToDiary) {
       enableVibration: false,
       autoCancel: true,
       ongoing: false,
-      fullScreenIntent: false, 
+      fullScreenIntent: false,
       visibility: NotificationVisibility.public,
     );
 
@@ -6046,7 +6280,7 @@ if (isWritingToDiary) {
     }));
   }
 
-    void _startAlarmLoop(
+  void _startAlarmLoop(
     String taskTitle,
     String repeat,
     String interval,
@@ -6054,15 +6288,14 @@ if (isWritingToDiary) {
     DateTime scheduled,
     String? soundUri,
   ) {
-    _ignoreNextWakeWordStart = false; // 👈 السطر الجديد اللي هتضيفه (كوبي بيست)
-    
-    // 👈 لو المنبه ده كان من زمان (أكتر من دقيقتين)، متفتحوش تاني
-if (scheduled.isBefore(DateTime.now().subtract(const Duration(minutes: 2)))) {
-  return;
-}
+    _ignoreNextWakeWordStart = false;
+
+    if (scheduled.isBefore(DateTime.now().subtract(const Duration(minutes: 2)))) {
+      return;
+    }
     if (_isAlarmDialogOpen) {
       if (_activeAlarmTaskTitle == taskTitle) {
-        return; 
+        return;
       }
       if (_alarmDialogContext != null) {
         try { Navigator.of(_alarmDialogContext!).pop(); } catch (_) {}
@@ -6076,13 +6309,13 @@ if (scheduled.isBefore(DateTime.now().subtract(const Duration(minutes: 2)))) {
     }
 
     final userTitle = _userTitle;
-final hasCustomSound = soundUri != null && soundUri.isNotEmpty && soundUri != 'default';
+    final hasCustomSound = soundUri != null && soundUri.isNotEmpty && soundUri != 'default';
 
-if (!hasCustomSound) {
-  try { _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
-  try { _nativeAlarmChannel.invokeMethod('cancelAlarm', {'id': taskTitle.hashCode + 5000}); } catch (_) {}
-}
-try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
+    if (!hasCustomSound) {
+      try { _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
+      try { _nativeAlarmChannel.invokeMethod('cancelAlarm', {'id': taskTitle.hashCode + 5000}); } catch (_) {}
+    }
+    try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
     WakelockPlus.enable();
     HapticFeedback.vibrate();
 
@@ -6140,9 +6373,9 @@ try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
                     animation: _activeAlarmLoopTimer != null ? const AlwaysStoppedAnimation(1) : const AlwaysStoppedAnimation(0),
                     builder: (context, child) {
                       return _TalkingImage(
-  imagePath: _getSecretaryImage(_secretaryName, _settings.voiceGender, customImagePath: _settings.customImagePath),
-  isTalking: true,
-);
+                        imagePath: _getSecretaryImage(_secretaryName, _settings.voiceGender, customImagePath: _settings.customImagePath),
+                        isTalking: true,
+                      );
                     },
                   ),
                 ),
@@ -6181,8 +6414,8 @@ try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
                               ),
                               onPressed: () {
                                 _activeAlarmLoopTimer?.cancel();
-                                _alarmVoiceSafetyTimer?.cancel(); 
-                                _alarmVoiceSafetyTimer = null; 
+                                _alarmVoiceSafetyTimer?.cancel();
+                                _alarmVoiceSafetyTimer = null;
                                 _tts.stop();
                                 WakelockPlus.disable();
                                 _isAlarmDialogOpen = false;
@@ -6197,15 +6430,15 @@ try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
                                 final snoozeTimestamp = DateTime.now().millisecondsSinceEpoch;
 
                                 _scheduleContinuousAlarm(
-  taskTitle,
-  snoozeTime,
-  'مرة واحدة',
-  'كل 10 ثواني',
-  [],
-  customId: snoozeTimestamp,
-  customNotificationId: snoozeTimestamp + 1000000,
-  soundUri: soundUri,
-);
+                                  taskTitle,
+                                  snoozeTime,
+                                  'مرة واحدة',
+                                  'كل 10 ثواني',
+                                  [],
+                                  customId: snoozeTimestamp,
+                                  customNotificationId: snoozeTimestamp + 1000000,
+                                  soundUri: soundUri,
+                                );
 
                                 if (repeat != 'مرة واحدة') {
                                   _rescheduleRepeating(taskTitle, repeat, interval, customDays, scheduled, soundUri);
@@ -6226,8 +6459,8 @@ try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
                               ),
                               onPressed: () async {
                                 _activeAlarmLoopTimer?.cancel();
-                                _alarmVoiceSafetyTimer?.cancel(); 
-                                _alarmVoiceSafetyTimer = null; 
+                                _alarmVoiceSafetyTimer?.cancel();
+                                _alarmVoiceSafetyTimer = null;
                                 _tts.stop();
                                 WakelockPlus.disable();
                                 _isAlarmDialogOpen = false;
@@ -6274,339 +6507,528 @@ try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
       }
       if (_isInBackground) return;
       if (_activeAlarmTitle == null) return;
-      
+
       if (!_isListening && !_starting && !_isRecording) {
         _listenVoiceCommand();
       }
     });
   }
-  
+
   Future<Map<String, String>> _calculatePrayerTimes() async {
-  try {
-    final coordinates = Coordinates(30.0444, 31.2357);
-    final date = DateComponents.from(DateTime.now());
-    final params = CalculationMethod.egyptian.getParameters();
-    params.madhab = Madhab.shafi;
-    final prayerTimes = PrayerTimes(coordinates, date, params);
+    try {
+      final coordinates = Coordinates(30.0444, 31.2357);
+      final date = DateComponents.from(DateTime.now());
+      final params = CalculationMethod.egyptian.getParameters();
+      params.madhab = Madhab.shafi;
+      final prayerTimes = PrayerTimes(coordinates, date, params);
 
-    final format = DateFormat('HH:mm');
+      final format = DateFormat('HH:mm');
 
-    return {
-      'fajr': format.format(prayerTimes.fajr.toLocal()),
-      'sunrise': format.format(prayerTimes.sunrise.toLocal()),
-      'dhuhr': format.format(prayerTimes.dhuhr.toLocal()),
-      'asr': format.format(prayerTimes.asr.toLocal()),
-      'maghrib': format.format(prayerTimes.maghrib.toLocal()),
-      'isha': format.format(prayerTimes.isha.toLocal()),
-    };
-  } catch (e) {
-    final format = DateFormat('HH:mm');
-    final now = DateTime.now();
-    return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
-  }
-}
-
-String _formatTimeForDisplay(String time24) {
-  try {
-    final parts = time24.split(':');
-    final hour = int.parse(parts[0]);
-    final minute = parts[1];
-    final isPm = hour >= 12;
-    final h12 = hour % 12 == 0 ? 12 : hour % 12;
-    return '$h12:$minute ${isPm ? 'م' : 'ص'}';
-  } catch (_) {
-    return time24;
-  }
-}
-
-Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
-  try {
-    final eventDate = DateTime.parse(event['eventDate'].toString());
-    final reminderHour = event['reminderHour'] ?? _settings.defaultReminderHour;
-    final reminderMinute = event['reminderMinute'] ?? _settings.defaultReminderMinute;
-    final advanceDays = _getAdvanceDays(event['advanceReminder'] ?? 'قبلها بيوم');
-    final interval = event['repeatInterval'] ?? 'مرة واحدة';
-    final repeatType = event['repeatType'] ?? 'سنوي';
-    final now = DateTime.now();
-
-    final eventThisYear = DateTime(now.year, eventDate.month, eventDate.day);
-    final reminderDate = eventThisYear.subtract(Duration(days: advanceDays));
-    final reminderDateTime = DateTime(reminderDate.year, reminderDate.month, reminderDate.day, reminderHour, reminderMinute);
-
-    if (reminderDateTime.isBefore(now)) return;
-
-    await _scheduleEventNotification(event, reminderDateTime, interval, repeatType);
-
-    final hasCustomSound = event['sound'] != null && event['sound'] != 'default';
-    final eventText = (event['detail'] != null && event['detail'].toString().isNotEmpty)
-        ? '${event['title']} - ${event['detail']}'
-        : event['title'].toString();
-    if (!hasCustomSound) {
-      await _scheduleNativeAlarm(
-        eventText,
-        reminderDateTime,
-        prefix: 'قربت مناسبة: ',
-      );
+      return {
+        'fajr': format.format(prayerTimes.fajr.toLocal()),
+        'sunrise': format.format(prayerTimes.sunrise.toLocal()),
+        'dhuhr': format.format(prayerTimes.dhuhr.toLocal()),
+        'asr': format.format(prayerTimes.asr.toLocal()),
+        'maghrib': format.format(prayerTimes.maghrib.toLocal()),
+        'isha': format.format(prayerTimes.isha.toLocal()),
+      };
+    } catch (e) {
+      final format = DateFormat('HH:mm');
+      final now = DateTime.now();
+      return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
     }
+  }
 
-    final diff = reminderDateTime.difference(now);
+  // ══════════════════════════════════════════════════════
+  // 🆕 الدوال الخمسة الجديدة للصلاة (بعد _calculatePrayerTimes مباشرة)
+  // ══════════════════════════════════════════════════════
 
-    late final Timer timer;
-    timer = Timer(diff, () {
-      _activeTimers.remove(timer);
-      if (mounted && !_isInBackground) {
-        _showEventReminder(
-          event['title'].toString(),
-          event['detail'].toString(),
-          interval,
-          hasCustomSound: hasCustomSound,
+  // 1️⃣ تنسيق الوقت للتحدث
+  String _formatTimeForSpeech(String time24) {
+    try {
+      final parts = time24.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+      final isPm = hour >= 12;
+      final h12 = hour % 12 == 0 ? 12 : hour % 12;
+      String minuteText;
+      if (minute == 0) minuteText = '';
+      else if (minute == 15) minuteText = ' و رُبْع';
+      else if (minute == 30) minuteText = ' و نُص';
+      else if (minute == 45) minuteText = ' إِلَّا رُبْع';
+      else minuteText = ' و $minute دَقِيقَة';
+      final periodText = isPm ? 'مَسَاءً' : 'صَبَاحاً';
+      return "السَّاعَة $h12$minuteText $periodText";
+    } catch (_) { return time24; }
+  }
+
+  // 2️⃣ قراءة المواقيت بصوت
+  Future<void> _speakPrayerTimes({String? specificPrayer, String? name}) async {
+    try {
+      final times = await _calculatePrayerTimes();
+      final userTitle = _userTitle;
+      if (specificPrayer != null && name != null) {
+        final timeStr = times[specificPrayer] ?? '';
+        if (timeStr.isEmpty) {
+          await _speak("مَعْلِشْ $userTitle، مَقْدَرْتِشْ أَجِيبْ مَوْعِدْ $name.");
+          return;
+        }
+        await _speak("مَوْعِدْ $name النَّهَارْدَة ${_formatTimeForSpeech(timeStr)} $userTitle.");
+      } else {
+        await _speak("مَوَاقِيتُ الصَّلَاةِ النَّهَارْدَة $userTitle: "
+            "الفَجْر ${_formatTimeForSpeech(times['fajr'] ?? '')}، "
+            "الشُّرُوق ${_formatTimeForSpeech(times['sunrise'] ?? '')}، "
+            "الظُّهْر ${_formatTimeForSpeech(times['dhuhr'] ?? '')}، "
+            "العَصْر ${_formatTimeForSpeech(times['asr'] ?? '')}، "
+            "المَغْرِب ${_formatTimeForSpeech(times['maghrib'] ?? '')}، "
+            "العِشَاء ${_formatTimeForSpeech(times['isha'] ?? '')}.");
+      }
+    } catch (_) {
+      await _speak("مَعْلِشْ $_userTitle، مَقْدَرْتِشْ أَجِيبْ المَوَاقِيت.");
+    }
+  }
+
+  // 3️⃣ استخراج اسم الصلاة
+  String? _parsePrayerName(String cmd) {
+    final norm = _norm(cmd);
+    if (_hasAny(norm, ['الفجر', 'فجر'])) return 'fajr';
+    if (_hasAny(norm, ['الظهر', 'ظهر'])) return 'dhuhr';
+    if (_hasAny(norm, ['العصر', 'عصر'])) return 'asr';
+    if (_hasAny(norm, ['المغرب', 'مغرب'])) return 'maghrib';
+    if (_hasAny(norm, ['العشاء', 'العشا', 'عشاء', 'عشا'])) return 'isha';
+    if (_hasAny(norm, ['الشروق', 'شروق'])) return 'sunrise';
+    return null;
+  }
+
+  // 4️⃣ استخراج الفرق الزمني (قبل/بعد)
+  int? _parsePrayerOffset(String cmd) {
+    final norm = _norm(cmd);
+    final isBefore = _hasAny(norm, ['قبل', 'قبلها', 'قبل ما']);
+    final isAfter = _hasAny(norm, ['بعد', 'بعدها', 'بعد ما']);
+    int? minutes;
+    if (_hasAny(norm, ['ساعتين وربع'])) minutes = 135;
+    else if (_hasAny(norm, ['ساعتين', 'ساعتان'])) minutes = 120;
+    else if (_hasAny(norm, ['ساعة وربع', 'ساعه وربع'])) minutes = 75;
+    else if (_hasAny(norm, ['ساعة ونص', 'ساعة ونصف', 'ساعه ونص'])) minutes = 90;
+    else if (_hasAny(norm, ['ساعة', 'ساعه'])) minutes = 60;
+    else if (_hasAny(norm, ['خمسة واربعين', 'خمسه واربعين', 'تلات تربع', '45 دقيقة', '45 دقيقه'])) minutes = 45;
+    else if (_hasAny(norm, ['اربعين', '40 دقيقة', '40 دقيقه'])) minutes = 40;
+    else if (_hasAny(norm, ['نص ساعة', 'نصف ساعة', 'نص ساعه', 'تلاتين', '30 دقيقة', '30 دقيقه'])) minutes = 30;
+    else if (_hasAny(norm, ['تلت ساعة', 'ثلث ساعة', 'عشرين', '20 دقيقة', '20 دقيقه'])) minutes = 20;
+    else if (_hasAny(norm, ['ربع ساعة', 'ربع ساعه', 'خمستاشر', '15 دقيقة', '15 دقيقه'])) minutes = 15;
+    else if (_hasAny(norm, ['عشر دقايق', 'عشر دقائق', '10 دقايق', '10 دقائق'])) minutes = 10;
+    else if (_hasAny(norm, ['خمس دقايق', 'خمس دقائق', '5 دقايق', '5 دقائق'])) minutes = 5;
+    if (minutes == null) return null;
+    if (isBefore && !isAfter) return -minutes;
+    if (isAfter && !isBefore) return minutes;
+    if (isBefore && isAfter) return -minutes;
+    return null;
+  }
+
+  // 5️⃣ معالج المنبه المرتبط بالصلاة
+  Future<bool> _handlePrayerRelativeAlarm(String rawCommand, String cmd) async {
+    final hasScheduleVerb = _hasAny(cmd, [
+      'فكرني', 'فكريني', 'ذكرني', 'ذكريني', 'صحيني', 'صحوني', 'نبهني', 'نبهيني',
+      'عايز تنبيه', 'عايزة تنبيه', 'عايز منبه', 'عايزة منبه', 'عايز تذكير', 'عايزة تذكير',
+      'حطلي تنبيه', 'حطيلي تنبيه', 'ضيفلي تنبيه', 'ضيفيلي تنبيه',
+      'حطلي منبه', 'حطيلي منبه', 'ضيفلي منبه', 'ضيفيلي منبه',
+    ]);
+    if (!hasScheduleVerb) return false;
+    final prayerRelativeKeywords = [
+      'قبل الفجر', 'قبل الظهر', 'قبل العصر', 'قبل المغرب', 'قبل العشاء', 'قبل العشا', 'قبل الشروق',
+      'بعد الفجر', 'بعد الظهر', 'بعد العصر', 'بعد المغرب', 'بعد العشاء', 'بعد العشا', 'بعد الشروق',
+      'قبل صلاة الفجر', 'قبل صلاة الظهر', 'قبل صلاة العصر', 'قبل صلاة المغرب', 'قبل صلاة العشاء',
+      'بعد صلاة الفجر', 'بعد صلاة الظهر', 'بعد صلاة العصر', 'بعد صلاة المغرب', 'بعد صلاة العشاء',
+      'قبل اذان الفجر', 'قبل اذان الظهر', 'قبل اذان العصر', 'قبل اذان المغرب', 'قبل اذان العشاء',
+      'قبل أذان الفجر', 'قبل أذان الظهر', 'قبل أذان العصر', 'قبل أذان المغرب', 'قبل أذان العشاء',
+    ];
+    if (!_hasAny(cmd, prayerRelativeKeywords)) return false;
+    final prayerKey = _parsePrayerName(cmd);
+    if (prayerKey == null) return false;
+    int? offsetMinutes = _parsePrayerOffset(cmd);
+    if (offsetMinutes == null) offsetMinutes = -30;
+    final times = await _calculatePrayerTimes();
+    final timeStr = times[prayerKey] ?? '';
+    if (timeStr.isEmpty) {
+      await _speak("مَعْلِشْ $_userTitle، مَقْدَرْتِشْ أَعْرِفْ مَوْعِدْ الصَّلَاة.");
+      return true;
+    }
+    final parts = timeStr.split(':');
+    final now = DateTime.now();
+    DateTime prayerTime = DateTime(now.year, now.month, now.day, int.parse(parts[0]), int.parse(parts[1]));
+    DateTime target = prayerTime.add(Duration(minutes: offsetMinutes));
+    if (target.isBefore(now)) {
+      prayerTime = prayerTime.add(const Duration(days: 1));
+      target = prayerTime.add(Duration(minutes: offsetMinutes));
+    }
+    final isDaily = _hasAny(cmd, ['كل يوم', 'يومي', 'يوميا', 'يومياً']);
+    final repeatType = isDaily ? 'يومي' : 'مرة واحدة';
+    var selectedSound = _parseSoundFromVoice(cmd);
+    if (selectedSound == 'use_default') {
+      final prefs = await SharedPreferences.getInstance();
+      selectedSound = prefs.getString('default_alarm_sound');
+    } else if (selectedSound == 'secretary') {
+      selectedSound = null;
+    }
+    final prayerNames = {
+      'fajr': 'الفَجْر', 'dhuhr': 'الظُّهْر', 'asr': 'العَصْر',
+      'maghrib': 'المَغْرِب', 'isha': 'العِشَاء', 'sunrise': 'الشُّرُوق',
+    };
+    final prayerName = prayerNames[prayerKey] ?? '';
+    final absOffset = offsetMinutes.abs();
+    String offsetPhrase;
+    String voiceOffsetPhrase;
+    if (offsetMinutes < 0) {
+      offsetPhrase = 'قبل $prayerName بـ $absOffset دقيقة';
+      if (absOffset == 60) voiceOffsetPhrase = 'قَبْلَ $prayerName بِسَاعَة';
+      else if (absOffset == 30) voiceOffsetPhrase = 'قَبْلَ $prayerName بِنُص سَاعَة';
+      else if (absOffset == 15) voiceOffsetPhrase = 'قَبْلَ $prayerName بِرُبْع سَاعَة';
+      else if (absOffset == 20) voiceOffsetPhrase = 'قَبْلَ $prayerName بِتِلْت سَاعَة';
+      else voiceOffsetPhrase = 'قَبْلَ $prayerName بِـ $absOffset دَقِيقَة';
+    } else {
+      offsetPhrase = 'بعد $prayerName بـ $absOffset دقيقة';
+      if (absOffset == 60) voiceOffsetPhrase = 'بَعْدَ $prayerName بِسَاعَة';
+      else if (absOffset == 30) voiceOffsetPhrase = 'بَعْدَ $prayerName بِنُص سَاعَة';
+      else if (absOffset == 15) voiceOffsetPhrase = 'بَعْدَ $prayerName بِرُبْع سَاعَة';
+      else voiceOffsetPhrase = 'بَعْدَ $prayerName بِـ $absOffset دَقِيقَة';
+    }
+    final taskTitle = 'تذكير $offsetPhrase';
+    final formattedDate = DateFormat('yyyy-MM-dd').format(target);
+    final formattedTime = DateFormat('hh:mm a', 'ar').format(target);
+    setState(() {
+      _tasks.add({
+        'date': formattedDate, 'task': taskTitle, 'time': formattedTime,
+        'alarm': true, 'scheduled': target.toIso8601String(),
+        'repeat': repeatType, 'repeatInterval': 'كل 10 ثواني',
+        'customDays': [], 'sound': selectedSound, 'advanceReminder': 'في الموعد',
+      });
+    });
+    _saveData();
+    _scheduleContinuousAlarm(taskTitle, target, repeatType, 'كل 10 ثواني', [], soundUri: selectedSound);
+    final userTitle = _userTitle;
+    final h12 = target.hour % 12 == 0 ? 12 : target.hour % 12;
+    final periodText = target.hour >= 12 ? 'مَسَاءً' : 'صَبَاحاً';
+    final isTomorrow = target.day != now.day;
+    if (isDaily) {
+      await _speak("تَمَام $userTitle، كُلْ يَوْمْ هَفَكَّرَكْ $voiceOffsetPhrase، وَالْمَرَّةُ الجَايَة السَّاعَة $h12 $periodText.");
+    } else if (isTomorrow) {
+      await _speak("تَمَام $userTitle، هَفَكَّرَكْ بُكْرَة $voiceOffsetPhrase، السَّاعَة $h12 $periodText.");
+    } else {
+      await _speak("تَمَام $userTitle، هَفَكَّرَكْ $voiceOffsetPhrase، السَّاعَة $h12 $periodText.");
+    }
+    return true;
+  }
+
+// ══════════════════════════════════════════════════════
+// نهاية PART 7 / 8
+// ══════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
+// PART 8 / 8 (الأخير)
+// باقي دوال MainDashboard + كل الـ Widgets + _DiaryPage
+// + _HijriCalendarWidget + _AdhkarCard + _TalkingImage
+// ══════════════════════════════════════════════════════
+
+  String _formatTimeForDisplay(String time24) {
+    try {
+      final parts = time24.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = parts[1];
+      final isPm = hour >= 12;
+      final h12 = hour % 12 == 0 ? 12 : hour % 12;
+      return '$h12:$minute ${isPm ? 'م' : 'ص'}';
+    } catch (_) {
+      return time24;
+    }
+  }
+
+  Future<void> _scheduleEventReminder(Map<String, dynamic> event) async {
+    try {
+      final eventDate = DateTime.parse(event['eventDate'].toString());
+      final reminderHour = event['reminderHour'] ?? _settings.defaultReminderHour;
+      final reminderMinute = event['reminderMinute'] ?? _settings.defaultReminderMinute;
+      final advanceDays = _getAdvanceDays(event['advanceReminder'] ?? 'قبلها بيوم');
+      final interval = event['repeatInterval'] ?? 'مرة واحدة';
+      final repeatType = event['repeatType'] ?? 'سنوي';
+      final now = DateTime.now();
+
+      final eventThisYear = DateTime(now.year, eventDate.month, eventDate.day);
+      final reminderDate = eventThisYear.subtract(Duration(days: advanceDays));
+      final reminderDateTime = DateTime(reminderDate.year, reminderDate.month, reminderDate.day, reminderHour, reminderMinute);
+
+      if (reminderDateTime.isBefore(now)) return;
+
+      await _scheduleEventNotification(event, reminderDateTime, interval, repeatType);
+
+      final hasCustomSound = event['sound'] != null && event['sound'] != 'default';
+      final eventText = (event['detail'] != null && event['detail'].toString().isNotEmpty)
+          ? '${event['title']} - ${event['detail']}'
+          : event['title'].toString();
+      if (!hasCustomSound) {
+        await _scheduleNativeAlarm(
+          eventText,
+          reminderDateTime,
+          prefix: 'قربت مناسبة: ',
         );
       }
-    });
-    _activeTimers.add(timer);
-  } catch (_) {}
-}
 
-Future<void> _scheduleEventNotification(Map<String, dynamic> event, DateTime fireTime, String interval, String repeatType) async {
-  try {
-    final eventId = ('${event['title']}_${event['eventDate']}_${event['reminderHour']}_${event['reminderMinute']}').hashCode & 0x7FFFFFFF;
-    final tzTime = tz.TZDateTime.from(fireTime, tz.local);
+      final diff = reminderDateTime.difference(now);
 
-    final prefs = await SharedPreferences.getInstance();
-    final finalSound = event['sound'] ?? prefs.getString('default_event_sound');
-
-    final androidDetails = AndroidNotificationDetails(
-      'event_channel_v1', 'تنبيهات المناسبات',
-      channelDescription: 'تنبيهات المناسبات السنوية',
-      importance: Importance.max, priority: Priority.max,
-      playSound: true,
-      sound: _getNotificationSound(finalSound),
-      enableVibration: true,
-      category: AndroidNotificationCategory.alarm,
-      autoCancel: false, ongoing: true,
-      fullScreenIntent: true,
-      visibility: NotificationVisibility.public,
-    );
-
-    final notificationBody = (event['detail'] != null && event['detail'].toString().isNotEmpty)
-        ? 'قربت مناسبة: ${event['title']} - ${event['detail']}'
-        : 'قربت مناسبة: ${event['title']}';
-
-    DateTimeComponents? matchComponent;
-    if (repeatType == 'أسبوعي') matchComponent = DateTimeComponents.dayOfWeekAndTime;
-    else if (repeatType == 'شهري') matchComponent = DateTimeComponents.dayOfMonthAndTime;
-    else matchComponent = DateTimeComponents.dateAndTime;
-
-    await _notifications.zonedSchedule(
-      eventId, '🎉 تذكير بمناسبة', notificationBody,
-      tzTime, NotificationDetails(android: androidDetails),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: matchComponent,
-    );
-
-    await prefs.setString('pending_event_announce', json.encode({
-      'title': event['title'], 'detail': event['detail'],
-      'interval': interval, 'scheduledMillis': fireTime.millisecondsSinceEpoch,
-      'hasCustomSound': finalSound != null && finalSound != 'default',
-    }));
-  } catch (_) {}
-}
-
-int _getAdvanceDays(String advanceReminder) {
-  switch (advanceReminder) {
-    case 'في نفس اليوم': return 0;
-    case 'قبلها بيوم': return 1;
-    case 'قبلها بـ 3 أيام': return 3;
-    case 'قبلها بأسبوع': return 7;
-    case 'قبلها بـ 10 أيام': return 10;
-    case 'قبلها بشهر': return 30;
-    default: return 1;
+      late final Timer timer;
+      timer = Timer(diff, () {
+        _activeTimers.remove(timer);
+        if (mounted && !_isInBackground) {
+          _showEventReminder(
+            event['title'].toString(),
+            event['detail'].toString(),
+            interval,
+            hasCustomSound: hasCustomSound,
+          );
+        }
+      });
+      _activeTimers.add(timer);
+    } catch (_) {}
   }
-}
 
-Future<void> _showEventReminder(String title, String detail, String interval, {bool hasCustomSound = false}) async {
-  if (_eventDialogShowing) return;
-  _eventDialogShowing = true;
-  _eventAnnouncing = true;
+  Future<void> _scheduleEventNotification(Map<String, dynamic> event, DateTime fireTime, String interval, String repeatType) async {
+    try {
+      final eventId = ('${event['title']}_${event['eventDate']}_${event['reminderHour']}_${event['reminderMinute']}').hashCode & 0x7FFFFFFF;
+      final tzTime = tz.TZDateTime.from(fireTime, tz.local);
 
-  HapticFeedback.vibrate();
-  WakelockPlus.enable();
+      final prefs = await SharedPreferences.getInstance();
+      final finalSound = event['sound'] ?? prefs.getString('default_event_sound');
 
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('pending_event_announce');
-  } catch (_) {}
+      final androidDetails = AndroidNotificationDetails(
+        'event_channel_v1', 'تنبيهات المناسبات',
+        channelDescription: 'تنبيهات المناسبات السنوية',
+        importance: Importance.max, priority: Priority.max,
+        playSound: true,
+        sound: _getNotificationSound(finalSound),
+        enableVibration: true,
+        category: AndroidNotificationCategory.alarm,
+        autoCancel: false, ongoing: true,
+        fullScreenIntent: true,
+        visibility: NotificationVisibility.public,
+      );
 
-  void speakAlert() {
-    if (!hasCustomSound) {
-      _speak("تَنْبِيه: قَرَبِتْ مُنَاسَبَة $title. $detail");
+      final notificationBody = (event['detail'] != null && event['detail'].toString().isNotEmpty)
+          ? 'قربت مناسبة: ${event['title']} - ${event['detail']}'
+          : 'قربت مناسبة: ${event['title']}';
+
+      DateTimeComponents? matchComponent;
+      if (repeatType == 'أسبوعي') matchComponent = DateTimeComponents.dayOfWeekAndTime;
+      else if (repeatType == 'شهري') matchComponent = DateTimeComponents.dayOfMonthAndTime;
+      else matchComponent = DateTimeComponents.dateAndTime;
+
+      await _notifications.zonedSchedule(
+        eventId, '🎉 تذكير بمناسبة', notificationBody,
+        tzTime, NotificationDetails(android: androidDetails),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: matchComponent,
+      );
+
+      await prefs.setString('pending_event_announce', json.encode({
+        'title': event['title'], 'detail': event['detail'],
+        'interval': interval, 'scheduledMillis': fireTime.millisecondsSinceEpoch,
+        'hasCustomSound': finalSound != null && finalSound != 'default',
+      }));
+    } catch (_) {}
+  }
+
+  int _getAdvanceDays(String advanceReminder) {
+    switch (advanceReminder) {
+      case 'في نفس اليوم': return 0;
+      case 'قبلها بيوم': return 1;
+      case 'قبلها بـ 3 أيام': return 3;
+      case 'قبلها بأسبوع': return 7;
+      case 'قبلها بـ 10 أيام': return 10;
+      case 'قبلها بشهر': return 30;
+      default: return 1;
     }
+  }
+
+  Future<void> _showEventReminder(String title, String detail, String interval, {bool hasCustomSound = false}) async {
+    if (_eventDialogShowing) return;
+    _eventDialogShowing = true;
+    _eventAnnouncing = true;
+
     HapticFeedback.vibrate();
-  }
+    WakelockPlus.enable();
 
-  if (interval != 'بدون تنبيه' && !hasCustomSound) speakAlert();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('pending_event_announce');
+    } catch (_) {}
 
-  _eventRepeatTimer?.cancel();
-  int secs = _getIntervalSeconds(interval);
-  if (secs > 0 && interval != 'مرة واحدة' && !hasCustomSound) {
-    _eventRepeatTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
-  }
+    void speakAlert() {
+      if (!hasCustomSound) {
+        _speak("تَنْبِيه: قَرَبِتْ مُنَاسَبَة $title. $detail");
+      }
+      HapticFeedback.vibrate();
+    }
 
-  if (!mounted) {
-    _eventDialogShowing = false;
-    _eventAnnouncing = false;
-    return;
-  }
+    if (interval != 'بدون تنبيه' && !hasCustomSound) speakAlert();
 
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => AlertDialog(
-      backgroundColor: const Color(0xFF1B2A4A),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Row(children: [Icon(Icons.celebration, color: Color(0xFFC5A059), size: 30), SizedBox(width: 10), Text('تذكير بمناسبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
-      content: Text('قَرَبِتْ مُنَاسَبَة: $title\n$detail', style: const TextStyle(color: Colors.white, fontSize: 16)),
-      actions: [
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
-          onPressed: () async {
-            _eventRepeatTimer?.cancel();
-            _tts.stop();
-            WakelockPlus.disable();
-            _eventAnnouncing = false;
-            _eventDialogShowing = false;
+    _eventRepeatTimer?.cancel();
+    int secs = _getIntervalSeconds(interval);
+    if (secs > 0 && interval != 'مرة واحدة' && !hasCustomSound) {
+      _eventRepeatTimer = Timer.periodic(Duration(seconds: secs), (_) => speakAlert());
+    }
 
-            await _notifications.cancel(title.hashCode + detail.hashCode);
-            try { await _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
-            _cancelNativeAlarm('مناسبة: $title');
-            Navigator.pop(ctx);
-          },
-          child: const Text('تمام', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        )
-      ],
-    ),
-  );
-}
+    if (!mounted) {
+      _eventDialogShowing = false;
+      _eventAnnouncing = false;
+      return;
+    }
 
-void _deleteTask(int index) {
-  final taskTitle = _tasks[index]['task'].toString();
-  setState(() => _tasks.removeAt(index));
-  _saveData();
-  _cancelNativeAlarm(taskTitle);
-  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
-}
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1B2A4A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(children: [Icon(Icons.celebration, color: Color(0xFFC5A059), size: 30), SizedBox(width: 10), Text('تذكير بمناسبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
+        content: Text('قَرَبِتْ مُنَاسَبَة: $title\n$detail', style: const TextStyle(color: Colors.white, fontSize: 16)),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
+            onPressed: () async {
+              _eventRepeatTimer?.cancel();
+              _tts.stop();
+              WakelockPlus.disable();
+              _eventAnnouncing = false;
+              _eventDialogShowing = false;
 
-void _deleteWeeklyTask(int index) {
-  final task = _weeklySchedule[index];
-  final taskTitle = task['task'].toString();
-  final day = task['day'].toString();
-  setState(() => _weeklySchedule.removeAt(index));
-  _saveWeeklySchedule();
-  _cancelNativeAlarm('جدول_${day}_$taskTitle');
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف الموعد من $day')));
-}
-
-Future<void> _deleteAllWeeklyTasks() async {
-  final userTitle = _userTitle;
-  if (_weeklySchedule.isEmpty) {
-    await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي أَصْلًا $_userTitle.");
-    return;
-  }
-  final count = _weeklySchedule.length;
-  for (final task in List.from(_weeklySchedule)) {
-    await _cancelNativeAlarm('جدول_${task['day']}_${task['task']}');
-  }
-  setState(() => _weeklySchedule.clear());
-  _saveWeeklySchedule();
-  await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنَ الجَدْوَلِ الأُسْبُوعِيِّ $_userTitle.");
-}
-
-void _openSettingsScreen() {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => SettingsScreen(
-        settings: _settings,
-        ttsVolume: _ttsVolume,
-        currentSecretaryName: _secretaryName,
-        currentIsUserMale: _isUserMale,
-        onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeMode, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger, muteBeep, useOverlayAlarm, isKidsMode, customGreeting, tahajjudAlertEnabled, isDarkMode, customImagePath, stopRecordMode) async {
-          setState(() {
-            _settings.defaultReminderHour = hour;
-            _settings.defaultReminderMinute = minute;
-            _settings.voiceLevel = voiceLevel;
-            _settings.greetingEnabled = greeting;
-            _settings.adhanAlertEnabled = adhan;
-            _ttsVolume = ttsVol;
-            _settings.showAboveLockScreen = showLock;
-            _settings.shakeMode = shakeMode;
-            _settings.muteBeep = muteBeep;
-            _settings.voiceGender = voiceGender;
-            _settings.defaultInterval = defaultInterval;
-            _settings.customWakeWord = customWakeWord;
-            _settings.wakeWordMode = wakeWordMode;
-            _settings.wakeWordTrigger = wakeWordTrigger;
-            _settings.useOverlayAlarm = useOverlayAlarm;
-            _settings.isKidsMode = isKidsMode;
-            _settings.customGreeting = customGreeting;
-            _settings.tahajjudAlertEnabled = tahajjudAlertEnabled;
-            _settings.isDarkMode = isDarkMode;
-            _settings.customImagePath = customImagePath;
-            _settings.stopRecordMode = stopRecordMode;
-          });
-
-          await _saveSettings();
-          final prefs = await SharedPreferences.getInstance();
-          _settings.salatAlaNabiEnabled = prefs.getBool('salat_ala_nabi_enabled') ?? false;
-          _settings.salatAlaNabiInterval = prefs.getString('salat_ala_nabi_interval') ?? 'كل ساعة';
-          _settings.customUserTitle = prefs.getString('custom_user_title') ?? '';
-          _settings.customSecTitle = prefs.getString('custom_sec_title') ?? '';
-          _scheduleSalatAlaNabi();
-          widget.onThemeChanged(isDarkMode);
-
-          Future.delayed(const Duration(milliseconds: 100), () async {
-            try { _scheduleAdhan30Days(); } catch (_) {}
-          });
-
-          try { await _configureVoice(skipGreeting: true); } catch (_) {}
-
-          try {
-            if (showLock) {
-              await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
-            } else {
-              await _lockScreenChannel.invokeMethod('disableShowWhenLocked');
-            }
-
-            if (_settings.wakeWordMode == 'off') {
-              try { await _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
-            } else {
-              try { await _wakeWordChannel.invokeMethod('startWakeWord'); } catch (_) {}
-            }
-
-            _initShakeDetector();
-
-          } catch (_) {}
-        },
-        onSaveSecretary: (name, voiceGender) async {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('secretary_name', name);
-          await prefs.setString('voice_gender', voiceGender);
-          if (mounted) {
-            setState(() {
-              _secretaryName = name;
-              _settings.voiceGender = voiceGender;
-            });
-          }
-          Future.delayed(const Duration(milliseconds: 300), () {
-            try { _configureVoice(skipGreeting: true); } catch (_) {}
-          });
-        },
+              await _notifications.cancel(title.hashCode + detail.hashCode);
+              try { await _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
+              _cancelNativeAlarm('مناسبة: $title');
+              Navigator.pop(ctx);
+            },
+            child: const Text('تمام', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          )
+        ],
       ),
-    ),
-  );
-}
-  
+    );
+  }
+
+  void _deleteTask(int index) {
+    final taskTitle = _tasks[index]['task'].toString();
+    setState(() => _tasks.removeAt(index));
+    _saveData();
+    _cancelNativeAlarm(taskTitle);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموعد')));
+  }
+
+  void _deleteWeeklyTask(int index) {
+    final task = _weeklySchedule[index];
+    final taskTitle = task['task'].toString();
+    final day = task['day'].toString();
+    setState(() => _weeklySchedule.removeAt(index));
+    _saveWeeklySchedule();
+    _cancelNativeAlarm('جدول_${day}_$taskTitle');
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف الموعد من $day')));
+  }
+
+  Future<void> _deleteAllWeeklyTasks() async {
+    final userTitle = _userTitle;
+    if (_weeklySchedule.isEmpty) {
+      await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي أَصْلًا $_userTitle.");
+      return;
+    }
+    final count = _weeklySchedule.length;
+    for (final task in List.from(_weeklySchedule)) {
+      await _cancelNativeAlarm('جدول_${task['day']}_${task['task']}');
+    }
+    setState(() => _weeklySchedule.clear());
+    _saveWeeklySchedule();
+    await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنَ الجَدْوَلِ الأُسْبُوعِيِّ $_userTitle.");
+  }
+
+  void _openSettingsScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SettingsScreen(
+          settings: _settings,
+          ttsVolume: _ttsVolume,
+          currentSecretaryName: _secretaryName,
+          currentIsUserMale: _isUserMale,
+          onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeMode, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger, muteBeep, useOverlayAlarm, isKidsMode, customGreeting, tahajjudAlertEnabled, isDarkMode, customImagePath, stopRecordMode) async {
+            setState(() {
+              _settings.defaultReminderHour = hour;
+              _settings.defaultReminderMinute = minute;
+              _settings.voiceLevel = voiceLevel;
+              _settings.greetingEnabled = greeting;
+              _settings.adhanAlertEnabled = adhan;
+              _ttsVolume = ttsVol;
+              _settings.showAboveLockScreen = showLock;
+              _settings.shakeMode = shakeMode;
+              _settings.muteBeep = muteBeep;
+              _settings.voiceGender = voiceGender;
+              _settings.defaultInterval = defaultInterval;
+              _settings.customWakeWord = customWakeWord;
+              _settings.wakeWordMode = wakeWordMode;
+              _settings.wakeWordTrigger = wakeWordTrigger;
+              _settings.useOverlayAlarm = useOverlayAlarm;
+              _settings.isKidsMode = isKidsMode;
+              _settings.customGreeting = customGreeting;
+              _settings.tahajjudAlertEnabled = tahajjudAlertEnabled;
+              _settings.isDarkMode = isDarkMode;
+              _settings.customImagePath = customImagePath;
+              _settings.stopRecordMode = stopRecordMode;
+            });
+
+            await _saveSettings();
+            final prefs = await SharedPreferences.getInstance();
+            _settings.salatAlaNabiEnabled = prefs.getBool('salat_ala_nabi_enabled') ?? false;
+            _settings.salatAlaNabiInterval = prefs.getString('salat_ala_nabi_interval') ?? 'كل ساعة';
+            _settings.customUserTitle = prefs.getString('custom_user_title') ?? '';
+            _settings.customSecTitle = prefs.getString('custom_sec_title') ?? '';
+            _scheduleSalatAlaNabi();
+            widget.onThemeChanged(isDarkMode);
+
+            Future.delayed(const Duration(milliseconds: 100), () async {
+              try { _scheduleAdhan30Days(); } catch (_) {}
+            });
+
+            try { await _configureVoice(skipGreeting: true); } catch (_) {}
+
+            try {
+              if (showLock) {
+                await _lockScreenChannel.invokeMethod('enableShowWhenLocked');
+              } else {
+                await _lockScreenChannel.invokeMethod('disableShowWhenLocked');
+              }
+
+              if (_settings.wakeWordMode == 'off') {
+                try { await _wakeWordChannel.invokeMethod('stopWakeWord'); } catch (_) {}
+              } else {
+                try { await _wakeWordChannel.invokeMethod('startWakeWord'); } catch (_) {}
+              }
+
+              _initShakeDetector();
+
+            } catch (_) {}
+          },
+          onSaveSecretary: (name, voiceGender) async {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('secretary_name', name);
+            await prefs.setString('voice_gender', voiceGender);
+            if (mounted) {
+              setState(() {
+                _secretaryName = name;
+                _settings.voiceGender = voiceGender;
+              });
+            }
+            Future.delayed(const Duration(milliseconds: 300), () {
+              try { _configureVoice(skipGreeting: true); } catch (_) {}
+            });
+          },
+        ),
+      ),
+    );
+  }
+
   void _addNewTaskDialog() {
     _showTaskDialog();
   }
@@ -6614,7 +7036,8 @@ void _openSettingsScreen() {
   void _editTaskDialog(int index) {
     _showTaskDialog(taskIndex: index);
   }
-    Future<void> _showTaskDialog({int? taskIndex}) async {
+
+  Future<void> _showTaskDialog({int? taskIndex}) async {
     final prefs = await SharedPreferences.getInstance();
     final defaultSound = prefs.getString('default_alarm_sound');
 
@@ -7586,13 +8009,13 @@ void _openSettingsScreen() {
             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: _isHijriView 
-                  ? const Color(0xFFC5A059).withOpacity(0.1) 
+              color: _isHijriView
+                  ? const Color(0xFFC5A059).withOpacity(0.1)
                   : Colors.grey.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: _isHijriView 
-                    ? const Color(0xFFC5A059) 
+                color: _isHijriView
+                    ? const Color(0xFFC5A059)
                     : Colors.grey.withOpacity(0.5),
                 width: 1.5,
               ),
@@ -7740,7 +8163,7 @@ void _openSettingsScreen() {
                       content: const Text('هل أنت متأكد أنك تريد مسح كل اليوميات المسجلة في التطبيق نهائياً؟ لا يمكن التراجع عن هذا الإجراء.', style: TextStyle(fontSize: 16)),
                       actions: [
                         TextButton(
-                          onPressed: () => Navigator.pop(ctx), 
+                          onPressed: () => Navigator.pop(ctx),
                           child: const Text('إلغاء', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
                         ),
                         ElevatedButton(
@@ -7942,7 +8365,7 @@ void _openSettingsScreen() {
               children: [
                 Expanded(
                   child: Text(
-                    text, 
+                    text,
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)
                   )
                 ),
@@ -8108,7 +8531,7 @@ void _openSettingsScreen() {
             itemBuilder: (ctx, i) {
               final text = adhkarList[i]['text'];
               _adhkarCounts.putIfAbsent(text, () => adhkarList[i]['count']);
-              
+
               return _AdhkarCard(
                 text: text,
                 count: _adhkarCounts[text] ?? 0,
@@ -8454,13 +8877,13 @@ void _openSettingsScreen() {
       {'key': 'astaghfirullah', 'text': _norm('استغفر الله')},
       {'key': 'salah_ala_nabi', 'text': _norm('اللهم صل على سيدنا محمد')},
       {'key': 'alhamdulillah', 'text': _norm('الحمد لله')},
-{'key': 'allahu_akbar', 'text': _norm('الله اكبر')},
-{'key': 'la_ilaha_illallah', 'text': _norm('لا اله الا الله')},
+      {'key': 'allahu_akbar', 'text': _norm('الله اكبر')},
+      {'key': 'la_ilaha_illallah', 'text': _norm('لا اله الا الله')},
     ];
-    
+
     String remaining = norm;
     final counts = <String, int>{};
-    
+
     for (var m in matches) {
       final text = m['text']!;
       final key = m['key']!;
@@ -8472,7 +8895,7 @@ void _openSettingsScreen() {
       }
       if (cnt > 0) counts[key] = (counts[key] ?? 0) + cnt;
     }
-    
+
     if (counts.isEmpty) return;
     setState(() {
       for (var entry in counts.entries) {
@@ -8509,7 +8932,7 @@ void _openSettingsScreen() {
     ];
 
     bool anyFound = false;
-    final List<String> messages = []; 
+    final List<String> messages = [];
 
     while (norm.trim().isNotEmpty) {
       String? matchedText;
@@ -8518,7 +8941,7 @@ void _openSettingsScreen() {
       for (var adhkar in adhkarPriorityList) {
         for (var keyword in adhkar['keywords'] as List<String>) {
           final normKeyword = _norm(keyword);
-          if (normKeyword.isEmpty) continue; 
+          if (normKeyword.isEmpty) continue;
           if (norm.contains(normKeyword)) {
             matchedText = adhkar['text'] as String;
             matchedKeyword = normKeyword;
@@ -8543,7 +8966,7 @@ void _openSettingsScreen() {
             int newCount = currentCount - count;
             if (newCount < 0) newCount = 0;
 
-            _adhkarCounts[matchedText] = newCount; 
+            _adhkarCounts[matchedText] = newCount;
 
             if (newCount > 0) {
               messages.add("تَمَّ تَسْجِيلُ الذِّكْرِ $count مَرَّات. البَاقِي: $newCount");
@@ -8570,6 +8993,9 @@ void _openSettingsScreen() {
   }
 }
 
+// ══════════════════════════════════════════════════════
+// _AdhkarCard
+// ══════════════════════════════════════════════════════
 class _AdhkarCard extends StatelessWidget {
   final String text;
   final int count;
@@ -8622,6 +9048,9 @@ class _AdhkarCard extends StatelessWidget {
   }
 }
 
+// ══════════════════════════════════════════════════════
+// _TalkingImage
+// ══════════════════════════════════════════════════════
 class _TalkingImage extends StatefulWidget {
   final String imagePath;
   final bool isTalking;
@@ -8683,6 +9112,9 @@ class _TalkingImageState extends State<_TalkingImage> with SingleTickerProviderS
   }
 }
 
+// ══════════════════════════════════════════════════════
+// _DiaryPage
+// ══════════════════════════════════════════════════════
 class _DiaryPage extends StatefulWidget {
   final DateTime date;
   final Map<String, dynamic> initialData;
@@ -8690,7 +9122,7 @@ class _DiaryPage extends StatefulWidget {
   final VoidCallback onClearAll;
 
   const _DiaryPage({required this.date, required this.initialData, required this.onSave, required this.onClearAll});
-  
+
   @override
   State<_DiaryPage> createState() => _DiaryPageState();
 }
@@ -8701,14 +9133,14 @@ class _DiaryPageState extends State<_DiaryPage> {
   late TextEditingController diaryCtrl;
   final TextEditingController _quickTextCtrl = TextEditingController();
   StreamSubscription? _voiceSub;
-  
+
   final AudioRecorder _recorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
   final ImagePicker _picker = ImagePicker();
-  
+
   bool _isRecordingNow = false;
   String? _currentlyPlayingPath;
-  
+
   Duration _currentPosition = Duration.zero;
   Duration _currentDuration = Duration.zero;
   StreamSubscription? _positionSub;
@@ -8754,7 +9186,7 @@ class _DiaryPageState extends State<_DiaryPage> {
   }
   if (data['text'] != null && data['text'].toString().trim().isNotEmpty) {
     _entries.insert(0, {'type': 'text', 'content': data['text'], 'time': widget.date});
-    diaryCtrl.clear(); 
+    diaryCtrl.clear();
   }
   _sortEntries();
   }
@@ -8764,8 +9196,8 @@ class _DiaryPageState extends State<_DiaryPage> {
       bool aDone = a['type'] == 'todo' && a['done'] == true;
       bool bDone = b['type'] == 'todo' && b['done'] == true;
 
-      if (aDone && !bDone) return 1; 
-      if (!aDone && bDone) return -1; 
+      if (aDone && !bDone) return 1;
+      if (!aDone && bDone) return -1;
 
       return (a['time'] as DateTime).compareTo(b['time'] as DateTime);
     });
@@ -8903,8 +9335,8 @@ class _DiaryPageState extends State<_DiaryPage> {
           ListTile(
             leading: const Icon(Icons.text_fields, color: Color(0xFF1B2A4A)),
             title: const Text('كتابة نص', style: TextStyle(fontWeight: FontWeight.bold)),
-            onTap: () { 
-              Navigator.pop(ctx); 
+            onTap: () {
+              Navigator.pop(ctx);
               _addText();
             },
           ),
@@ -8957,8 +9389,8 @@ class _DiaryPageState extends State<_DiaryPage> {
     builder: (ctx) => AlertDialog(
       title: const Text('إضافة نص لليوميات', style: TextStyle(fontWeight: FontWeight.bold)),
       content: TextField(
-        controller: ctrl, 
-        maxLines: null, 
+        controller: ctrl,
+        maxLines: null,
         minLines: 3,
         autofocus: true,
         decoration: const InputDecoration(hintText: 'اكتب هنا...', border: OutlineInputBorder())
@@ -8990,8 +9422,8 @@ class _DiaryPageState extends State<_DiaryPage> {
       builder: (ctx) => AlertDialog(
         title: const Text('إضافة مهام'),
         content: TextField(
-          controller: ctrl, 
-          maxLines: null, 
+          controller: ctrl,
+          maxLines: null,
           minLines: 3,
           decoration: const InputDecoration(hintText: 'مهمة 1\nمهمة 2...')
         ),
@@ -9087,8 +9519,8 @@ class _DiaryPageState extends State<_DiaryPage> {
   Future<void> _toggleRecording() async {
     if (_isRecordingNow) {
       final p = await _recorder.stop();
-      setState(() { 
-        _isRecordingNow = false; 
+      setState(() {
+        _isRecordingNow = false;
         if (p != null) {
           _entries.add({'type': 'audio', 'content': p, 'time': DateTime.now()});
           _sortEntries();
@@ -9106,8 +9538,8 @@ class _DiaryPageState extends State<_DiaryPage> {
   }
 
   Future<void> _stopRecording() async {
-    if (!_isRecordingNow) return; 
-setState(() => _isRecordingNow = false); 
+    if (!_isRecordingNow) return;
+    setState(() => _isRecordingNow = false);
     await _notifications.cancel(9999);
     final path = await _recorder.stop();
     setState(() {
@@ -9185,7 +9617,7 @@ setState(() => _isRecordingNow = false);
 
   void _editEntryDialog(int entryIndex) {
     if (entryIndex < 0 || entryIndex >= _entries.length) return;
-    
+
     TextEditingController ctrl = TextEditingController(text: _entries[entryIndex]['content'].toString());
     showDialog(
       context: context,
@@ -9304,7 +9736,7 @@ setState(() => _isRecordingNow = false);
                   content: const Text('هل أنت متأكد أنك تريد مسح كل محتويات هذه اليومية؟ لا يمكن التراجع عن هذا الإجراء.', style: TextStyle(fontSize: 16)),
                   actions: [
                     TextButton(
-                      onPressed: () => Navigator.pop(ctx), 
+                      onPressed: () => Navigator.pop(ctx),
                       child: const Text('إلغاء', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
                     ),
                     ElevatedButton(
@@ -9347,7 +9779,7 @@ setState(() => _isRecordingNow = false);
                 ]),
               ),
               const SizedBox(height: 15),
-              
+
               Row(
                 children: [
                   Expanded(
@@ -9387,9 +9819,9 @@ setState(() => _isRecordingNow = false);
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 15),
-              
+
               Expanded(
                 child: ListView(
                   controller: _scrollController,
@@ -9434,7 +9866,7 @@ setState(() => _isRecordingNow = false);
                           ),
                         );
                       }
-                      
+
                       if (entry['type'] == 'todo') {
                         return Card(
                           color: entry['done'] ? Colors.green.withOpacity(0.1) : Theme.of(context).cardColor,
@@ -9512,8 +9944,8 @@ setState(() => _isRecordingNow = false);
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Image.file(
-                                  File(entry['content']), 
-                                  width: double.infinity, 
+                                  File(entry['content']),
+                                  width: double.infinity,
                                   fit: BoxFit.fitWidth
                                 ),
                                 Padding(
@@ -9656,6 +10088,9 @@ setState(() => _isRecordingNow = false);
   }
 }
 
+// ══════════════════════════════════════════════════════
+// _HijriCalendarWidget
+// ══════════════════════════════════════════════════════
 class _HijriCalendarWidget extends StatefulWidget {
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDateChanged;
@@ -9663,7 +10098,7 @@ class _HijriCalendarWidget extends StatefulWidget {
   @override
   State<_HijriCalendarWidget> createState() => _HijriCalendarWidgetState();
 }
-                        
+
 class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
   late HijriCalendar _currentHijriDate;
 
@@ -9715,7 +10150,7 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
                         itemBuilder: (context, index) {
                           final h = HijriCalendar();
                           h.hDay = 1;
-                          h.hYear = tempYear; 
+                          h.hYear = tempYear;
                           h.hMonth = index + 1;
                           final isSelected = (index + 1) == tempMonth;
                           return InkWell(
@@ -9723,8 +10158,8 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
                             child: Container(
                               margin: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFFC5A059) : Colors.transparent, 
-                                borderRadius: BorderRadius.circular(8), 
+                                color: isSelected ? const Color(0xFFC5A059) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: isSelected ? const Color(0xFFC5A059) : Colors.grey.shade300)
                               ),
                               alignment: Alignment.center,
@@ -9744,8 +10179,8 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
                   onPressed: () {
                     try {
                       DateTime firstOfTarget = HijriCalendar().hijriToGregorian(tempYear, tempMonth, 1);
-                      setState(() { 
-                        _currentHijriDate = HijriCalendar.fromDate(firstOfTarget); 
+                      setState(() {
+                        _currentHijriDate = HijriCalendar.fromDate(firstOfTarget);
                       });
                       Navigator.pop(context);
                     } catch (_) {}
@@ -9776,7 +10211,7 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
             children: [
               IconButton(icon: const Icon(Icons.chevron_left, color: Color(0xFF1B2A4A)), onPressed: () => _changeMonth(-1)),
               InkWell(
-                onTap: _showMonthYearPicker, 
+                onTap: _showMonthYearPicker,
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -9791,13 +10226,13 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
             ],
           ),
         ),
-        
+
         Row(
           children: ['س', 'ح', 'ن', 'ث', 'ر', 'خ', 'ج']
               .map((d) => Expanded(
                     child: Center(
                       child: Text(
-                        d, 
+                        d,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.black87,
@@ -9809,52 +10244,52 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
               .toList(),
         ),
         const SizedBox(height: 8),
-        
+
 LayoutBuilder(
   builder: (context, constraints) {
     final double cellWidth = constraints.maxWidth / 7;
-    const double cellHeight = 45.0; 
+    const double cellHeight = 45.0;
 
     return Wrap(
       children: List.generate(startOffset + daysInMonth, (index) {
         if (index < startOffset) {
           return SizedBox(width: cellWidth, height: cellHeight);
         }
-        
+
         int day = index - startOffset + 1;
-        
+
         HijriCalendar hDay = HijriCalendar();
-        hDay.hDay = 1; 
+        hDay.hDay = 1;
         hDay.hYear = _currentHijriDate.hYear;
         hDay.hMonth = _currentHijriDate.hMonth;
         hDay.hDay = day;
-        
+
         DateTime gDate = hDay.hijriToGregorian(hDay.hYear, hDay.hMonth, hDay.hDay);
-        bool isSelected = gDate.year == widget.selectedDate.year && 
-                          gDate.month == widget.selectedDate.month && 
+        bool isSelected = gDate.year == widget.selectedDate.year &&
+                          gDate.month == widget.selectedDate.month &&
                           gDate.day == widget.selectedDate.day;
 
         return SizedBox(
-          width: cellWidth, 
-          height: cellHeight, 
+          width: cellWidth,
+          height: cellHeight,
           child: Center(
             child: InkWell(
               onTap: () => widget.onDateChanged(gDate),
               customBorder: const CircleBorder(),
               child: Container(
-                width: 38, 
-                height: 38, 
+                width: 38,
+                height: 38,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isSelected ? const Color(0xFF1B2A4A) : null,
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  '$day', 
+                  '$day',
                   style: TextStyle(
-                    fontSize: 16, 
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600, 
-                    color: isSelected ? Colors.white : Colors.black, 
+                    fontSize: 16,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                    color: isSelected ? Colors.white : Colors.black,
                   ),
                 ),
               ),
@@ -9869,3 +10304,7 @@ LayoutBuilder(
     );
   }
 }
+
+// ══════════════════════════════════════════════════════
+// 🎉 نهاية الملف بالكامل — التطبيق كامل بدون أي نقص
+// ══════════════════════════════════════════════════════
