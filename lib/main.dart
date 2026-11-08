@@ -8335,19 +8335,69 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       padding: const EdgeInsets.all(16),
       children: [
         Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)]),
-            borderRadius: BorderRadius.circular(16),
+  padding: const EdgeInsets.all(20),
+  decoration: BoxDecoration(
+    gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)]),
+    borderRadius: BorderRadius.circular(16),
+  ),
+  child: Column(
+    children: [
+      const Text('إجمالي التسبيح', style: TextStyle(color: Colors.white70, fontSize: 14)),
+      const SizedBox(height: 8),
+      Text('$_tasbeehCount', style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: Color(0xFFC5A059))),
+      const SizedBox(height: 20),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // 🔄 زرار التصفير
+          GestureDetector(
+            onTap: () async {
+              setState(() {
+                _tasbeehCount = 0;
+                _tasbeehSubCounts.clear();
+              });
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setInt('tasbeeh_count', 0);
+              for (var item in _tasbeehItems) {
+                await prefs.setInt('tasbeeh_${item['key']}', 0);
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.redAccent,
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
+              ),
+              child: const Icon(Icons.refresh, color: Colors.white, size: 28),
+            ),
           ),
-          child: Column(
-            children: [
-              const Text('إجمالي التسبيح', style: TextStyle(color: Colors.white70, fontSize: 14)),
-              const SizedBox(height: 8),
-              Text('$_tasbeehCount', style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: Color(0xFFC5A059))),
-            ],
+          const SizedBox(width: 30),
+          // ➕ زرار الإضافة (اللي كان متشال)
+          GestureDetector(
+            onTap: () async {
+              setState(() {
+                _tasbeehCount++;
+              });
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setInt('tasbeeh_count', _tasbeehCount);
+              HapticFeedback.lightImpact();
+            },
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFFC5A059),
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: const Color(0xFFC5A059).withOpacity(0.5), blurRadius: 12, offset: const Offset(0, 4))],
+              ),
+              child: const Icon(Icons.add, color: Colors.black, size: 36),
+            ),
           ),
-        ),
+        ],
+      ),
+    ],
+  ),
+),
         const SizedBox(height: 16),
         ..._tasbeehItems.map((item) {
           final key = item['key']!;
