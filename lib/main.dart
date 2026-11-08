@@ -6212,26 +6212,59 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   void _rescheduleRepeating(String taskTitle, String repeat, String interval, List<String> customDays, DateTime lastScheduled, String? soundUri) {
-    DateTime next;
-    if (repeat == 'يومي') {
-      next = lastScheduled.add(const Duration(days: 1));
-    } else if (repeat == 'أسبوعي') {
-      next = lastScheduled.add(const Duration(days: 7));
-    } else if (repeat == 'شهري') {
-      next = DateTime(lastScheduled.year, lastScheduled.month + 1, lastScheduled.day, lastScheduled.hour, lastScheduled.minute);
-    } else if (repeat == 'مخصص') {
-      next = lastScheduled.add(const Duration(days: 1));
-      int safety = 0;
-      while (safety < 14) {
-        final dayName = _weekDays[(next.weekday) % 7];
-        if (customDays.contains(dayName)) break;
-        next = next.add(const Duration(days: 1));
-        safety++;
+  DateTime next;
+  if (repeat == 'يومي') {
+    next = lastScheduled.add(const Duration(days: 1));
+    
+    // 👇 التعديل هنا: بنشوف هل ده منبه صلاة؟ لو أه، بنحسب ميعاد بكرة من جديد
+    final taskData = _tasks.firstWhere((t) => t['task'] == taskTitle, orElse: () => {});
+    if (taskData['isPrayerAlarm'] == true) {
+      final prayerKey = taskData['prayerKey'] as String?;
+      final offsetMinutes = taskData['prayerOffset'] as int?;
+      
+      if (prayerKey != null && offsetMinutes != null) {
+        _calculatePrayerTimes(targetDate: next).then((times) {
+          final timeStr = times[prayerKey] ?? '';
+          if (timeStr.isNotEmpty) {
+            final parts = timeStr.split(':');
+            final prayerTime = DateTime(next.year, next.month, next.day, int.parse(parts[0]), int.parse(parts[1]));
+            final newTarget = prayerTime.add(Duration(minutes: offsetMinutes));
+            
+            // بنحدث الميعاد الجديد في القايمة
+            setState(() {
+              final idx = _tasks.indexWhere((t) => t['task'] == taskTitle);
+              if (idx != -1) {
+                _tasks[idx]['scheduled'] = newTarget.toIso8601String();
+                _tasks[idx]['time'] = DateFormat('hh:mm a', 'ar').format(newTarget);
+              }
+            });
+            _saveData();
+            _scheduleContinuousAlarm(taskTitle, newTarget, repeat, interval, customDays, soundUri: soundUri);
+            return;
+          }
+        }).catchError((_) {
+           _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays, soundUri: soundUri);
+        });
+        return;
       }
-    } else {
-      return;
     }
-    _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays, soundUri: soundUri);
+  } else if (repeat == 'أسبوعي') {
+    next = lastScheduled.add(const Duration(days: 7));
+  } else if (repeat == 'شهري') {
+    next = DateTime(lastScheduled.year, lastScheduled.month + 1, lastScheduled.day, lastScheduled.hour, lastScheduled.minute);
+  } else if (repeat == 'مخصص') {
+    next = lastScheduled.add(const Duration(days: 1));
+    int safety = 0;
+    while (safety < 14) {
+      final dayName = _weekDays[(next.weekday) % 7];
+      if (customDays.contains(dayName)) break;
+      next = next.add(const Duration(days: 1));
+      safety++;
+    }
+  } else {
+    return;
+  }
+  _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays, soundUri: soundUri);
   }
 
   Future<void> _scheduleBackgroundNotification(
@@ -6514,11 +6547,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     });
   }
 
-  Future<Map<String, String>> _calculatePrayerTimes() async {
-    try {
-      final coordinates = Coordinates(30.0444, 31.2357);
-      final date = DateComponents.from(DateTime.now());
-      final params = CalculationMethod.egyptian.getParameters();
+  Future<Map<String, String>> _calculatePrayerTimes({DateTime? targetDate}) async {
+  try {
+    final coordinates = Coordinates(30.0444, 31.2357);
+    final date = DateComponents.from(targetDate ?? DateTime.now()); // 👈 التعديل هنا
+    final params = CalculationMethod.egyptian.getParameters();
+    // ... باقي الدالة زي ما هي عادي بدون تغيير
       params.madhab = Madhab.shafi;
       final prayerTimes = PrayerTimes(coordinates, date, params);
 
@@ -6701,6 +6735,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         'alarm': true, 'scheduled': target.toIso8601String(),
         'repeat': repeatType, 'repeatInterval': 'كل 10 ثواني',
         'customDays': [], 'sound': selectedSound, 'advanceReminder': 'في الموعد',
+        'isPrayerAlarm': isDaily,
+'prayerKey': prayerKey,
+'prayerOffset': offsetMinutes,
       });
     });
     _saveData();
@@ -8347,54 +8384,54 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       Text('$_tasbeehCount', style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: Color(0xFFC5A059))),
       const SizedBox(height: 20),
       Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // 🔄 زرار التصفير
-          GestureDetector(
-            onTap: () async {
-              setState(() {
-                _tasbeehCount = 0;
-                _tasbeehSubCounts.clear();
-              });
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setInt('tasbeeh_count', 0);
-              for (var item in _tasbeehItems) {
-                await prefs.setInt('tasbeeh_${item['key']}', 0);
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.redAccent,
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
-              ),
-              child: const Icon(Icons.refresh, color: Colors.white, size: 28),
-            ),
-          ),
-          const SizedBox(width: 30),
-          // ➕ زرار الإضافة (اللي كان متشال)
-          GestureDetector(
-            onTap: () async {
-              setState(() {
-                _tasbeehCount++;
-              });
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setInt('tasbeeh_count', _tasbeehCount);
-              HapticFeedback.lightImpact();
-            },
-            child: Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: const Color(0xFFC5A059),
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: const Color(0xFFC5A059).withOpacity(0.5), blurRadius: 12, offset: const Offset(0, 4))],
-              ),
-              child: const Icon(Icons.add, color: Colors.black, size: 36),
-            ),
-          ),
-        ],
+  mainAxisAlignment: MainAxisAlignment.center,
+  children: [
+    // ➕ زرار الإضافة (بقى على اليمين)
+    GestureDetector(
+      onTap: () async {
+        setState(() {
+          _tasbeehCount++;
+        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('tasbeeh_count', _tasbeehCount);
+        HapticFeedback.lightImpact();
+      },
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: const BoxDecoration(
+          color: Color(0xFFC5A059),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.add, color: Colors.black, size: 36),
       ),
+    ),
+    // المسافة بقت الضعف (60 بدل 30)
+    const SizedBox(width: 60), 
+    // 🔄 زرار التصفير (بقى على الشمال)
+    GestureDetector(
+      onTap: () async {
+        setState(() {
+          _tasbeehCount = 0;
+          _tasbeehSubCounts.clear();
+        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('tasbeeh_count', 0);
+        for (var item in _tasbeehItems) {
+          await prefs.setInt('tasbeeh_${item['key']}', 0);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.redAccent,
+          shape: BoxShape.circle,
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
+        ),
+        child: const Icon(Icons.refresh, color: Colors.white, size: 28),
+      ),
+    ),
+  ],
+),
     ],
   ),
 ),
