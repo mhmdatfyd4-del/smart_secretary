@@ -6060,7 +6060,6 @@ if (scheduled.isBefore(now)) {
       final n = _norm(t);
       if (n.isEmpty) continue;
       if (strip.contains(n) || n == nameNorm) continue;
-      if (afterTomorrow && n == 'بعد') continue;
       if (RegExp(r'^\d{1,2}(:\d{2})?$').hasMatch(n)) continue;
       if (!hourTokenRemoved && _hourWords.containsKey(n)) {
         hourTokenRemoved = true;
