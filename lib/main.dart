@@ -3777,9 +3777,19 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
 
     if (targetWeekday != null) {
-      final isLast = _hasAny(normCmd, ['اللي فات', 'اللى فات', 'الماضي']);
-      final isNext = _hasAny(normCmd, ['الجاي', 'القادم', 'اللي جاي']);
-      if (isLast) {
+  final isAfterNext = _hasAny(normCmd, ['بعد الجاي', 'اللي بعد الجاي', 'بعد القادم', 'اللي بعد القادم', 'اللي بعده', 'اللي بعدها', 'اللي بعدهم']);
+  final isLast = _hasAny(normCmd, ['اللي فات', 'اللى فات', 'الماضي']);
+  final isNext = _hasAny(normCmd, ['الجاي', 'القادم', 'اللي جاي']);
+  
+  if (isLast) {
+    var diff = now.weekday - targetWeekday;
+    if (diff <= 0) diff += 7;
+    return now.subtract(Duration(days: diff));
+  } else if (isAfterNext) {
+    var diff = targetWeekday - now.weekday;
+    if (diff <= 0) diff += 7;
+    return now.add(Duration(days: diff + 7)); // +7 عشان اللي بعد الجاي
+  } else if (isNext) {
         var diff = now.weekday - targetWeekday;
         if (diff <= 0) diff += 7;
         return now.subtract(Duration(days: diff));
@@ -5933,18 +5943,21 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
   Future<void> _createAlarmFromVoice(String rawCommand, String cmd) async {
     final userTitle = _userTitle;
-    final now = DateTime.now();
-    var targetDate = now;
-    var explicitDay = false;
-    var afterTomorrow = false;
-    if (cmd.contains('بعد بكره') || cmd.contains('بعد غد')) {
-      targetDate = now.add(const Duration(days: 2));
-      explicitDay = true;
-      afterTomorrow = true;
-    } else if (cmd.contains('بكره') || cmd.contains('غدا')) {
-      targetDate = now.add(const Duration(days: 1));
-      explicitDay = true;
-    }
+final now = DateTime.now();
+
+// 👇 استخدام دالة تحليل التاريخ الشاملة
+DateTime? parsedDate = _parseFullDate(cmd);
+var targetDate = parsedDate ?? now;
+var explicitDay = parsedDate != null;
+
+// 👇 التحقق من تحديد يوم معين في الأسبوع
+bool isSpecificWeekday = false;
+for (final day in _weekDays) {
+  if (_hasAny(cmd, _dayKeywords[day] ?? [day])) {
+    isSpecificWeekday = true;
+    break;
+  }
+}
     final parsedHour = _parseHour(cmd);
     if (parsedHour == null) {
       _pendingVoiceAction = 'alarm_time';
@@ -5972,12 +5985,20 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     }
     var scheduled = DateTime(targetDate.year, targetDate.month, targetDate.day, hour, minute);
-    if (!isMorning && !isEvening && !explicitDay && hour < 12 && scheduled.isBefore(now)) {
-      final alt = scheduled.add(const Duration(hours: 12));
-      if (alt.isAfter(now)) scheduled = alt;
-    }
-    if (scheduled.isBefore(now)) scheduled = scheduled.add(const Duration(days: 1));
+if (!isMorning && !isEvening && !explicitDay && hour < 12 && scheduled.isBefore(now)) {
+  final alt = scheduled.add(const Duration(hours: 12));
+  if (alt.isAfter(now)) scheduled = alt;
+}
 
+if (scheduled.isBefore(now)) {
+  // لو حدد يوم معين (زي الأربع) والوقت فات النهاردة، نروح للأسبوع اللي بعده
+  if (isSpecificWeekday && explicitDay) {
+    scheduled = scheduled.add(const Duration(days: 7));
+  } else {
+    // لو مقالش يوم، أو قال النهاردة والوقت فات، نروح بكرة
+    scheduled = scheduled.add(const Duration(days: 1));
+  }
+}
     final repeatType = _parseRepeatType(cmd);
     final intervalType = _parseIntervalType(cmd);
     final customDays = _parseCustomDays(cmd);
@@ -5991,6 +6012,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
 
     final strip = <String>{
+      'لا', 'لأ', 'لاء', 'أقصد', 'اقصد', 'يعني', 'قصدي'
+        'اللي', 'الجاي', 'القادم', 'ده', 'دي', 'بعده', 'بعدها', 'بعدهم', 'بعدكم', 'بعدنا',
       'اظبطلي', 'اضبطلي', 'اظبطيلي', 'اضبطيلي', 'اظبط', 'اضبط', 'اظبطي', 'اضبطي',
       'ظبط', 'ضبط', 'ظبطي', 'ضبطي', 'ظبطلي', 'ضبطلي', 'ظبطيلي', 'ضبطيلي',
       'منبه', 'منبّه', 'المنبه',
@@ -6131,8 +6154,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
     final soundText = selectedSound == null ? "بِصَوْتِ السِّكْرِتِير" : "عَلَى ${_getSoundName(selectedSound)}";
 
-    await _speak("تَمَّ التَّنْفِيذ $_userTitle! تَمَّ تَسْجِيل: $cleanTitle، السَّاعَة $h12$minuteText $periodText$repeatText$intervalText، $soundText.");
-  }
+  final dayName = DateFormat('EEEE', 'ar').format(scheduled);
+  await _speak("تَمَّ التَّنْفِيذ $_userTitle! تَمَّ تَسْجِيل: $cleanTitle، يَوْمْ $dayName، السَّاعَة $h12$minuteText $periodText$repeatText$intervalText، $soundText.");
+}
 
   int _getIntervalSeconds(String interval) {
     switch (interval) {
