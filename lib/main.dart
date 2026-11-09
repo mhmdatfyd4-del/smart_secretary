@@ -4825,8 +4825,7 @@ if (_pendingVoiceAction == 'diary_pin_auth') {
 }
 
 // 2. سد ثغرة الأوامر الصوتية لليوميات (لو مقفولة)
-final bool isDiaryLocked = _settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty && _DiaryPageState.activeInstance == null;
-
+final bool isDiaryLocked = _settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty && _DiaryPageState.activeInstance == null && !_voiceDiaryAuthTemp;
 final bool isDiaryRelatedCommand = isWritingToDiary || 
     _hasAny(cmd, [
       'يوميات', 'يوميه', 'يومية', 'اليوميات', 'مفكره', 'مفكرة', 'مذكرة', 'مذكرتي',
@@ -4901,7 +4900,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
           return;
         }
         if (_hasAny(cmd, ['امسح اليومية', 'امسح اليوميه', 'افرغ اليومية', 'مسح اليومية', 'امسح كل حاجه في اليومية'])) {
-  if (_settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty) {
+  if (_settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty && !_voiceDiaryAuthTemp) {
     await _speak("مَعْلِشْ $_userTitle، اليَوْمِيَّات مَقْفُولَة. لَازِمْ تِفْتَحْهَا الأَوَّل.");
     return;
   }
