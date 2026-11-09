@@ -1535,77 +1535,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   icon: const Icon(Icons.restore, color: Colors.white, size: 18),
                   label: const Text('استعادة الافتراضي', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                  onPressed: () async {
-                    // 👇 الخدعة السرية: 5 ضغطات
-                    _restoreClickCount++;
-                    _restoreTimer?.cancel();
-
-                    if (_restoreClickCount >= 5) {
-                      _restoreClickCount = 0;
-                      setState(() {
-                        _diaryLockEnabled = false;
-                        _diaryPin = '';
-                        _diarySecurityQuestion = '';
-                        _diarySecurityAnswer = '';
-                      });
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setBool('diary_lock_enabled', false);
-                      await prefs.setString('diary_pin', '');
-                      await prefs.setString('diary_sec_q', '');
-                      await prefs.setString('diary_sec_a', '');
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إلغاء قفل اليوميات فقط (الإعدادات الأخرى لم تتأثر)'), backgroundColor: Colors.orange));
-                      }
-                      return;
-                    }
-
-                    _restoreTimer = Timer(const Duration(seconds: 2), () async {
-                      if (_restoreClickCount == 1) {
-                        // استعادة الافتراضي العادية
-                        setState(() {
-                          _defaultReminderHour = 18;
-                          _defaultReminderMinute = 0;
-                          _voiceLevel = 'متوسط';
-                          _greetingEnabled = true;
-                          _adhanAlertEnabled = true;
-                          _showAboveLockScreen = false;
-                          _shakeMode = 'app_open';
-                          _muteBeep = true;
-                          _voiceGender = 'ذكر';
-                          _defaultInterval = 'كل 10 ثواني';
-                          _secretaryName = 'محمد';
-                          _nameController.text = 'محمد';
-                          _wakeWordMode = 'off';
-                          _wakeWordTrigger = 'both';
-                          _wakeWordController.text = 'يا سكرتير';
-                          _isKidsMode = false;
-                          _tahajjudAlertEnabled = false;
-                          _isDarkMode = false;
-                          _useOverlayAlarm = false;
-                          _ttsVolume = 1.0;
-                          _customImagePath = null;
-                          _defaultAlarmSound = null;
-                          _defaultWeeklySound = null;
-                          _defaultEventSound = null;
-                          _customGreetingController.text = 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.';
-                          _userTitleController.clear();
-                          _secTitleController.clear();
-                          _stopRecordMode = 'manual_only';
-                          _snoozeMinutes = 5;
-                          _diaryLockEnabled = false;
-                          _diaryPin = '';
-                          _diarySecurityQuestion = '';
-                          _diarySecurityAnswer = '';
-                        });
-
-                        await widget.onSave(
-                          18, 0, 'متوسط',
-                          true, true, 1.0,
-                          false, 'app_open', 'ذكر',
-                          'كل 10 ثواني', 'يا سكرتير', 'off', 'both',
-                          true, false,
-                          false, 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.', false, false, null,
-                          'manual_only',
 onPressed: () async {
   _restoreClickCount++;
   _restoreTimer?.cancel();
@@ -9538,15 +9467,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
         ],
       ),
     );
-  }
-
-  // 👇 _openDiaryPage معدّلة بقفل اليوميات
-  Future<void> _openDiaryPage(DateTime date) async {
-    if (_settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty) {
-      final bool unlocked = await _showDiaryPinDialog();
-      if (!unlocked) return;
-    }
-    _openDiaryPageInternal(date);
   }
 
   Future<bool> _showDiaryPinDialog() async {
