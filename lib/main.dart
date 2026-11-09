@@ -2615,17 +2615,29 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         _isWakeWordListening = false;
 
         if (stoppedTitle != null) {
-          _cancelNativeAlarm(stoppedTitle);
-          try { _notifications.cancel(stoppedTitle.hashCode + 1000); } catch (_) {}
-          SharedPreferences.getInstance().then((prefs) => prefs.remove('pending_alarm'));
-          final idx = _tasks.indexWhere((t) => t['task'] == stoppedTitle);
-          if (idx != -1) {
-            final task = _tasks[idx];
-            if (task['repeat'] == 'مرة واحدة' || task['repeat'] == null) {
-              setState(() => _tasks.removeAt(idx));
-              _saveData();
-            }
-          }
+  final task = _tasks.firstWhere(
+    (t) => t['task'] == stoppedTitle,
+    orElse: () => {},
+  );
+  final alarmId = task['alarmId'] as int?;
+
+  if (alarmId != null) {
+    try { _notifications.cancel(alarmId); } catch (_) {}
+    _cancelNativeAlarm(stoppedTitle, customId: alarmId);
+  } else {
+    try { _notifications.cancel(stoppedTitle.hashCode + 1000); } catch (_) {}
+    _cancelNativeAlarm(stoppedTitle);
+  }
+
+  SharedPreferences.getInstance().then((prefs) => prefs.remove('pending_alarm'));
+  final idx = _tasks.indexWhere((t) => t['task'] == stoppedTitle);
+  if (idx != -1) {
+    final task = _tasks[idx];
+    if (task['repeat'] == 'مرة واحدة' || task['repeat'] == null) {
+      setState(() => _tasks.removeAt(idx));
+      _saveData();
+    }
+  }
         }
       }
 
@@ -5924,72 +5936,86 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 // ══════════════════════════════════════════════════════
 
   Future<void> _deleteWeeklyTaskByVoice(String rawCommand, String cmd) async {
-    final userTitle = _userTitle;
-    final days = _extractWeeklyDaysFromCmd(cmd);
-    final taskNameRaw = _extractWeeklyTaskName(rawCommand);
-    final searchTerm = _norm(taskNameRaw);
+  final userTitle = _userTitle;
+  final days = _extractWeeklyDaysFromCmd(cmd);
+  final taskNameRaw = _extractWeeklyTaskName(rawCommand);
+  final searchTerm = _norm(taskNameRaw);
 
-    if (searchTerm.isEmpty && days.isNotEmpty) {
-      final matches = _weeklySchedule.where((t) => days.contains(t['day'].toString())).toList();
-      if (matches.isEmpty) {
-        await _speak("مَفِيشْ مَوَاعِيد فِي الأَيَّامْ دِي $_userTitle.");
-        return;
-      }
-      final count = matches.length;
-      for (final task in matches) {
-        await _cancelNativeAlarm('جدول_${task['day']}_${task['task']}');
-      }
-      setState(() {
-        for (final task in matches) {
-          _weeklySchedule.remove(task);
-        }
-      });
-      _saveWeeklySchedule();
-      await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنْ أَيَّامْ: ${days.join('، ')} $_userTitle.");
-      return;
-    }
-
-    if (searchTerm.isEmpty) {
-      await _speak("قُولِّي أَمْسَحْ أَنَّهِي مَوْعِدْ مِنَ الجَدْوَلْ $_userTitle.");
-      return;
-    }
-
-    final matches = <Map<String, dynamic>>[];
-    for (final t in _weeklySchedule) {
-      if (days.isNotEmpty && !days.contains(t['day'].toString())) continue;
-      final taskName = _norm(t['task'].toString());
-      if (taskName.contains(searchTerm) || searchTerm.contains(taskName)) {
-        matches.add(t);
-      }
-    }
-
+  if (searchTerm.isEmpty && days.isNotEmpty) {
+    final matches = _weeklySchedule.where((t) => days.contains(t['day'].toString())).toList();
     if (matches.isEmpty) {
-      await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ فِي الجَدْوَلْ $_userTitle.");
+      await _speak("مَفِيشْ مَوَاعِيد فِي الأَيَّامْ دِي $_userTitle.");
       return;
     }
-
-    if (matches.length == 1) {
-      final task = matches.first;
-      final taskTitle = task['task'].toString();
-      final day = task['day'].toString();
-      final idx = _weeklySchedule.indexOf(task);
-      setState(() => _weeklySchedule.removeAt(idx));
-      _saveWeeklySchedule();
-      await _cancelNativeAlarm('جدول_${day}_$taskTitle');
-      await _speak("تَمَّ مَسْحُ مَوْعِدْ $taskTitle مِنْ يَوْمْ $day $_userTitle.");
-    } else {
-      final count = matches.length;
-      for (final task in matches) {
-        await _cancelNativeAlarm('جدول_${task['day']}_${task['task']}');
-      }
-      setState(() {
-        for (final task in matches) {
-          _weeklySchedule.remove(task);
-        }
-      });
-      _saveWeeklySchedule();
-      await _speak("تَمَّ مَسْحُ $count مَوَاعِيدْ مِنْ أَيَّامْ: ${days.join('، ')} $_userTitle.");
+    final count = matches.length;
+    for (final task in matches) {
+      final taskScheduled = DateTime.tryParse(task['scheduled']?.toString() ?? '');
+      final taskHhmm = taskScheduled != null ? DateFormat('HHmm').format(taskScheduled) : '';
+      final fullTitle = 'جدول_${task['day']}_${taskHhmm}_${task['task']}';
+      await _cancelNativeAlarm(fullTitle);
+      try { await _notifications.cancel(fullTitle.hashCode + 1000); } catch (_) {}
     }
+    setState(() {
+      for (final task in matches) {
+        _weeklySchedule.remove(task);
+      }
+    });
+    _saveWeeklySchedule();
+    await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنْ أَيَّامْ: ${days.join('، ')} $_userTitle.");
+    return;
+  }
+
+  if (searchTerm.isEmpty) {
+    await _speak("قُولِّي أَمْسَحْ أَنَّهِي مَوْعِدْ مِنَ الجَدْوَلْ $_userTitle.");
+    return;
+  }
+
+  final matches = <Map<String, dynamic>>[];
+  for (final t in _weeklySchedule) {
+    if (days.isNotEmpty && !days.contains(t['day'].toString())) continue;
+    final taskName = _norm(t['task'].toString());
+    if (taskName.contains(searchTerm) || searchTerm.contains(taskName)) {
+      matches.add(t);
+    }
+  }
+
+  if (matches.isEmpty) {
+    await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ فِي الجَدْوَلْ $_userTitle.");
+    return;
+  }
+
+  if (matches.length == 1) {
+    final task = matches.first;
+    final taskTitle = task['task'].toString();
+    final day = task['day'].toString();
+    final idx = _weeklySchedule.indexOf(task);
+    
+    final taskScheduled = DateTime.tryParse(task['scheduled']?.toString() ?? '');
+    final taskHhmm = taskScheduled != null ? DateFormat('HHmm').format(taskScheduled) : '';
+    final fullTitle = 'جدول_${day}_${taskHhmm}_$taskTitle';
+
+    setState(() => _weeklySchedule.removeAt(idx));
+    _saveWeeklySchedule();
+    await _cancelNativeAlarm(fullTitle);
+    try { await _notifications.cancel(fullTitle.hashCode + 1000); } catch (_) {}
+    await _speak("تَمَّ مَسْحُ مَوْعِدْ $taskTitle مِنْ يَوْمْ $day $_userTitle.");
+  } else {
+    final count = matches.length;
+    for (final task in matches) {
+      final taskScheduled = DateTime.tryParse(task['scheduled']?.toString() ?? '');
+      final taskHhmm = taskScheduled != null ? DateFormat('HHmm').format(taskScheduled) : '';
+      final fullTitle = 'جدول_${task['day']}_${taskHhmm}_${task['task']}';
+      await _cancelNativeAlarm(fullTitle);
+      try { await _notifications.cancel(fullTitle.hashCode + 1000); } catch (_) {}
+    }
+    setState(() {
+      for (final task in matches) {
+        _weeklySchedule.remove(task);
+      }
+    });
+    _saveWeeklySchedule();
+    await _speak("تَمَّ مَسْحُ $count مَوَاعِيدْ مِنْ أَيَّامْ: ${days.join('، ')} $_userTitle.");
+  }
   }
 
   Future<void> _editWeeklyTaskByVoice(String rawCommand, String cmd) async {
@@ -7415,30 +7441,41 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   void _deleteWeeklyTask(int index) {
-    final task = _weeklySchedule[index];
-    final taskTitle = task['task'].toString();
-    final day = task['day'].toString();
-    setState(() => _weeklySchedule.removeAt(index));
-    _saveWeeklySchedule();
-    _cancelNativeAlarm('جدول_${day}_$taskTitle');
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف الموعد من $day')));
+  final task = _weeklySchedule[index];
+  final taskTitle = task['task'].toString();
+  final day = task['day'].toString();
+  final scheduled = DateTime.tryParse(task['scheduled']?.toString() ?? '');
+  final hhmm = scheduled != null ? DateFormat('HHmm').format(scheduled) : '';
+  final fullTitle = 'جدول_${day}_${hhmm}_$taskTitle';
+
+  setState(() => _weeklySchedule.removeAt(index));
+  _saveWeeklySchedule();
+  _cancelNativeAlarm(fullTitle);
+  try { _notifications.cancel(fullTitle.hashCode + 1000); } catch (_) {}
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف الموعد من $day')));
   }
 
   Future<void> _deleteAllWeeklyTasks() async {
-    final userTitle = _userTitle;
-    if (_weeklySchedule.isEmpty) {
-      await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي أَصْلًا $_userTitle.");
-      return;
-    }
-    final count = _weeklySchedule.length;
-    for (final task in List.from(_weeklySchedule)) {
-      await _cancelNativeAlarm('جدول_${task['day']}_${task['task']}');
-    }
-    setState(() => _weeklySchedule.clear());
-    _saveWeeklySchedule();
-    await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنَ الجَدْوَلِ الأُسْبُوعِيِّ $_userTitle.");
+  final userTitle = _userTitle;
+  if (_weeklySchedule.isEmpty) {
+    await _speak("الجَدْوَلُ الأُسْبُوعِيُّ فَاضِي أَصْلًا $_userTitle.");
+    return;
   }
-
+  final count = _weeklySchedule.length;
+  for (final task in List.from(_weeklySchedule)) {
+    final taskTitle = task['task'].toString();
+    final day = task['day'].toString();
+    final scheduled = DateTime.tryParse(task['scheduled']?.toString() ?? '');
+    final hhmm = scheduled != null ? DateFormat('HHmm').format(scheduled) : '';
+    final fullTitle = 'جدول_${day}_${hhmm}_$taskTitle';
+    
+    await _cancelNativeAlarm(fullTitle);
+    try { await _notifications.cancel(fullTitle.hashCode + 1000); } catch (_) {}
+  }
+  setState(() => _weeklySchedule.clear());
+  _saveWeeklySchedule();
+  await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنَ الجَدْوَلِ الأُسْبُوعِيِّ $_userTitle.");
+  }
   // 👇 _openSettingsScreen معدّلة (onSave بأحدث signature)
   void _openSettingsScreen() {
     Navigator.push(
@@ -8058,10 +8095,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                     'sound': selectedSound,
                   };
                   if (eventIndex == null) {
-                    setState(() => _specialEvents.add(newEvent));
-                  } else {
-                    _cancelNativeAlarm('مناسبة: ${existingEvent!['title']}');
-                    setState(() => _specialEvents[eventIndex] = newEvent);
+  setState(() => _specialEvents.add(newEvent));
+} else {
+  final oldEventText = (existingEvent!['detail'] != null && existingEvent['detail'].toString().isNotEmpty)
+      ? '${existingEvent['title']} - ${existingEvent['detail']}'
+      : existingEvent['title'].toString();
+  _cancelNativeAlarm(oldEventText);
+  setState(() => _specialEvents[eventIndex] = newEvent);
                   }
                   _sortByTime(_specialEvents);
                   _saveData();
@@ -9181,13 +9221,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                   children: [
                     IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _editSpecialEventDialog(i)),
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () {
-                        _cancelNativeAlarm('مناسبة: ${e['title']}');
-                        setState(() => _specialEvents.removeAt(i));
-                        _saveData();
-                      },
-                    ),
+  icon: const Icon(Icons.delete_outline, color: Colors.red),
+  onPressed: () {
+    final eventText = (e['detail'] != null && e['detail'].toString().isNotEmpty)
+        ? '${e['title']} - ${e['detail']}'
+        : e['title'].toString();
+    _cancelNativeAlarm(eventText);
+    setState(() => _specialEvents.removeAt(i));
+    _saveData();
+  },
+),
                   ],
                 ),
               ),
