@@ -1606,32 +1606,107 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           true, false,
                           false, 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.', false, false, null,
                           'manual_only',
-                          5, false, '', '', '',
-                        );
+onPressed: () async {
+  _restoreClickCount++;
+  _restoreTimer?.cancel();
 
-                        await widget.onSaveSecretary('محمد', 'ذكر');
+  // 👇 الخدعة السرية: 5 ضغطات سريعة تلغي الباسورد فقط
+  if (_restoreClickCount >= 5) {
+    _restoreClickCount = 0;
+    setState(() {
+      _diaryLockEnabled = false;
+      _diaryPin = '';
+      _diarySecurityQuestion = '';
+      _diarySecurityAnswer = '';
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('diary_lock_enabled', false);
+    await prefs.setString('diary_pin', '');
+    await prefs.setString('diary_sec_q', '');
+    await prefs.setString('diary_sec_a', '');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم إلغاء قفل اليوميات فقط (الإعدادات الأخرى لم تتأثر)'), backgroundColor: Colors.orange),
+      );
+    }
+    return;
+  }
 
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.remove('default_alarm_sound');
-                        await prefs.remove('default_weekly_sound');
-                        await prefs.remove('default_event_sound');
-                        await prefs.remove('custom_user_title');
-                        await prefs.remove('custom_sec_title');
-                        await prefs.setBool('diary_lock_enabled', false);
-                        await prefs.setString('diary_pin', '');
-                        await prefs.setString('diary_sec_q', '');
-                        await prefs.setString('diary_sec_a', '');
-                        await prefs.setInt('snooze_minutes', 5);
+  // 👇 لو دوس مرة واحدة، بنعمل استعادة عادية مع الحفاظ على الباسورد
+  _restoreTimer = Timer(const Duration(seconds: 2), () async {
+    if (_restoreClickCount == 1) {
+      final bool keepLock = _diaryLockEnabled;
+      final String keepPin = _diaryPin;
+      final String keepQ = _diarySecurityQuestion;
+      final String keepA = _diarySecurityAnswer;
 
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('تمت استعادة الإعدادات الافتراضية بنجاح'), backgroundColor: Colors.green),
-                          );
-                        }
-                      }
-                      _restoreClickCount = 0;
-                    });
-                  },
+      setState(() {
+        _defaultReminderHour = 18;
+        _defaultReminderMinute = 0;
+        _voiceLevel = 'متوسط';
+        _greetingEnabled = true;
+        _adhanAlertEnabled = true;
+        _showAboveLockScreen = false;
+        _shakeMode = 'app_open';
+        _muteBeep = true;
+        _voiceGender = 'ذكر';
+        _defaultInterval = 'كل 10 ثواني';
+        _secretaryName = 'محمد';
+        _nameController.text = 'محمد';
+        _wakeWordMode = 'off';
+        _wakeWordTrigger = 'both';
+        _wakeWordController.text = 'يا سكرتير';
+        _isKidsMode = false;
+        _tahajjudAlertEnabled = false;
+        _isDarkMode = false;
+        _useOverlayAlarm = false;
+        _ttsVolume = 1.0;
+        _customImagePath = null;
+        _defaultAlarmSound = null;
+        _defaultWeeklySound = null;
+        _defaultEventSound = null;
+        _customGreetingController.text = 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.';
+        _userTitleController.clear();
+        _secTitleController.clear();
+        _stopRecordMode = 'manual_only';
+        _snoozeMinutes = 5;
+        
+        _diaryLockEnabled = keepLock;
+        _diaryPin = keepPin;
+        _diarySecurityQuestion = keepQ;
+        _diarySecurityAnswer = keepA;
+      });
+
+      await widget.onSave(
+        18, 0, 'متوسط',
+        true, true, 1.0,
+        false, 'app_open', 'ذكر',
+        'كل 10 ثواني', 'يا سكرتير', 'off', 'both',
+        true, false,
+        false, 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.', false, false, null,
+        'manual_only',
+        5, keepLock, keepPin, keepQ, keepA,
+      );
+
+      await widget.onSaveSecretary('محمد', 'ذكر');
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('default_alarm_sound');
+      await prefs.remove('default_weekly_sound');
+      await prefs.remove('default_event_sound');
+      await prefs.remove('custom_user_title');
+      await prefs.remove('custom_sec_title');
+      await prefs.setInt('snooze_minutes', 5);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تمت استعادة الإعدادات الافتراضية بنجاح (ماعدا قفل اليوميات)'), backgroundColor: Colors.green),
+        );
+      }
+    }
+    _restoreClickCount = 0;
+  });
+},
                 ),
               ),
             ],
@@ -2387,6 +2462,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   bool _isListening = false;
   bool _isWakeWordListening = false;
   bool _isAlarmDialogOpen = false;
+  bool _voiceDiaryAuthTemp = false;
   String? _activeAlarmTitle;
   BuildContext? _alarmDialogContext;
 
@@ -4790,6 +4866,59 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       'سجل عندك', 'اكتب في المذكرة', 'سجل في المذكرة', 'اكتبي عندك', 'اكتبي', 'اكتب', 'سجلي', 'سجل'
     ]);
 
+    // 1. طلب الباسورد الصوتي لليوميات
+if (_pendingVoiceAction == 'diary_pin_auth') {
+  _pendingActionTimer?.cancel();
+  _pendingVoiceAction = null;
+
+  String spokenPin = cmd.replaceAll(RegExp(r'[^0-9]'), '');
+  
+  if (spokenPin.isEmpty) {
+    String wordPin = cmd;
+    final words = {'صفر':'0','زيرو':'0','واحد':'1','واحدة':'1','اتنين':'2','اثنين':'2','تلاتة':'3','ثلاثة':'3','اربعة':'4','أربعة':'4','خمسة':'5','سته':'6','ستة':'6','سبعة':'7','تمانية':'8','ثمانية':'8','تسعة':'9'};
+    words.forEach((k, v) { wordPin = wordPin.replaceAll(k, v); });
+    spokenPin = wordPin.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+
+  if (spokenPin == _settings.diaryPin && _settings.diaryPin.isNotEmpty) {
+    _voiceDiaryAuthTemp = true;
+    await _speak("تَمَام $_userTitle، تَمَّ فَتْحُ القَفْل.");
+    if (_pendingRawCommand != null) {
+      final originalCmd = _pendingRawCommand!;
+      _pendingRawCommand = null;
+      await _processSmartVoiceCommand(originalCmd);
+    }
+  } else {
+    await _speak("مَعْلِشْ $_userTitle، كَلِمَة السِّرْ غَلَط.");
+    _pendingRawCommand = null;
+  }
+  return;
+}
+
+// 2. سد ثغرة الأوامر الصوتية لليوميات (لو مقفولة)
+final bool isDiaryLocked = _settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty && _DiaryPageState.activeInstance == null;
+
+final bool isDiaryRelatedCommand = isWritingToDiary || 
+    _hasAny(cmd, [
+      'يوميات', 'يوميه', 'يومية', 'اليوميات', 'مفكره', 'مفكرة', 'مذكرة', 'مذكرتي',
+      'اقرا يومية', 'اقرا يوميات', 'قولي يومية', 'اللي في يومية', 'اقرالي يومية', 'اقرا اليومية', 'قولي اليومية',
+      'امسح اليومية', 'امسح اليوميه', 'افرغ اليومية', 'مسح اليومية', 'امسح كل حاجه في اليومية', 'امسح كل اليوميات', 'امسح اليوميات كلها', 'احذف كل اليوميات', 'افرغ كل اليوميات'
+    ]);
+
+if (isDiaryLocked && isDiaryRelatedCommand) {
+  _pendingVoiceAction = 'diary_pin_auth';
+  _pendingRawCommand = rawCommand;
+  _pendingActionTimer?.cancel();
+  _pendingActionTimer = Timer(const Duration(seconds: 15), () {
+    _pendingVoiceAction = null;
+    _pendingRawCommand = null;
+    _voiceDiaryAuthTemp = false;
+  });
+  await _speak("اليَوْمِيَّات مَقْفُولَة $_userTitle. قُولِي كَلِمَة السِّرْ بَصَوْتَك، أَوِ افْتَحْهَا مِنَ التَّطْبِيق.");
+  _listenVoiceCommand();
+  return;
+}
+
     if (!isWritingToDiary && _hasAny(cmd, ['يوميات', 'يوميه', 'يومية', 'مفكره', 'مفكرة'])) {
       if (_DiaryPageState.activeInstance == null) {
         _openDiaryPage(DateTime.now());
@@ -4843,9 +4972,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           return;
         }
         if (_hasAny(cmd, ['امسح اليومية', 'امسح اليوميه', 'افرغ اليومية', 'مسح اليومية', 'امسح كل حاجه في اليومية'])) {
-          _diaryVoiceStream.add({'action': 'clear_all'});
-          await _speak("تَمَّ مَسْحُ كُلِّ مَحْتُوِيَّاتِ اليَوْمِيَّةِ $_userTitle.");
-          return;
+  if (_settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty) {
+    await _speak("مَعْلِشْ $_userTitle، اليَوْمِيَّات مَقْفُولَة. لَازِمْ تِفْتَحْهَا الأَوَّل.");
+    return;
+  }
+  _diaryVoiceStream.add({'action': 'clear_all'});
+  await _speak("تَمَّ مَسْحُ كُلِّ مَحْتُوِيَّاتِ اليَوْمِيَّةِ $_userTitle.");
+  return;
         }
         if (_hasAny(cmd, ['اقرا اليوميات', 'قولي اليوميات', 'اللي في اليوميات'])) {
           final readableText = _DiaryPageState.activeInstance!.getReadableText();
@@ -8697,44 +8830,51 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
               IconButton(
                 icon: const Icon(Icons.delete_sweep, color: Colors.redAccent, size: 30),
                 tooltip: 'مسح كل اليوميات',
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      title: const Row(
-                        children: [
-                          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
-                          SizedBox(width: 8),
-                          Text('مسح كل اليوميات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-                        ],
-                      ),
-                      content: const Text('هل أنت متأكد أنك تريد مسح كل اليوميات المسجلة في التطبيق نهائياً؟ لا يمكن التراجع عن هذا الإجراء.', style: TextStyle(fontSize: 16)),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('إلغاء', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
-                        ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                          onPressed: () async {
-                            setState(() {
-                              _diaries.clear();
-                            });
-                            await _saveData();
-                            if (mounted) {
-                              Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('تم مسح كل اليوميات بنجاح'), backgroundColor: Colors.green),
-                              );
-                            }
-                          },
-                          child: const Text('مسح الكل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                onPressed: () async {
+  // 👇 التحقق من الباسورد
+  if (_settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty) {
+    final unlocked = await _showDiaryPinDialog();
+    if (!unlocked) return;
+  }
+  
+  if (!mounted) return;
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      title: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+          SizedBox(width: 8),
+          Text('مسح كل اليوميات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+        ],
+      ),
+      content: const Text('هل أنت متأكد أنك تريد مسح كل اليوميات المسجلة في التطبيق نهائياً؟ لا يمكن التراجع عن هذا الإجراء.', style: TextStyle(fontSize: 16)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('إلغاء', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          onPressed: () async {
+            setState(() {
+              _diaries.clear();
+            });
+            await _saveData();
+            if (mounted) {
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم مسح كل اليوميات بنجاح'), backgroundColor: Colors.green),
+              );
+            }
+          },
+          child: const Text('مسح الكل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+      ],
+    ),
+  );
+},
               ),
             ],
           ),
@@ -9482,33 +9622,42 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     return false;
   }
 
-  void _openDiaryPageInternal(DateTime date) {
-    final key = DateFormat('yyyy-MM-dd').format(date);
-    final data = _diaries[key] ?? {'text': '', 'todos': [], 'images': [], 'audio': null};
-    if (data['todos'] == null) data['todos'] = [];
-    if (data['images'] == null) data['images'] = [];
-    Navigator.push(context, MaterialPageRoute(builder: (_) => _DiaryPage(
-      date: date,
-      initialData: data,
-      onSave: (d, dData) async {
-        final k = DateFormat('yyyy-MM-dd').format(d);
-        setState(() => _diaries[k] = dData);
-        await _saveData();
-      },
-      onClearAll: () async {
-        setState(() {
-          _diaries.clear();
-        });
-        await _saveData();
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تم مسح كل اليوميات بنجاح'), backgroundColor: Colors.green),
-          );
-        }
-      },
-    )));
+  Future<void> _openDiaryPage(DateTime date) async {
+  if (_settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty && !_voiceDiaryAuthTemp) {
+    final bool unlocked = await _showDiaryPinDialog();
+    if (!unlocked) return;
   }
+  _voiceDiaryAuthTemp = false; // تصفير بعد الاستخدام
+  _openDiaryPageInternal(date);
+}
+
+void _openDiaryPageInternal(DateTime date) {
+  final key = DateFormat('yyyy-MM-dd').format(date);
+  final data = _diaries[key] ?? {'text': '', 'todos': [], 'images': [], 'audio': null};
+  if (data['todos'] == null) data['todos'] = [];
+  if (data['images'] == null) data['images'] = [];
+  Navigator.push(context, MaterialPageRoute(builder: (_) => _DiaryPage(
+    date: date,
+    initialData: data,
+    onSave: (d, dData) async {
+      final k = DateFormat('yyyy-MM-dd').format(d);
+      setState(() => _diaries[k] = dData);
+      await _saveData();
+    },
+    onClearAll: () async {
+      setState(() {
+        _diaries.clear();
+      });
+      await _saveData();
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم مسح كل اليوميات بنجاح'), backgroundColor: Colors.green),
+        );
+      }
+    },
+  )));
+}
 
   void _handleConflictResolution(bool save) {
     _pendingActionTimer?.cancel();
