@@ -6193,85 +6193,97 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   // 👇 _deleteTaskByVoice (بتستخدم alarmId)
-  Future<void> _deleteTaskByVoice(String cmd) async {
-    final userTitle = _userTitle;
-    final now = DateTime.now();
+ Future<void> _deleteTaskByVoice(String cmd) async {
+  final userTitle = _userTitle;
+  final now = DateTime.now();
 
-    String? targetDate;
-    if (_hasAny(cmd, ['النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم'])) {
-      targetDate = DateFormat('yyyy-MM-dd').format(now);
-    } else if (_hasAny(cmd, ['بكره', 'بكرة', 'غدا', 'غداً'])) {
-      targetDate = DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 1)));
-    } else if (_hasAny(cmd, ['امبارح', 'امس', 'البارح'])) {
-      targetDate = DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 1)));
-    } else {
-      final delDays = _extractWeeklyDaysFromCmd(cmd);
-      if (delDays.isNotEmpty) {
-        final day = delDays.first;
-        final dayIndex = _weekDays.indexOf(day);
-        final todayIndex = (now.weekday) % 7;
-        final daysAhead = (dayIndex - todayIndex + 7) % 7;
-        final target = now.add(Duration(days: daysAhead));
-        targetDate = DateFormat('yyyy-MM-dd').format(target);
-      }
-    }
-
-    if (targetDate != null) {
-      final matches = _tasks.where((t) => t['date'] == targetDate).toList();
-      if (matches.isEmpty) {
-        await _speak("مَفِيشْ مَوَاعِيد فِي اليَوْمَ دَهْ $_userTitle.");
-        return;
-      }
-      final count = matches.length;
-      for (final task in matches) {
-        final alarmId = task['alarmId'] as int?;
-        await _cancelNativeAlarm(task['task'].toString(), customId: alarmId);
-      }
-      setState(() {
-        for (final task in matches) {
-          _tasks.remove(task);
-        }
-      });
-      _saveData();
-      await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} $_userTitle.");
-      return;
-    }
-
-    final nameNorm = _norm(_secretaryName);
-    String searchTerm = cmd;
-    final deleteWords = ['امسح', 'امسحي', 'احذف', 'احذفي', 'شيل', 'شيلي', 'الغي', 'الغى', 'الغيلي', 'مسح', 'حذف', 'كانسل', 'كنسل', 'المنبه', 'منبه', 'مواعيد', 'موعد', 'معاد', 'ميعاد'];
-    for (final w in deleteWords) {
-      searchTerm = searchTerm.replaceAll(_norm(w), '');
-    }
-    searchTerm = searchTerm.replaceAll(nameNorm, '').trim();
-
-    if (searchTerm.isEmpty) {
-      await _speak("قُولِّي أَمْسَحْ أَنَّهِي مَوْعِدْ $_userTitle");
-      return;
-    }
-
-    final matches = _tasks.where((t) {
-      final taskName = _norm(t['task'].toString());
-      return taskName.contains(searchTerm) || searchTerm.contains(taskName);
-    }).toList();
-
-    if (matches.isEmpty) {
-      await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ $_userTitle");
-      return;
-    }
-
-    if (matches.length == 1) {
-      final task = matches.first;
-      final taskTitle = task['task'].toString();
-      final alarmId = task['alarmId'] as int?;
-      setState(() => _tasks.remove(task));
-      _saveData();
-      await _cancelNativeAlarm(taskTitle, customId: alarmId);
-      await _speak("تَمَّ مَسْحُ مَوْعِدْ $taskTitle $_userTitle");
-    } else {
-      await _speak("لَقِيتْ ${matches.length} مَوَاعِيدْ بِالاِسْمْ دَهْ $_userTitle، حَدِّدْ أَكْتَرْ");
+  String? targetDate;
+  if (_hasAny(cmd, ['النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم'])) {
+    targetDate = DateFormat('yyyy-MM-dd').format(now);
+  } else if (_hasAny(cmd, ['بكره', 'بكرة', 'غدا', 'غداً'])) {
+    targetDate = DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 1)));
+  } else if (_hasAny(cmd, ['امبارح', 'امس', 'البارح'])) {
+    targetDate = DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 1)));
+  } else {
+    final delDays = _extractWeeklyDaysFromCmd(cmd);
+    if (delDays.isNotEmpty) {
+      final day = delDays.first;
+      final dayIndex = _weekDays.indexOf(day);
+      final todayIndex = (now.weekday) % 7;
+      final daysAhead = (dayIndex - todayIndex + 7) % 7;
+      final target = now.add(Duration(days: daysAhead));
+      targetDate = DateFormat('yyyy-MM-dd').format(target);
     }
   }
+
+  if (targetDate != null) {
+    final matches = _tasks.where((t) => t['date'] == targetDate).toList();
+    if (matches.isEmpty) {
+      await _speak("مَفِيشْ مَوَاعِيد فِي اليَوْمَ دَهْ $_userTitle.");
+      return;
+    }
+    final count = matches.length;
+    
+    // 👇 التعديل هنا: إلغاء الإشعار المتكرر من الأندرويد
+    for (final task in matches) {
+      final alarmId = task['alarmId'] as int?;
+      if (alarmId != null) {
+        try { await _notifications.cancel(alarmId); } catch (_) {}
+      }
+      await _cancelNativeAlarm(task['task'].toString(), customId: alarmId);
+    }
+    
+    setState(() {
+      for (final task in matches) {
+        _tasks.remove(task);
+      }
+    });
+    _saveData();
+    await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} $_userTitle.");
+    return;
+  }
+
+  final nameNorm = _norm(_secretaryName);
+  String searchTerm = cmd;
+  final deleteWords = ['امسح', 'امسحي', 'احذف', 'احذفي', 'شيل', 'شيلي', 'الغي', 'الغى', 'الغيلي', 'مسح', 'حذف', 'كانسل', 'كنسل', 'المنبه', 'منبه', 'مواعيد', 'موعد', 'معاد', 'ميعاد'];
+  for (final w in deleteWords) {
+    searchTerm = searchTerm.replaceAll(_norm(w), '');
+  }
+  searchTerm = searchTerm.replaceAll(nameNorm, '').trim();
+
+  if (searchTerm.isEmpty) {
+    await _speak("قُولِّي أَمْسَحْ أَنَّهِي مَوْعِدْ $_userTitle");
+    return;
+  }
+
+  final matches = _tasks.where((t) {
+    final taskName = _norm(t['task'].toString());
+    return taskName.contains(searchTerm) || searchTerm.contains(taskName);
+  }).toList();
+
+  if (matches.isEmpty) {
+    await _speak("مَفِيشْ مَوْعِدْ بِالاِسْمْ دَهْ $_userTitle");
+    return;
+  }
+
+  if (matches.length == 1) {
+    final task = matches.first;
+    final taskTitle = task['task'].toString();
+    final alarmId = task['alarmId'] as int?;
+    
+    // 👇 التعديل هنا: إلغاء الإشعار المتكرر من الأندرويد
+    if (alarmId != null) {
+      try { await _notifications.cancel(alarmId); } catch (_) {}
+    }
+    
+    setState(() => _tasks.remove(task));
+    _saveData();
+    await _cancelNativeAlarm(taskTitle, customId: alarmId);
+    await _speak("تَمَّ مَسْحُ مَوْعِدْ $taskTitle $_userTitle");
+  } else {
+    await _speak("لَقِيتْ ${matches.length} مَوَاعِيدْ بِالاِسْمْ دَهْ $_userTitle، حَدِّدْ أَكْتَرْ");
+  }
+ }
 
   Future<void> _editTaskByVoice(String cmd) async {
     final userTitle = _userTitle;
@@ -9399,7 +9411,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
                 if (_norm(answerController.text.trim()) == _norm(_settings.diarySecurityAnswer.trim()) && _settings.diarySecurityAnswer.isNotEmpty) {
                   Navigator.pop(ctx, 'success');
                 } else {
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('إجابة خاطئة!', backgroundColor: Colors.red)));
+                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('إجابة خاطئة!'), backgroundColor: Colors.red));
                 }
               },
               child: const Text('تحقق'),
@@ -9423,7 +9435,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
     if (result == _settings.diaryPin) return true;
 
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('كلمة السر غير صحيحة', backgroundColor: Colors.red)));
+     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('كلمة السر غير صحيحة'), backgroundColor: Colors.red));
     return false;
   }
 
