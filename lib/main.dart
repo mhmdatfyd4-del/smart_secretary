@@ -256,6 +256,7 @@ class AppSettings {
   String diaryPin;
   String diarySecurityQuestion;
   String diarySecurityAnswer;
+  bool isProUser;
 
   AppSettings({
     this.defaultReminderHour = 18,
@@ -287,6 +288,7 @@ class AppSettings {
     this.diaryPin = '',
     this.diarySecurityQuestion = '',
     this.diarySecurityAnswer = '',
+    this.isProUser = false,
   });
 
   double get speechRate {
@@ -11280,26 +11282,28 @@ class _PremiumScreenState extends State<PremiumScreen> {
             ),
             const SizedBox(height: 30),
             ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF25D366),
-                minimumSize: const Size.fromHeight(55),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              icon: const Icon(Icons.whatsapp, color: Colors.white, size: 30),
-              label: const Text('للطلب وشراء كود التفعيل (اضغط هنا)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-              onPressed: () async {
-                final Uri url = Uri.parse('https://wa.me/201012345678?text=أهلاً، أريد شراء كود تفعيل النسخة البرو لتطبيق السكرتير');
-                try {
-                  if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-                    throw 'Could not launch';
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تأكد من وجود تطبيق واتساب'), backgroundColor: Colors.red));
-                  }
-                }
-              },
-            ),
+  style: ElevatedButton.styleFrom(
+    backgroundColor: const Color(0xFF25D366),
+    minimumSize: const Size.fromHeight(55),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  ),
+  // 👇 التعديل هنا
+  icon: const FaIcon(FontAwesomeIcons.whatsapp, color: Colors.white, size: 30),
+  label: const Text('للطلب وشراء كود التفعيل (اضغط هنا)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+  onPressed: () async {
+    // 👇 متنساش تغير الرقم ده لرقمك
+    final Uri url = Uri.parse('https://wa.me/201032491766?text=أهلاً، أريد شراء كود تفعيل النسخة البرو لتطبيق السكرتير');
+    try {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        throw 'Could not launch';
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تأكد من وجود تطبيق واتساب'), backgroundColor: Colors.red));
+      }
+    }
+  },
+),
             const SizedBox(height: 30),
             const Row(children: [Expanded(child: Divider(color: Colors.white24)), Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('لديك كود بالفعل؟', style: TextStyle(color: Colors.white54))), Expanded(child: Divider(color: Colors.white24))]),
             const SizedBox(height: 20),
