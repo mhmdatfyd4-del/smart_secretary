@@ -28,6 +28,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:hijri/hijri_calendar.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 final StreamController<Map<String, dynamic>> _diaryVoiceStream = StreamController.broadcast();
 
@@ -85,6 +89,7 @@ AndroidNotificationSound? _getNotificationSound(String? soundUri) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(); // 👈 ضيف السطر ده هنا
   await initializeDateFormatting('ar');
   tz.initializeTimeZones();
   tz.setLocalLocation(tz.getLocation('Africa/Cairo'));
