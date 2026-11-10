@@ -32,6 +32,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 final StreamController<Map<String, dynamic>> _diaryVoiceStream = StreamController.broadcast();
 
@@ -89,7 +90,7 @@ AndroidNotificationSound? _getNotificationSound(String? soundUri) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(); // 👈 ضيف السطر ده هنا
+  await Firebase.initializeApp(); // 👈 تهيئة فايربيز
   await initializeDateFormatting('ar');
   tz.initializeTimeZones();
   tz.setLocalLocation(tz.getLocation('Africa/Cairo'));
@@ -250,7 +251,6 @@ class AppSettings {
   String customUserTitle;
   String customSecTitle;
   String stopRecordMode;
-  // 👇 الحقول الجديدة (التأجيل + قفل اليوميات)
   int snoozeMinutes;
   bool diaryLockEnabled;
   String diaryPin;
@@ -282,7 +282,6 @@ class AppSettings {
     this.customUserTitle = '',
     this.customSecTitle = '',
     this.stopRecordMode = 'manual_only',
-    // 👇 الجديد
     this.snoozeMinutes = 5,
     this.diaryLockEnabled = false,
     this.diaryPin = '',
@@ -321,7 +320,9 @@ class SettingsScreen extends StatefulWidget {
   final double ttsVolume;
   final String currentSecretaryName;
   final bool currentIsUserMale;
-  // 👇 تعديل: إضافة المتغيرات الجديدة
+  final bool isProUser; // 👈 تعديل
+  final VoidCallback onUpgrade; // 👈 تعديل
+
   final Future<void> Function(
     int hour, int minute, String voiceLevel,
     bool greeting, bool adhan, double ttsVol,
@@ -341,6 +342,8 @@ class SettingsScreen extends StatefulWidget {
     required this.ttsVolume,
     required this.currentSecretaryName,
     required this.currentIsUserMale,
+    required this.isProUser, // 👈 تعديل
+    required this.onUpgrade, // 👈 تعديل
     required this.onSave,
     required this.onSaveSecretary,
   });
@@ -376,7 +379,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late String _stopRecordMode;
   late String _origStopRecordMode;
 
-  // 👇 المتغيرات الجديدة
   late int _snoozeMinutes;
   late bool _diaryLockEnabled;
   late String _diaryPin;
@@ -388,7 +390,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   final TextEditingController _userTitleController = TextEditingController();
   final TextEditingController _secTitleController = TextEditingController();
-
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _wakeWordController = TextEditingController();
   final TextEditingController _customGreetingController = TextEditingController();
@@ -422,7 +423,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _defaultAlarmSound;
   String? _defaultWeeklySound;
   String? _defaultEventSound;
-
   String? _origDefaultAlarmSound;
   String? _origDefaultWeeklySound;
   String? _origDefaultEventSound;
@@ -461,7 +461,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _stopRecordMode = widget.settings.stopRecordMode;
     _origStopRecordMode = _stopRecordMode;
 
-    // 👇 الجديد
     _snoozeMinutes = widget.settings.snoozeMinutes;
     _diaryLockEnabled = widget.settings.diaryLockEnabled;
     _diaryPin = widget.settings.diaryPin;
@@ -573,7 +572,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  // 👇 دالة تغيير كلمة السر
   Future<void> _showChangePasswordDialog() async {
     final oldPinCtrl = TextEditingController();
     final newPinCtrl = TextEditingController();
@@ -741,6 +739,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // 👇 بانر الترقية للبرو
+          if (!widget.isProUser) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF1B2A4A), Color(0xFF2C3E50)], begin: Alignment.topRight, end: Alignment.bottomLeft),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4))],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: widget.onUpgrade,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.workspace_premium, color: Color(0xFFC5A059), size: 40),
+                        const SizedBox(width: 15),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('ترقية للنسخة البرو 👑', style: TextStyle(color: Color(0xFFC5A059), fontSize: 18, fontWeight: FontWeight.bold)),
+                              SizedBox(height: 4),
+                              Text('افتح الأوامر الصوتية، النداء الدائم، والمزيد...', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(color: const Color(0xFFC5A059), borderRadius: BorderRadius.circular(20)),
+                          child: const Text('50 ج.م', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -775,120 +815,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: InkWell(
-              onTap: () => _pickDefaultSound('alarm'),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.notifications_active, color: Color(0xFF1B2A4A), size: 26),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('🎵 صوت منبه المهام الافتراضي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          const SizedBox(height: 4),
-                          Text(
-                            _defaultAlarmSound == null
-                                ? (_voiceGender == 'ذكر' ? 'الافتراضي (السكرتير)' : 'الافتراضي (السكرتيرة)')
-                                : 'مخصص — بدون صوت سكرتيرة',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _defaultAlarmSound != null ? const Color(0xFFC5A059) : Colors.grey,
-                              fontWeight: _defaultAlarmSound != null ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
-                  ],
-                ),
+          
+          // 👇 كروت النغمات (مقفولة للبرو)
+          if (widget.isProUser) ...[
+            Card(
+              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: InkWell(
+                onTap: () => _pickDefaultSound('alarm'),
+                child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+                  const Icon(Icons.notifications_active, color: Color(0xFF1B2A4A), size: 26), const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('🎵 صوت منبه المهام', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(_defaultAlarmSound == null ? 'الافتراضي' : 'مخصص', style: TextStyle(fontSize: 12, color: _defaultAlarmSound != null ? const Color(0xFFC5A059) : Colors.grey)),
+                  ])),
+                  const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+                ])),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: InkWell(
-              onTap: () => _pickDefaultSound('weekly'),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_month, color: Color(0xFF1B2A4A), size: 26),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('🎵 صوت منبه الجدول الأسبوعي الافتراضي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          const SizedBox(height: 4),
-                          Text(
-                            _defaultWeeklySound == null
-                                ? (_voiceGender == 'ذكر' ? 'الافتراضي (السكرتير)' : 'الافتراضي (السكرتيرة)')
-                                : 'مخصص — بدون صوت سكرتيرة',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _defaultWeeklySound != null ? const Color(0xFFC5A059) : Colors.grey,
-                              fontWeight: _defaultWeeklySound != null ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
-                  ],
-                ),
+            const SizedBox(height: 12),
+            Card(
+              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: InkWell(
+                onTap: () => _pickDefaultSound('weekly'),
+                child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+                  const Icon(Icons.calendar_month, color: Color(0xFF1B2A4A), size: 26), const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('🎵 صوت منبه الجدول', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(_defaultWeeklySound == null ? 'الافتراضي' : 'مخصص', style: TextStyle(fontSize: 12, color: _defaultWeeklySound != null ? const Color(0xFFC5A059) : Colors.grey)),
+                  ])),
+                  const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+                ])),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: InkWell(
-              onTap: () => _pickDefaultSound('event'),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.celebration, color: Color(0xFF1B2A4A), size: 26),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('🎵 صوت المناسبات الافتراضي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          const SizedBox(height: 4),
-                          Text(
-                            _defaultEventSound == null
-                                ? (_voiceGender == 'ذكر' ? 'الافتراضي (السكرتير)' : 'الافتراضي (السكرتيرة)')
-                                : 'مخصص — بدون صوت سكرتيرة',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _defaultEventSound != null ? const Color(0xFFC5A059) : Colors.grey,
-                              fontWeight: _defaultEventSound != null ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
-                  ],
-                ),
+            const SizedBox(height: 12),
+            Card(
+              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: InkWell(
+                onTap: () => _pickDefaultSound('event'),
+                child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+                  const Icon(Icons.celebration, color: Color(0xFF1B2A4A), size: 26), const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('🎵 صوت المناسبات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(_defaultEventSound == null ? 'الافتراضي' : 'مخصص', style: TextStyle(fontSize: 12, color: _defaultEventSound != null ? const Color(0xFFC5A059) : Colors.grey)),
+                  ])),
+                  const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+                ])),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ] else ...[
+            Card(
+              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: ListTile(
+                leading: const Icon(Icons.notifications_active, color: Colors.grey, size: 26),
+                title: const Text('🎵 تغيير نغمات المنبهات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey)),
+                subtitle: const Text('متاح في النسخة البرو 👑', style: TextStyle(color: Color(0xFFC5A059), fontSize: 12)),
+                trailing: const Icon(Icons.lock, color: Color(0xFFC5A059)),
+                onTap: widget.onUpgrade,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          
+          // 👇 كارت السكرتير (مقفول للبرو)
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -897,95 +886,106 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [
-                    Text(secTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  ]),
-                  const SizedBox(height: 10),
-                  Center(
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        GestureDetector(
-                          onTap: _pickCustomImage,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            width: 100, height: 100,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: const Color(0xFFC5A059), width: 3),
-                              image: DecorationImage(
-                                image: _customImagePath != null ? FileImage(File(_customImagePath!)) as ImageProvider : AssetImage(_getSecretaryImage(_nameController.text, _voiceGender)),
-                                fit: BoxFit.cover, alignment: Alignment.topCenter,
+                  if (widget.isProUser) ...[
+                    Row(children: [ Text(secTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)) ]),
+                    const SizedBox(height: 10),
+                    Center(
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          GestureDetector(
+                            onTap: _pickCustomImage,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              width: 100, height: 100,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFFC5A059), width: 3),
+                                image: DecorationImage(
+                                  image: _customImagePath != null ? FileImage(File(_customImagePath!)) as ImageProvider : AssetImage(_getSecretaryImage(_nameController.text, _voiceGender)),
+                                  fit: BoxFit.cover, alignment: Alignment.topCenter,
+                                ),
                               ),
-                            ),
-                            child: Align(
-                              alignment: Alignment.bottomRight,
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(color: Color(0xFF1B2A4A), shape: BoxShape.circle),
-                                child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (_customImagePath != null)
-                          Positioned(
-                            top: 0, left: 0,
-                            child: GestureDetector(
-                              onTap: () async {
-                                final prefs = await SharedPreferences.getInstance();
-                                await prefs.remove('custom_img_${_nameController.text}');
-                                setState(() => _customImagePath = null);
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                                child: const Icon(Icons.close, color: Colors.white, size: 16),
+                              child: Align(
+                                alignment: Alignment.bottomRight,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(color: Color(0xFF1B2A4A), shape: BoxShape.circle),
+                                  child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                                ),
                               ),
                             ),
                           ),
-                      ],
+                          if (_customImagePath != null)
+                            Positioned(
+                              top: 0, left: 0,
+                              child: GestureDetector(
+                                onTap: () async {
+                                  final prefs = await SharedPreferences.getInstance();
+                                  await prefs.remove('custom_img_${_nameController.text}');
+                                  setState(() => _customImagePath = null);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                  child: const Icon(Icons.close, color: Colors.white, size: 16),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 15),
-                  const Text('اختر أو أضف اسماً:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8.0, runSpacing: 8.0,
-                    children: names.map((name) {
-                      final isSelected = _nameController.text == name;
-                      return ActionChip(
-                        label: Text(name),
-                        backgroundColor: isSelected ? const Color(0xFFC5A059) : Colors.grey.shade200,
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.black : Colors.black87,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        ),
-                        onPressed: () async {
-                          setState(() => _nameController.text = name);
-                          final prefs = await SharedPreferences.getInstance();
-                          setState(() {
-                            _customImagePath = prefs.getString('custom_img_$name');
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _nameController,
-                    onChanged: (v) => setState(() {}),
-                    decoration: InputDecoration(
-                      labelText: 'اسم $secTitle',
-                      prefixIcon: const Icon(Icons.badge, color: Color(0xFF1B2A4A)),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    const SizedBox(height: 15),
+                    const Text('اختر أو أضف اسماً:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8.0, runSpacing: 8.0,
+                      children: names.map((name) {
+                        final isSelected = _nameController.text == name;
+                        return ActionChip(
+                          label: Text(name),
+                          backgroundColor: isSelected ? const Color(0xFFC5A059) : Colors.grey.shade200,
+                          labelStyle: TextStyle(
+                            color: isSelected ? Colors.black : Colors.black87,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          onPressed: () async {
+                            setState(() => _nameController.text = name);
+                            final prefs = await SharedPreferences.getInstance();
+                            setState(() {
+                              _customImagePath = prefs.getString('custom_img_$name');
+                            });
+                          },
+                        );
+                      }).toList(),
                     ),
-                  ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _nameController,
+                      onChanged: (v) => setState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'اسم $secTitle',
+                        prefixIcon: const Icon(Icons.badge, color: Color(0xFF1B2A4A)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ] else ...[
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.face, color: Colors.grey, size: 30),
+                      title: const Text('تخصيص السكرتير (الاسم والصورة)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey)),
+                      subtitle: const Text('متاح في النسخة البرو 👑', style: TextStyle(color: Color(0xFFC5A059), fontSize: 12)),
+                      trailing: const Icon(Icons.lock, color: Color(0xFFC5A059)),
+                      onTap: widget.onUpgrade,
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
           const SizedBox(height: 12),
+          
+          // 👇 كارت وقت التذكير
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1010,6 +1010,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          
+          // 👇 كارت التنبيه المستمر
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1035,8 +1037,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-          // 👇 كارت وقت التأجيل
           const SizedBox(height: 12),
+          
+          // 👇 كارت التأجيل
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1061,55 +1064,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-          // 👇 كارت قفل اليوميات
+          
+          // 👇 قفل اليوميات (مقفول للبرو)
           const SizedBox(height: 12),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    secondary: const Icon(Icons.lock, color: Color(0xFF1B2A4A), size: 26),
-                    title: const Text('تفعيل قفل اليوميات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    value: _diaryLockEnabled,
-                    activeColor: const Color(0xFF1B2A4A),
-                    onChanged: (val) => setState(() => _diaryLockEnabled = val),
-                  ),
-                  if (_diaryLockEnabled) ...[
-                    const Divider(),
-                    if (_diaryPin.isEmpty) ...[
-                      TextField(
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'كلمة السر الجديدة (أرقام)', border: OutlineInputBorder()),
-                        onChanged: (val) => _diaryPin = val,
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        decoration: const InputDecoration(labelText: 'سؤال الأمان (مثال: اسم معلمك)', border: OutlineInputBorder()),
-                        onChanged: (val) => _diarySecurityQuestion = val,
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        decoration: const InputDecoration(labelText: 'إجابة سؤال الأمان', border: OutlineInputBorder()),
-                        onChanged: (val) => _diarySecurityAnswer = val,
-                      ),
-                    ] else ...[
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
-                        icon: const Icon(Icons.lock_reset, color: Colors.white),
-                        label: const Text('تغيير كلمة السر أو سؤال الأمان', style: TextStyle(color: Colors.white)),
-                        onPressed: _showChangePasswordDialog,
-                      ),
+          if (widget.isProUser)
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.lock, color: Color(0xFF1B2A4A), size: 26),
+                      title: const Text('تفعيل قفل اليوميات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      value: _diaryLockEnabled,
+                      activeColor: const Color(0xFF1B2A4A),
+                      onChanged: (val) => setState(() => _diaryLockEnabled = val),
+                    ),
+                    if (_diaryLockEnabled) ...[
+                      const Divider(),
+                      if (_diaryPin.isEmpty) ...[
+                        TextField(
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'كلمة السر الجديدة (أرقام)', border: OutlineInputBorder()),
+                          onChanged: (val) => _diaryPin = val,
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          decoration: const InputDecoration(labelText: 'سؤال الأمان (مثال: اسم معلمك)', border: OutlineInputBorder()),
+                          onChanged: (val) => _diarySecurityQuestion = val,
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          decoration: const InputDecoration(labelText: 'إجابة سؤال الأمان', border: OutlineInputBorder()),
+                          onChanged: (val) => _diarySecurityAnswer = val,
+                        ),
+                      ] else ...[
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
+                          icon: const Icon(Icons.lock_reset, color: Colors.white),
+                          label: const Text('تغيير كلمة السر أو سؤال الأمان', style: TextStyle(color: Colors.white)),
+                          onPressed: _showChangePasswordDialog,
+                        ),
+                      ]
                     ]
-                  ]
-                ],
+                  ],
+                ),
+              ),
+            )
+          else
+            Card(
+              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: ListTile(
+                leading: const Icon(Icons.lock, color: Colors.grey, size: 26),
+                title: const Text('قفل اليوميات بكلمة سر', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey)),
+                subtitle: const Text('متاح في النسخة البرو 👑', style: TextStyle(color: Color(0xFFC5A059), fontSize: 12)),
+                trailing: const Icon(Icons.lock, color: Color(0xFFC5A059)),
+                onTap: widget.onUpgrade,
               ),
             ),
-          ),
+          
           const SizedBox(height: 12),
           Card(
             elevation: 2,
@@ -1295,34 +1312,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
+          
+          // 👇 إيقاف التسجيل بالهز (مقفول للبرو)
           const SizedBox(height: 12),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(children: [
-                    Icon(Icons.stop_circle, color: Color(0xFF1B2A4A), size: 26),
-                    SizedBox(width: 10),
-                    Text('طريقة إيقاف التسجيل الصوتي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  ]),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: _stopRecordMode,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
-                    items: [
-                      DropdownMenuItem(value: 'shake_only', child: Text('بمجرد الهز فقط')),
-                      DropdownMenuItem(value: 'manual_only', child: Text('باستخدام الأزرار فقط')),
-                    ],
-                    onChanged: (val) => setState(() => _stopRecordMode = val ?? 'manual_only'),
-                  ),
-                ],
+          if (widget.isProUser)
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(children: [
+                      Icon(Icons.stop_circle, color: Color(0xFF1B2A4A), size: 26),
+                      SizedBox(width: 10),
+                      Text('طريقة إيقاف التسجيل الصوتي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    ]),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: _stopRecordMode,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: [
+                        DropdownMenuItem(value: 'shake_only', child: Text('بمجرد الهز فقط')),
+                        DropdownMenuItem(value: 'manual_only', child: Text('باستخدام الأزرار فقط')),
+                      ],
+                      onChanged: (val) => setState(() => _stopRecordMode = val ?? 'manual_only'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Card(
+              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: ListTile(
+                leading: const Icon(Icons.stop_circle, color: Colors.grey, size: 26),
+                title: const Text('إيقاف التسجيل بالهز', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey)),
+                subtitle: const Text('متاح في النسخة البرو 👑', style: TextStyle(color: Color(0xFFC5A059), fontSize: 12)),
+                trailing: const Icon(Icons.lock, color: Color(0xFFC5A059)),
+                onTap: widget.onUpgrade,
               ),
             ),
-          ),
+            
           const SizedBox(height: 12),
           Card(
             elevation: 2,
@@ -1333,19 +1365,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: _isDarkMode,
               activeColor: const Color(0xFF1B2A4A),
               onChanged: (v) => setState(() => _isDarkMode = v),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: SwitchListTile(
-              secondary: const Icon(Icons.child_care, color: Colors.grey, size: 26),
-              title: const Text('وضع الطفل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey)),
-              subtitle: const Text('قريباً...', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              value: false,
-              activeColor: Colors.grey,
-              onChanged: null,
             ),
           ),
           const SizedBox(height: 12),
@@ -1376,6 +1395,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
+          
+          // 👇 كارت الترحيب مع المعاينة الحية
           const SizedBox(height: 12),
           Card(
             elevation: 2,
@@ -1397,72 +1418,110 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     controller: _customGreetingController,
                     maxLines: 3,
                     onChanged: (v) => setState(() {}),
-                    decoration: const InputDecoration(
-                      hintText: 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}...',
-                      border: OutlineInputBorder(),
+                    decoration: const InputDecoration(hintText: 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}...', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 15),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC5A059).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFC5A059), width: 1),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(children: [
-                    Icon(Icons.mic_external_on, color: Color(0xFF1B2A4A), size: 26),
-                    SizedBox(width: 10),
-                    Text('وضع النداء الدائم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  ]),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: _wakeWordMode,
-                    decoration: const InputDecoration(labelText: 'حالة النداء', border: OutlineInputBorder()),
-                    items: [
-                      DropdownMenuItem(value: 'off', child: Text('متوقف')),
-                      DropdownMenuItem(value: 'app_open', child: Text('التطبيق مفتوح فقط')),
-                      DropdownMenuItem(value: 'background', child: Text('التطبيق مفتوح + الخلفية')),
-                      DropdownMenuItem(value: 'always', child: Text('دائماً (حتى لو التطبيق مقفول)')),
-                    ],
-                    onChanged: (val) => setState(() => _wakeWordMode = val ?? 'off'),
-                  ),
-                  if (_wakeWordMode != 'off') ...[
-                    const Divider(height: 30),
-                    const Text('إيه اللي يخلي السكرتير يستمع؟', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: _wakeWordTrigger,
-                      decoration: const InputDecoration(border: OutlineInputBorder()),
-                      items: [
-                        DropdownMenuItem(value: 'both', child: Text('الاسم + كلمة السر')),
-                        DropdownMenuItem(value: 'name_only', child: Text('اسم السكرتير فقط')),
-                        DropdownMenuItem(value: 'custom_only', child: Text('كلمة السر فقط')),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('معاينة الترحيب (كما سيسمعه المستخدم):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1B2A4A))),
+                        const SizedBox(height: 5),
+                        Text(
+                          () {
+                            final userTitle = _userTitleController.text.trim().isNotEmpty ? _userTitleController.text.trim() : (widget.currentIsUserMale ? 'يا فندم' : 'يا أستاذة');
+                            final secTitle = _secTitleController.text.trim().isNotEmpty ? _secTitleController.text.trim() : (_voiceGender == 'ذكر' ? 'السكرتير' : 'السكرتيرة');
+                            final name = _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : (_voiceGender == 'ذكر' ? 'محمد' : 'سارة');
+                            return _customGreetingController.text.replaceAll('{user}', userTitle).replaceAll('{sec}', secTitle).replaceAll('{name}', name);
+                          }(),
+                          style: const TextStyle(fontSize: 14, height: 1.5, fontWeight: FontWeight.w600),
+                        ),
                       ],
-                      onChanged: (val) => setState(() => _wakeWordTrigger = val ?? 'both'),
                     ),
-                    const SizedBox(height: 15),
-                    TextField(
-                      controller: _wakeWordController,
-                      enabled: _wakeWordTrigger != 'name_only',
-                      decoration: InputDecoration(
-                        labelText: 'كلمة السر',
-                        hintText: 'مثال: يا بطل، يا سكرتير',
-                        border: const OutlineInputBorder(),
-                        fillColor: _wakeWordTrigger == 'name_only' ? Colors.grey.shade200 : null,
-                        filled: _wakeWordTrigger == 'name_only',
-                      ),
-                    ),
-                  ]
+                  ),
                 ],
               ),
             ),
           ),
+          
+          // 👇 وضع النداء الدائم (مقفول للبرو)
+          const SizedBox(height: 12),
+          if (widget.isProUser)
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(children: [
+                      Icon(Icons.mic_external_on, color: Color(0xFF1B2A4A), size: 26),
+                      SizedBox(width: 10),
+                      Text('وضع النداء الدائم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    ]),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: _wakeWordMode,
+                      decoration: const InputDecoration(labelText: 'حالة النداء', border: OutlineInputBorder()),
+                      items: [
+                        DropdownMenuItem(value: 'off', child: Text('متوقف')),
+                        DropdownMenuItem(value: 'app_open', child: Text('التطبيق مفتوح فقط')),
+                        DropdownMenuItem(value: 'background', child: Text('التطبيق مفتوح + الخلفية')),
+                        DropdownMenuItem(value: 'always', child: Text('دائماً (حتى لو التطبيق مقفول)')),
+                      ],
+                      onChanged: (val) => setState(() => _wakeWordMode = val ?? 'off'),
+                    ),
+                    if (_wakeWordMode != 'off') ...[
+                      const Divider(height: 30),
+                      const Text('إيه اللي يخلي السكرتير يستمع؟', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        value: _wakeWordTrigger,
+                        decoration: const InputDecoration(border: OutlineInputBorder()),
+                        items: [
+                          DropdownMenuItem(value: 'both', child: Text('الاسم + كلمة السر')),
+                          DropdownMenuItem(value: 'name_only', child: Text('اسم السكرتير فقط')),
+                          DropdownMenuItem(value: 'custom_only', child: Text('كلمة السر فقط')),
+                        ],
+                        onChanged: (val) => setState(() => _wakeWordTrigger = val ?? 'both'),
+                      ),
+                      const SizedBox(height: 15),
+                      TextField(
+                        controller: _wakeWordController,
+                        enabled: _wakeWordTrigger != 'name_only',
+                        decoration: InputDecoration(
+                          labelText: 'كلمة السر',
+                          hintText: 'مثال: يا بطل، يا سكرتير',
+                          border: const OutlineInputBorder(),
+                          fillColor: _wakeWordTrigger == 'name_only' ? Colors.grey.shade200 : null,
+                          filled: _wakeWordTrigger == 'name_only',
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
+              ),
+            )
+          else
+            Card(
+              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: ListTile(
+                leading: const Icon(Icons.mic_external_on, color: Colors.grey, size: 26),
+                title: const Text('النداء الدائم (يا سكرتير)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey)),
+                subtitle: const Text('متاح في النسخة البرو 👑', style: TextStyle(color: Color(0xFFC5A059), fontSize: 12)),
+                trailing: const Icon(Icons.lock, color: Color(0xFFC5A059)),
+                onTap: widget.onUpgrade,
+              ),
+            ),
+            
           const SizedBox(height: 30),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
@@ -1540,107 +1599,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   icon: const Icon(Icons.restore, color: Colors.white, size: 18),
                   label: const Text('استعادة الافتراضي', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-onPressed: () async {
-  _restoreClickCount++;
-  _restoreTimer?.cancel();
+                  onPressed: () async {
+                    _restoreClickCount++;
+                    _restoreTimer?.cancel();
 
-  // 👇 الخدعة السرية: 5 ضغطات سريعة تلغي الباسورد فقط
-  if (_restoreClickCount >= 5) {
-    _restoreClickCount = 0;
-    setState(() {
-      _diaryLockEnabled = false;
-      _diaryPin = '';
-      _diarySecurityQuestion = '';
-      _diarySecurityAnswer = '';
-    });
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('diary_lock_enabled', false);
-    await prefs.setString('diary_pin', '');
-    await prefs.setString('diary_sec_q', '');
-    await prefs.setString('diary_sec_a', '');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم إلغاء قفل اليوميات فقط (الإعدادات الأخرى لم تتأثر)'), backgroundColor: Colors.orange),
-      );
-    }
-    return;
-  }
+                    if (_restoreClickCount >= 5) {
+                      _restoreClickCount = 0;
+                      setState(() {
+                        _diaryLockEnabled = false;
+                        _diaryPin = '';
+                        _diarySecurityQuestion = '';
+                        _diarySecurityAnswer = '';
+                      });
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('diary_lock_enabled', false);
+                      await prefs.setString('diary_pin', '');
+                      await prefs.setString('diary_sec_q', '');
+                      await prefs.setString('diary_sec_a', '');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('تم إلغاء قفل اليوميات فقط (الإعدادات الأخرى لم تتأثر)'), backgroundColor: Colors.orange),
+                        );
+                      }
+                      return;
+                    }
 
-  // 👇 لو دوس مرة واحدة، بنعمل استعادة عادية مع الحفاظ على الباسورد
-  _restoreTimer = Timer(const Duration(seconds: 2), () async {
-    if (_restoreClickCount == 1) {
-      final bool keepLock = _diaryLockEnabled;
-      final String keepPin = _diaryPin;
-      final String keepQ = _diarySecurityQuestion;
-      final String keepA = _diarySecurityAnswer;
+                    _restoreTimer = Timer(const Duration(seconds: 2), () async {
+                      if (_restoreClickCount == 1) {
+                        final bool keepLock = _diaryLockEnabled;
+                        final String keepPin = _diaryPin;
+                        final String keepQ = _diarySecurityQuestion;
+                        final String keepA = _diarySecurityAnswer;
 
-      setState(() {
-        _defaultReminderHour = 18;
-        _defaultReminderMinute = 0;
-        _voiceLevel = 'متوسط';
-        _greetingEnabled = true;
-        _adhanAlertEnabled = true;
-        _showAboveLockScreen = false;
-        _shakeMode = 'app_open';
-        _muteBeep = true;
-        _voiceGender = 'ذكر';
-        _defaultInterval = 'كل 10 ثواني';
-        _secretaryName = 'محمد';
-        _nameController.text = 'محمد';
-        _wakeWordMode = 'off';
-        _wakeWordTrigger = 'both';
-        _wakeWordController.text = 'يا سكرتير';
-        _isKidsMode = false;
-        _tahajjudAlertEnabled = false;
-        _isDarkMode = false;
-        _useOverlayAlarm = false;
-        _ttsVolume = 1.0;
-        _customImagePath = null;
-        _defaultAlarmSound = null;
-        _defaultWeeklySound = null;
-        _defaultEventSound = null;
-        _customGreetingController.text = 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.';
-        _userTitleController.clear();
-        _secTitleController.clear();
-        _stopRecordMode = 'manual_only';
-        _snoozeMinutes = 5;
-        
-        _diaryLockEnabled = keepLock;
-        _diaryPin = keepPin;
-        _diarySecurityQuestion = keepQ;
-        _diarySecurityAnswer = keepA;
-      });
+                        setState(() {
+                          _defaultReminderHour = 18;
+                          _defaultReminderMinute = 0;
+                          _voiceLevel = 'متوسط';
+                          _greetingEnabled = true;
+                          _adhanAlertEnabled = true;
+                          _showAboveLockScreen = false;
+                          _shakeMode = 'app_open';
+                          _muteBeep = true;
+                          _voiceGender = 'ذكر';
+                          _defaultInterval = 'كل 10 ثواني';
+                          _secretaryName = 'محمد';
+                          _nameController.text = 'محمد';
+                          _wakeWordMode = 'off';
+                          _wakeWordTrigger = 'both';
+                          _wakeWordController.text = 'يا سكرتير';
+                          _isKidsMode = false;
+                          _tahajjudAlertEnabled = false;
+                          _isDarkMode = false;
+                          _useOverlayAlarm = false;
+                          _ttsVolume = 1.0;
+                          _customImagePath = null;
+                          _defaultAlarmSound = null;
+                          _defaultWeeklySound = null;
+                          _defaultEventSound = null;
+                          _customGreetingController.text = 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.';
+                          _userTitleController.clear();
+                          _secTitleController.clear();
+                          _stopRecordMode = 'manual_only';
+                          _snoozeMinutes = 5;
+                          
+                          _diaryLockEnabled = keepLock;
+                          _diaryPin = keepPin;
+                          _diarySecurityQuestion = keepQ;
+                          _diarySecurityAnswer = keepA;
+                        });
 
-      await widget.onSave(
-        18, 0, 'متوسط',
-        true, true, 1.0,
-        false, 'app_open', 'ذكر',
-        'كل 10 ثواني', 'يا سكرتير', 'off', 'both',
-        true, false,
-        false, 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.', false, false, null,
-        'manual_only',
-        5, keepLock, keepPin, keepQ, keepA,
-      );
+                        await widget.onSave(
+                          18, 0, 'متوسط',
+                          true, true, 1.0,
+                          false, 'app_open', 'ذكر',
+                          'كل 10 ثواني', 'يا سكرتير', 'off', 'both',
+                          true, false,
+                          false, 'أَهْلاً بِكَ {user}. أَنَا {sec} {name}، هُزَّ الهَاتِفَ فِي أَيِّ وَقْتٍ لِأَكُونَ فِي خِدْمَتِكَ.', false, false, null,
+                          'manual_only',
+                          5, keepLock, keepPin, keepQ, keepA,
+                        );
 
-      await widget.onSaveSecretary('محمد', 'ذكر');
+                        await widget.onSaveSecretary('محمد', 'ذكر');
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('default_alarm_sound');
-      await prefs.remove('default_weekly_sound');
-      await prefs.remove('default_event_sound');
-      await prefs.remove('custom_user_title');
-      await prefs.remove('custom_sec_title');
-      await prefs.setInt('snooze_minutes', 5);
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.remove('default_alarm_sound');
+                        await prefs.remove('default_weekly_sound');
+                        await prefs.remove('default_event_sound');
+                        await prefs.remove('custom_user_title');
+                        await prefs.remove('custom_sec_title');
+                        await prefs.setInt('snooze_minutes', 5);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تمت استعادة الإعدادات الافتراضية بنجاح (ماعدا قفل اليوميات)'), backgroundColor: Colors.green),
-        );
-      }
-    }
-    _restoreClickCount = 0;
-  });
-},
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('تمت استعادة الإعدادات الافتراضية بنجاح (ماعدا قفل اليوميات)'), backgroundColor: Colors.green),
+                          );
+                        }
+                      }
+                      _restoreClickCount = 0;
+                    });
+                  },
                 ),
               ),
             ],
@@ -2397,6 +2454,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   bool _isWakeWordListening = false;
   bool _isAlarmDialogOpen = false;
   bool _voiceDiaryAuthTemp = false;
+  bool _isProUser = false; // 👈 تعديل: إضافة حالة البرو
   String? _activeAlarmTitle;
   BuildContext? _alarmDialogContext;
 
@@ -2424,7 +2482,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   bool _isTasbeehMode = false;
   String _prayerSubView = 'times';
 
-  // 👇 متغيرات جديدة
   int _wakeWordFailCount = 0;
   bool _showOnlyRecurring = false;
 
@@ -2541,6 +2598,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     WidgetsBinding.instance.addObserver(this);
     _secretaryName = widget.secretaryName;
     _isUserMale = widget.isUserMale;
+    _checkProStatus(); // 👈 تعديل: فحص حالة البرو
 
     _wakeWordChannel.setMethodCallHandler((call) async {
       if (call.method == 'onWakeWordDetected') {
@@ -2625,29 +2683,29 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         _isWakeWordListening = false;
 
         if (stoppedTitle != null) {
-  final task = _tasks.firstWhere(
-    (t) => t['task'] == stoppedTitle,
-    orElse: () => {},
-  );
-  final alarmId = task['alarmId'] as int?;
+          final task = _tasks.firstWhere(
+            (t) => t['task'] == stoppedTitle,
+            orElse: () => {},
+          );
+          final alarmId = task['alarmId'] as int?;
 
-  if (alarmId != null) {
-    try { _notifications.cancel(alarmId); } catch (_) {}
-    _cancelNativeAlarm(stoppedTitle, customId: alarmId);
-  } else {
-    try { _notifications.cancel(stoppedTitle.hashCode + 1000); } catch (_) {}
-    _cancelNativeAlarm(stoppedTitle);
-  }
+          if (alarmId != null) {
+            try { _notifications.cancel(alarmId); } catch (_) {}
+            _cancelNativeAlarm(stoppedTitle, customId: alarmId);
+          } else {
+            try { _notifications.cancel(stoppedTitle.hashCode + 1000); } catch (_) {}
+            _cancelNativeAlarm(stoppedTitle);
+          }
 
-  SharedPreferences.getInstance().then((prefs) => prefs.remove('pending_alarm'));
-  final idx = _tasks.indexWhere((t) => t['task'] == stoppedTitle);
-  if (idx != -1) {
-    final task = _tasks[idx];
-    if (task['repeat'] == 'مرة واحدة' || task['repeat'] == null) {
-      setState(() => _tasks.removeAt(idx));
-      _saveData();
-    }
-  }
+          SharedPreferences.getInstance().then((prefs) => prefs.remove('pending_alarm'));
+          final idx = _tasks.indexWhere((t) => t['task'] == stoppedTitle);
+          if (idx != -1) {
+            final task = _tasks[idx];
+            if (task['repeat'] == 'مرة واحدة' || task['repeat'] == null) {
+              setState(() => _tasks.removeAt(idx));
+              _saveData();
+            }
+          }
         }
       }
 
@@ -2667,6 +2725,25 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     });
 
     _initAll();
+  }
+
+  // 👇 تعديل: دالة فحص حالة البرو
+  Future<void> _checkProStatus() async {
+    const storage = FlutterSecureStorage();
+    final localIsPro = await storage.read(key: 'is_pro_user');
+    if (localIsPro == 'true') {
+      if (mounted) setState(() => _isProUser = true);
+    }
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(const Duration(seconds: 3));
+        if (doc.exists && doc.get('isPro') == true) {
+          await storage.write(key: 'is_pro_user', value: 'true');
+          if (mounted) setState(() => _isProUser = true);
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -2750,7 +2827,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // 👇 تعديل: دالة _checkPendingAlarm بقت تفرق بين مرة واحدة والمتكرر
   Future<void> _checkPendingAlarm() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -2775,15 +2851,13 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final diff = nowMillis - scheduledMillis;
 
       if (repeat == 'مرة واحدة') {
-        // المنبه العادي: نسمح بـ 5 دقايق فقط
         if (diff > 5 * 60 * 1000) {
           await prefs.remove('pending_alarm');
           return;
         }
         if (diff < -60 * 1000) return;
       } else {
-        // المنبه المتكرر (يومي/أسبوعي/شهري/مخصص): نسمح بـ 12 ساعة
-        if (diff > 12 * 60 * 60 * 1000) {
+        if (diff > 5 * 60 * 1000) {
           await prefs.remove('pending_alarm');
           return;
         }
@@ -2891,22 +2965,22 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           final prayerTime = dayPrayers[prayer]!;
           if (prayerTime.isBefore(now)) continue;
 
-          final channelId = 'adhan_channel_${prayer}_v1';
+          final channelId = 'adhan_channel_${prayer}_v2'; // 👈 تعديل: v2 لمنع المشاكل
           final channelName = 'تنبيهات الأذان ${names[prayer]}';
 
           final androidDetails = AndroidNotificationDetails(
             channelId,
             channelName,
             channelDescription: 'تنبيهات مواقيت الصلاة',
-            importance: Importance.max,
-            priority: Priority.max,
+            importance: Importance.high, // 👈 تعديل
+            priority: Priority.high, // 👈 تعديل
             playSound: true,
             sound: RawResourceAndroidNotificationSound(sounds[prayer]),
             enableVibration: true,
             category: AndroidNotificationCategory.alarm,
-            autoCancel: false,
-            ongoing: true,
-            fullScreenIntent: true,
+            autoCancel: true, // 👈 تعديل
+            ongoing: false, // 👈 تعديل
+            fullScreenIntent: false, // 👈 تعديل
             visibility: NotificationVisibility.public,
             audioAttributesUsage: AudioAttributesUsage.alarm,
           );
@@ -2951,15 +3025,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final scheduledTime = now.add(Duration(hours: i));
 
       final androidDetails = AndroidNotificationDetails(
-        'salat_ala_nabi_channel_v1',
+        'salat_ala_nabi_channel_v2', // 👈 تعديل: v2
         'تذكير الصلاة على النبي',
         channelDescription: 'تنبيهات تذكير الصلاة على النبي',
-        importance: Importance.max,
-        priority: Priority.max,
+        importance: Importance.high, // 👈 تعديل
+        priority: Priority.high, // 👈 تعديل
         playSound: true,
         sound: const RawResourceAndroidNotificationSound('salat_ala_nabi'),
         enableVibration: true,
         category: AndroidNotificationCategory.reminder,
+        fullScreenIntent: false, // 👈 تعديل
       );
 
       try {
@@ -3247,12 +3322,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _settings.customSecTitle = prefs.getString('custom_sec_title') ?? '';
     _settings.stopRecordMode = prefs.getString('stop_record_mode') ?? 'manual_only';
 
-    // 👇 الجديد: التأجيل وقفل اليوميات
     _settings.snoozeMinutes = prefs.getInt('snooze_minutes') ?? 5;
     _settings.diaryLockEnabled = prefs.getBool('diary_lock_enabled') ?? false;
     _settings.diaryPin = prefs.getString('diary_pin') ?? '';
     _settings.diarySecurityQuestion = prefs.getString('diary_sec_q') ?? '';
     _settings.diarySecurityAnswer = prefs.getString('diary_sec_a') ?? '';
+    _settings.isProUser = prefs.getBool('is_pro_user') ?? false; // 👈 تعديل
 
     Future.delayed(const Duration(seconds: 2), () {
       _scheduleSalatAlaNabi();
@@ -3298,6 +3373,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await prefs.setString('custom_greeting', _settings.customGreeting);
     await prefs.setBool('tahajjud_alert_enabled', _settings.tahajjudAlertEnabled);
     await prefs.setBool('is_dark_mode', _settings.isDarkMode);
+    await prefs.setBool('is_pro_user', _settings.isProUser); // 👈 تعديل
     if (_settings.customImagePath != null) {
       await prefs.setString('custom_secretary_image', _settings.customImagePath!);
     } else {
@@ -3312,7 +3388,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await prefs.setDouble('tts_volume', _ttsVolume);
     await prefs.setString('stop_record_mode', _settings.stopRecordMode);
 
-    // 👇 الجديد: التأجيل وقفل اليوميات
     await prefs.setInt('snooze_minutes', _settings.snoozeMinutes);
     await prefs.setBool('diary_lock_enabled', _settings.diaryLockEnabled);
     await prefs.setString('diary_pin', _settings.diaryPin);
@@ -3672,6 +3747,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _listenVoiceCommand() async {
+    // 👇 تعديل: قفل المايك للنسخة البرو
+    if (!_isProUser) {
+      if (mounted) {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => PremiumScreen(
+          onActivated: () => setState(() => _isProUser = true),
+        )));
+      }
+      return;
+    }
+
     if (_isListening) {
       await _speech.stop();
       if (mounted) setState(() => _isListening = false);
@@ -4176,7 +4261,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       try { return DateTime(now.year, parsedMonth, parsedDay); } catch (_) { return null; }
     }
 
-    // 👇 الجديد: فهم "يوم عشرة" من غير شهر
     if (parsedMonth == null) {
       final dayOnlyMatch = RegExp(r'يوم\s*(\d{1,2})').firstMatch(normCmd);
       if (dayOnlyMatch != null) {
@@ -4372,10 +4456,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final cmd = _norm(rawCommand);
     final nameNorm = _norm(_secretaryName);
     bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('يا سكرتيرة');
-
-    // 👈 ==========================================
-    // 👈 بداية الأوامر الصوتية للإعدادات
-    // 👈 ==========================================
 
     // 1. تغيير اسم السكرتير
     if (_hasAny(cmd, ['غير اسم السكرتير', 'غيري اسم السكرتير', 'غير اسمك', 'غيري اسمك', 'من دلوقتي اسمك', 'خلي اسمك'])) {
@@ -4600,7 +4680,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
 
     // 14. تغيير النغمات الافتراضية
-    // --- أ. نغمة المنبه الافتراضية ---
     if (_hasAny(cmd, [
       'غير صوت المنبه', 'غيري صوت المنبه', 'خلي صوت المنبه', 'غير نغمة المنبه', 'خلي نغمة المنبه',
       'غير صوت منبه المهام', 'غير نغمة منبه المهام', 'خلي نغمة منبه المهام', 'خلي صوت منبه المهام',
@@ -4625,7 +4704,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     }
 
-    // --- ب. نغمة الجدول الأسبوعي ---
     if (_hasAny(cmd, [
       'غير صوت الجدول', 'غيري صوت الجدول', 'خلي صوت الجدول', 'غير نغمة الجدول', 'خلي نغمة الجدول',
       'غير صوت منبه الجدول', 'خلي صوت منبه الجدول', 'غير نغمة منبه الجدول', 'خلي نغمة منبه الجدول',
@@ -4649,7 +4727,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     }
 
-    // --- ج. نغمة المناسبات ---
     if (_hasAny(cmd, [
       'غير صوت المناسبات', 'غيري صوت المناسبات', 'خلي صوت المناسبات', 'غير نغمة المناسبات', 'خلي نغمة المناسبات',
       'خلي النغمة الافتراضية للمناسبات', 'خلي الصوت الافتراضي للمناسبات', 'غير النغمة الافتراضية للمناسبات',
@@ -4671,10 +4748,6 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         return;
       }
     }
-
-    // 👈 ==========================================
-    // 👈 نهاية الأوامر الصوتية للإعدادات
-    // 👈 ==========================================
 
     // 👈 التعرف العالمي على أوامر إيقاف التسجيل
     if (_hasAny(cmd, [
@@ -5885,7 +5958,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     final target = targetDate ?? DateTime.now();
     final todayName = _weekDays[(target.weekday) % 7];
 
-    // 👇 استخدام _getTasksForDate بدل الفلترة القديمة
     final todayTasks = _getTasksForDate(target);
     final weeklyToday = _weeklySchedule.where((t) => t['day'] == todayName).toList();
     _sortByTime(todayTasks);
@@ -5962,7 +6034,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     final daysAhead = (dayIndex - todayIndex + 7) % 7;
     final targetDate = today.add(Duration(days: daysAhead));
 
-    // 👇 استخدام _getTasksForDate بدل الفلترة القديمة
     final normalTasks = _getTasksForDate(targetDate);
     _sortByTime(normalTasks);
 
@@ -6284,8 +6355,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     await _speak("تَمَّتِ الإِضَافَة $_userTitle! $taskName فِي أَيَّامْ: $daysText السَّاعَة $h12 $periodText، $soundText.");
   }
 
-  // 👇 _deleteTaskByVoice (بتستخدم alarmId)
- Future<void> _deleteTaskByVoice(String cmd) async {
+  Future<void> _deleteTaskByVoice(String cmd) async {
   final userTitle = _userTitle;
   final now = DateTime.now();
 
@@ -6316,7 +6386,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     }
     final count = matches.length;
     
-    // 👇 التعديل هنا: إلغاء الإشعار المتكرر من الأندرويد
     for (final task in matches) {
       final alarmId = task['alarmId'] as int?;
       if (alarmId != null) {
@@ -6363,7 +6432,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     final taskTitle = task['task'].toString();
     final alarmId = task['alarmId'] as int?;
     
-    // 👇 التعديل هنا: إلغاء الإشعار المتكرر من الأندرويد
     if (alarmId != null) {
       try { await _notifications.cancel(alarmId); } catch (_) {}
     }
@@ -6413,17 +6481,14 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     }
   }
 
-  // 👇 _createAlarmFromVoice (معدّلة بالكامل)
   Future<void> _createAlarmFromVoice(String rawCommand, String cmd) async {
     final userTitle = _userTitle;
     final now = DateTime.now();
 
-    // استخدام _parseFullDate للتاريخ الشامل
     DateTime? parsedDate = _parseFullDate(cmd);
     var targetDate = parsedDate ?? now;
     var explicitDay = parsedDate != null;
 
-    // التحقق من تحديد يوم معين في الأسبوع
     bool isSpecificWeekday = false;
     for (final day in _weekDays) {
       if (_hasAny(cmd, _dayKeywords[day] ?? [day])) {
@@ -6465,7 +6530,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     }
 
     if (scheduled.isBefore(now)) {
-      // لو حدد يوم معين (زي الأربع) والوقت فات، نروح للأسبوع اللي بعده
       if (isSpecificWeekday && explicitDay) {
         scheduled = scheduled.add(const Duration(days: 7));
       } else {
@@ -6485,7 +6549,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
       selectedSound = null;
     }
 
-    // strip مع كلمات التصحيح
     final strip = <String>{
       'لا', 'لأ', 'لاء', 'أقصد', 'اقصد', 'يعني', 'قصدي',
       'اللي', 'الجاي', 'القادم', 'ده', 'دي', 'بعده', 'بعدها', 'بعدهم', 'بعدكم', 'بعدنا',
@@ -6548,7 +6611,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     final formattedDate = DateFormat('yyyy-MM-dd').format(scheduled);
     final formattedTime = DateFormat('hh:mm a', 'ar').format(scheduled);
 
-    // 👇 توليد ID فريد للمنبه
     final alarmId = DateTime.now().millisecondsSinceEpoch % 1000000;
 
     final existingConflict = _tasks.any((t) =>
@@ -6652,7 +6714,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     }
   }
 
-  // 👇 _scheduleContinuousAlarm (بتستخدم alarmId)
   void _scheduleContinuousAlarm(
     String taskTitle,
     DateTime scheduledDateTime,
@@ -6710,7 +6771,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     } catch (_) {}
   }
 
-  // 👇 _cancelNativeAlarm (بتستخدم customId)
   Future<void> _cancelNativeAlarm(String taskTitle, {int? customId}) async {
     try {
       await _nativeAlarmChannel.invokeMethod('cancelAlarm', {
@@ -6720,13 +6780,11 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     } catch (_) {}
   }
 
-  // 👇 _rescheduleRepeating (معدّلة للشهور + كل يومين/كل أسبوعين)
   void _rescheduleRepeating(String taskTitle, String repeat, String interval, List<String> customDays, DateTime lastScheduled, String? soundUri) {
     DateTime next;
     if (repeat == 'يومي') {
       next = lastScheduled.add(const Duration(days: 1));
 
-      // لو ده منبه صلاة، نحسب ميعاد بكرة من جديد
       final taskData = _tasks.firstWhere((t) => t['task'] == taskTitle, orElse: () => {});
       if (taskData['isPrayerAlarm'] == true) {
         final prayerKey = taskData['prayerKey'] as String?;
@@ -6766,7 +6824,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     } else if (repeat == 'أسبوعي') {
       next = lastScheduled.add(const Duration(days: 7));
     } else if (repeat == 'شهري') {
-      // حل مشكلة الشهور (31 فبراير)
       int nextMonth = lastScheduled.month + 1;
       int nextYear = lastScheduled.year;
       if (nextMonth > 12) {
@@ -6795,7 +6852,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     _scheduleContinuousAlarm(taskTitle, next, repeat, interval, customDays, soundUri: soundUri, alarmId: taskAlarmId);
   }
 
-  // 👇 _scheduleBackgroundNotification (بتستخدم matchDateTimeComponents لتكرار الأندرويد)
   Future<void> _scheduleBackgroundNotification(
     String taskTitle,
     DateTime scheduledDateTime, {
@@ -6821,7 +6877,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
       visibility: NotificationVisibility.public,
     );
 
-    // 👇 الأندرويد يكرر الإشعار تلقائياً
     DateTimeComponents? matchComponent;
     if (repeat == 'يومي' || repeat == 'كل يومين') {
       matchComponent = DateTimeComponents.time;
@@ -6853,7 +6908,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     }));
   }
 
-  // 👇 _startAlarmLoop (بتستخدم snoozeMinutes والتنظيف)
   void _startAlarmLoop(
     String taskTitle,
     String repeat,
@@ -6868,7 +6922,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
       return;
     }
 
-    // 👇 التنظيف: مسح التايمرات القديمة
     _activeTimers.removeWhere((timer) { timer.cancel(); return true; });
     _activeAlarmLoopTimer?.cancel();
 
@@ -6889,7 +6942,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     final userTitle = _userTitle;
     final hasCustomSound = soundUri != null && soundUri.isNotEmpty && soundUri != 'default';
 
-    // البحث عن alarmId
     final taskData = _tasks.firstWhere((t) => t['task'] == taskTitle, orElse: () => {});
     final alarmId = taskData['alarmId'] as int?;
 
@@ -7010,7 +7062,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                                 _cancelNativeAlarm(taskTitle, customId: alarmId);
                                 SharedPreferences.getInstance().then((prefs) => prefs.remove('pending_alarm'));
 
-                                // 👇 التأجيل المخصص
                                 final snoozeTime = DateTime.now().add(Duration(minutes: _settings.snoozeMinutes));
                                 final snoozeTimestamp = DateTime.now().millisecondsSinceEpoch;
 
@@ -7099,7 +7150,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     });
   }
 
-  // 👇 _calculatePrayerTimes (معدّلة بـ targetDate)
   Future<Map<String, String>> _calculatePrayerTimes({DateTime? targetDate}) async {
     try {
       final coordinates = Coordinates(30.0444, 31.2357);
@@ -7124,10 +7174,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
       return {'fajr': format.format(DateTime(now.year, now.month, now.day, 4, 25)), 'sunrise': format.format(DateTime(now.year, now.month, now.day, 5, 52)), 'dhuhr': format.format(DateTime(now.year, now.month, now.day, 11, 45)), 'asr': format.format(DateTime(now.year, now.month, now.day, 15, 8)), 'maghrib': format.format(DateTime(now.year, now.month, now.day, 17, 38)), 'isha': format.format(DateTime(now.year, now.month, now.day, 18, 55))};
     }
   }
-
-  // ══════════════════════════════════════════════════════
-  // 🆕 الدوال الخمسة الجديدة للصلاة (بعد _calculatePrayerTimes مباشرة)
-  // ══════════════════════════════════════════════════════
 
   String _formatTimeForSpeech(String time24) {
     try {
@@ -7312,6 +7358,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
 // PART 8 / 8 (الأخير)
 // باقي دوال MainDashboard + كل الـ Widgets + _DiaryPage
 // + _HijriCalendarWidget + _AdhkarCard + _TalkingImage
+// + LoginScreen + PremiumScreen
 // ══════════════════════════════════════════════════════
 
   String _formatTimeForDisplay(String time24) {
@@ -7488,7 +7535,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     );
   }
 
-  // 👇 _deleteTask معدّلة بـ alarmId
   void _deleteTask(int index) {
     final task = _tasks[index];
     final taskTitle = task['task'].toString();
@@ -7542,7 +7588,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
   _saveWeeklySchedule();
   await _speak("تَمَّ مَسْحُ $count ${count == 1 ? "مَوْعِدْ" : "مَوَاعِيدْ"} مِنَ الجَدْوَلِ الأُسْبُوعِيِّ $_userTitle.");
   }
-  // 👇 _openSettingsScreen معدّلة (onSave بأحدث signature)
+  
   void _openSettingsScreen() {
     Navigator.push(
       context,
@@ -7552,6 +7598,15 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
           ttsVolume: _ttsVolume,
           currentSecretaryName: _secretaryName,
           currentIsUserMale: _isUserMale,
+          isProUser: _isProUser, // 👈 تعديل
+          onUpgrade: () { // 👈 تعديل
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (context) => PremiumScreen(
+              onActivated: () {
+                setState(() => _isProUser = true);
+              }
+            )));
+          },
           onSave: (hour, minute, voiceLevel, greeting, adhan, ttsVol, showLock, shakeMode, voiceGender, defaultInterval, customWakeWord, wakeWordMode, wakeWordTrigger, muteBeep, useOverlayAlarm, isKidsMode, customGreeting, tahajjudAlertEnabled, isDarkMode, customImagePath, stopRecordMode, snoozeMinutes, diaryLockEnabled, diaryPin, diarySecurityQuestion, diarySecurityAnswer) async {
             setState(() {
               _settings.defaultReminderHour = hour;
@@ -7734,30 +7789,34 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                   onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval),
                 ),
                 const Divider(),
-                Row(children: [
-                  const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
-                  const SizedBox(width: 8),
-                  const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      selectedSound == null ? 'الافتراضي' : 'مخصص',
-                      style: const TextStyle(fontSize: 13),
+                // 👇 تعديل: قفل النغمات لو مش برو
+                if (_isProUser) ...[
+                  Row(children: [
+                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
+                    const SizedBox(width: 8),
+                    const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(selectedSound == null ? 'الافتراضي' : 'مخصص', style: const TextStyle(fontSize: 13))),
+                    TextButton(
+                      onPressed: () async {
+                        final result = await showDialog<String>(
+                          context: context,
+                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender),
+                        );
+                        if (result != null) {
+                          setStateSB(() => selectedSound = result == 'default' ? null : result);
+                        }
+                      },
+                      child: const Text('اختيار'),
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      final result = await showDialog<String>(
-                        context: context,
-                        builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender),
-                      );
-                      if (result != null) {
-                        setStateSB(() => selectedSound = result == 'default' ? null : result);
-                      }
-                    },
-                    child: const Text('اختيار'),
-                  ),
-                ]),
+                  ]),
+                ] else ...[
+                  const Row(children: [
+                    Icon(Icons.music_note, color: Colors.grey),
+                    SizedBox(width: 8),
+                    Text('🎵 الصوت: الافتراضي (تغيير النغمة في البرو 👑)', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  ]),
+                ],
               ],
             ),
           ),
@@ -7799,7 +7858,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                       });
                     });
                   } else {
-                    // مسح الإشعار القديم قبل التعديل
                     final oldAlarmId = existingTask?['alarmId'] as int?;
                     if (oldAlarmId != null) {
                       try { _notifications.cancel(oldAlarmId); } catch (_) {}
@@ -7920,30 +7978,34 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                   onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval),
                 ),
                 const Divider(),
-                Row(children: [
-                  const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
-                  const SizedBox(width: 8),
-                  const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      selectedSound == null ? 'الافتراضي' : 'مخصص',
-                      style: const TextStyle(fontSize: 13),
+                // 👇 تعديل: قفل النغمات لو مش برو
+                if (_isProUser) ...[
+                  Row(children: [
+                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
+                    const SizedBox(width: 8),
+                    const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(selectedSound == null ? 'الافتراضي' : 'مخصص', style: const TextStyle(fontSize: 13))),
+                    TextButton(
+                      onPressed: () async {
+                        final result = await showDialog<String>(
+                          context: context,
+                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender),
+                        );
+                        if (result != null) {
+                          setStateSB(() => selectedSound = result == 'default' ? null : result);
+                        }
+                      },
+                      child: const Text('اختيار'),
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      final result = await showDialog<String>(
-                        context: context,
-                        builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender),
-                      );
-                      if (result != null) {
-                        setStateSB(() => selectedSound = result == 'default' ? null : result);
-                      }
-                    },
-                    child: const Text('اختيار'),
-                  ),
-                ]),
+                  ]),
+                ] else ...[
+                  const Row(children: [
+                    Icon(Icons.music_note, color: Colors.grey),
+                    SizedBox(width: 8),
+                    Text('🎵 الصوت: الافتراضي (تغيير النغمة في البرو 👑)', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  ]),
+                ],
               ],
             ),
           ),
@@ -8115,30 +8177,34 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                   onChanged: (val) => setStateSB(() => selectedRepeatType = val ?? 'سنوي'),
                 ),
                 const Divider(),
-                Row(children: [
-                  const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
-                  const SizedBox(width: 8),
-                  const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      selectedSound == null ? 'الافتراضي' : 'مخصص',
-                      style: const TextStyle(fontSize: 13),
+                // 👇 تعديل: قفل النغمات لو مش برو
+                if (_isProUser) ...[
+                  Row(children: [
+                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
+                    const SizedBox(width: 8),
+                    const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(selectedSound == null ? 'الافتراضي' : 'مخصص', style: const TextStyle(fontSize: 13))),
+                    TextButton(
+                      onPressed: () async {
+                        final result = await showDialog<String>(
+                          context: context,
+                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender),
+                        );
+                        if (result != null) {
+                          setStateSB(() => selectedSound = result == 'default' ? null : result);
+                        }
+                      },
+                      child: const Text('اختيار'),
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      final result = await showDialog<String>(
-                        context: context,
-                        builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender),
-                      );
-                      if (result != null) {
-                        setStateSB(() => selectedSound = result == 'default' ? null : result);
-                      }
-                    },
-                    child: const Text('اختيار'),
-                  ),
-                ]),
+                  ]),
+                ] else ...[
+                  const Row(children: [
+                    Icon(Icons.music_note, color: Colors.grey),
+                    SizedBox(width: 8),
+                    Text('🎵 الصوت: الافتراضي (تغيير النغمة في البرو 👑)', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  ]),
+                ],
               ],
             ),
           ),
@@ -8239,6 +8305,17 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
           ]),
         ]),
         actions: [
+          // 👇 أيقونة التاج للبرو
+          if (!_isProUser)
+            IconButton(
+              icon: const Icon(Icons.workspace_premium, color: Colors.amber, size: 28),
+              tooltip: 'الترقية للنسخة البرو',
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => PremiumScreen(
+                  onActivated: () => setState(() => _isProUser = true),
+                )));
+              },
+            ),
           IconButton(
             icon: Icon(_isListening ? Icons.mic : Icons.mic_none, color: _isListening ? Colors.redAccent : const Color(0xFFC5A059)),
             onPressed: _isRecording ? null : _listenVoiceCommand,
@@ -8509,7 +8586,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     );
   }
 
-  // 👇 _buildCalendarAndTasksTab معدّلة (فلتر + badges + _getTasksForDate)
   Widget _buildCalendarAndTasksTab() {
     String formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
     String currentTime = DateFormat('hh:mm a', 'ar').format(DateTime.now());
@@ -8632,7 +8708,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                   onDateChanged: (d) => setState(() => _selectedDate = d),
                 ),
         ),
-        // 👇 الفلتر
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: Row(
@@ -8764,50 +8839,50 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                 icon: const Icon(Icons.delete_sweep, color: Colors.redAccent, size: 30),
                 tooltip: 'مسح كل اليوميات',
                 onPressed: () async {
-  // 👇 التحقق من الباسورد
-  if (_settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty) {
-    final unlocked = await _showDiaryPinDialog();
-    if (!unlocked) return;
-  }
-  
-  if (!mounted) return;
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      title: const Row(
-        children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
-          SizedBox(width: 8),
-          Text('مسح كل اليوميات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-        ],
-      ),
-      content: const Text('هل أنت متأكد أنك تريد مسح كل اليوميات المسجلة في التطبيق نهائياً؟ لا يمكن التراجع عن هذا الإجراء.', style: TextStyle(fontSize: 16)),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('إلغاء', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-          onPressed: () async {
-            setState(() {
-              _diaries.clear();
-            });
-            await _saveData();
-            if (mounted) {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم مسح كل اليوميات بنجاح'), backgroundColor: Colors.green),
-              );
-            }
-          },
-          child: const Text('مسح الكل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        ),
-      ],
-    ),
-  );
-},
+                  // 👇 تعديل: التحقق من الباسورد
+                  if (_settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty) {
+                    final unlocked = await _showDiaryPinDialog();
+                    if (!unlocked) return;
+                  }
+                  
+                  if (!mounted) return;
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      title: const Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+                          SizedBox(width: 8),
+                          Text('مسح كل اليوميات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                        ],
+                      ),
+                      content: const Text('هل أنت متأكد أنك تريد مسح كل اليوميات المسجلة في التطبيق نهائياً؟ لا يمكن التراجع عن هذا الإجراء.', style: TextStyle(fontSize: 16)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('إلغاء', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          onPressed: () async {
+                            setState(() {
+                              _diaries.clear();
+                            });
+                            await _saveData();
+                            if (mounted) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('تم مسح كل اليوميات بنجاح'), backgroundColor: Colors.green),
+                              );
+                            }
+                          },
+                          child: const Text('مسح الكل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -9547,41 +9622,41 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
   }
 
   Future<void> _openDiaryPage(DateTime date) async {
-  if (_settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty && !_voiceDiaryAuthTemp) {
-    final bool unlocked = await _showDiaryPinDialog();
-    if (!unlocked) return;
+    if (_settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty && !_voiceDiaryAuthTemp) {
+      final bool unlocked = await _showDiaryPinDialog();
+      if (!unlocked) return;
+    }
+    _voiceDiaryAuthTemp = false;
+    _openDiaryPageInternal(date);
   }
-  _voiceDiaryAuthTemp = false; // تصفير بعد الاستخدام
-  _openDiaryPageInternal(date);
-}
 
-void _openDiaryPageInternal(DateTime date) {
-  final key = DateFormat('yyyy-MM-dd').format(date);
-  final data = _diaries[key] ?? {'text': '', 'todos': [], 'images': [], 'audio': null};
-  if (data['todos'] == null) data['todos'] = [];
-  if (data['images'] == null) data['images'] = [];
-  Navigator.push(context, MaterialPageRoute(builder: (_) => _DiaryPage(
-    date: date,
-    initialData: data,
-    onSave: (d, dData) async {
-      final k = DateFormat('yyyy-MM-dd').format(d);
-      setState(() => _diaries[k] = dData);
-      await _saveData();
-    },
-    onClearAll: () async {
-      setState(() {
-        _diaries.clear();
-      });
-      await _saveData();
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم مسح كل اليوميات بنجاح'), backgroundColor: Colors.green),
-        );
-      }
-    },
-  )));
-}
+  void _openDiaryPageInternal(DateTime date) {
+    final key = DateFormat('yyyy-MM-dd').format(date);
+    final data = _diaries[key] ?? {'text': '', 'todos': [], 'images': [], 'audio': null};
+    if (data['todos'] == null) data['todos'] = [];
+    if (data['images'] == null) data['images'] = [];
+    Navigator.push(context, MaterialPageRoute(builder: (_) => _DiaryPage(
+      date: date,
+      initialData: data,
+      onSave: (d, dData) async {
+        final k = DateFormat('yyyy-MM-dd').format(d);
+        setState(() => _diaries[k] = dData);
+        await _saveData();
+      },
+      onClearAll: () async {
+        setState(() {
+          _diaries.clear();
+        });
+        await _saveData();
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم مسح كل اليوميات بنجاح'), backgroundColor: Colors.green),
+          );
+        }
+      },
+    )));
+  }
 
   void _handleConflictResolution(bool save) {
     _pendingActionTimer?.cancel();
@@ -10993,6 +11068,276 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
           },
         ),
       ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// 🎉 LoginScreen
+// ══════════════════════════════════════════════════════
+class LoginScreen extends StatefulWidget {
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  bool _isLogin = true;
+  bool _isLoading = false;
+
+  Future<void> _submit() async {
+    if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty) return;
+    setState(() => _isLoading = true);
+    try {
+      if (_isLogin) {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(email: _emailCtrl.text.trim(), password: _passCtrl.text.trim());
+      } else {
+        await FirebaseAuth.instance.createUserWithEmailAndPassword(email: _emailCtrl.text.trim(), password: _passCtrl.text.trim());
+      }
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: ${e.toString().split(']').last.trim()}'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1B2A4A),
+      appBar: AppBar(title: Text(_isLogin ? 'تسجيل الدخول' : 'إنشاء حساب جديد'), backgroundColor: Colors.transparent, elevation: 0),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.account_circle, size: 100, color: Color(0xFFC5A059)),
+            const SizedBox(height: 30),
+            TextField(controller: _emailCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'البريد الإلكتروني', labelStyle: const TextStyle(color: Colors.white70), filled: true, fillColor: Colors.black26, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none))),
+            const SizedBox(height: 15),
+            TextField(controller: _passCtrl, obscureText: true, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'كلمة المرور', labelStyle: const TextStyle(color: Colors.white70), filled: true, fillColor: Colors.black26, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none))),
+            const SizedBox(height: 25),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059), minimumSize: const Size.fromHeight(50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+              onPressed: _isLoading ? null : _submit,
+              child: _isLoading ? const CircularProgressIndicator(color: Colors.black) : Text(_isLogin ? 'دخول' : 'إنشاء الحساب', style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+            TextButton(onPressed: () => setState(() => _isLogin = !_isLogin), child: Text(_isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب؟ سجل دخول', style: const TextStyle(color: Color(0xFFC5A059)))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// 🎉 PremiumScreen
+// ══════════════════════════════════════════════════════
+class PremiumScreen extends StatefulWidget {
+  final VoidCallback onActivated;
+  const PremiumScreen({super.key, required this.onActivated});
+
+  @override
+  State<PremiumScreen> createState() => _PremiumScreenState();
+}
+
+class _PremiumScreenState extends State<PremiumScreen> {
+  final TextEditingController _codeController = TextEditingController();
+  bool _isLoading = false;
+
+  void _activateCode() async {
+    final code = _codeController.text.trim().toUpperCase();
+    if (code.isEmpty) return;
+    setState(() => _isLoading = true);
+
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen()));
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final firestore = FirebaseFirestore.instance;
+      final codeRef = firestore.collection('activation_codes').doc(code);
+      final userRef = firestore.collection('users').doc(user.uid);
+
+      await firestore.runTransaction((transaction) async {
+        DocumentSnapshot codeSnap = await transaction.get(codeRef);
+        if (!codeSnap.exists) throw 'INVALID';
+        bool isUsed = codeSnap.get('isUsed') ?? false;
+        if (isUsed) throw 'ALREADY_USED';
+
+        transaction.update(codeRef, {'isUsed': true, 'usedBy': user.email});
+        transaction.set(userRef, {'isPro': true, 'email': user.email}, SetOptions(merge: true));
+      });
+
+      const storage = FlutterSecureStorage();
+      await storage.write(key: 'is_pro_user', value: 'true');
+
+      widget.onActivated();
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('🎉 مبروك! تم تفعيل النسخة البرو بنجاح.'), backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      String msg = '❌ حدث خطأ، تأكد من الإنترنت.';
+      if (e == 'INVALID') msg = '❌ كود التفعيل غير صحيح.';
+      if (e == 'ALREADY_USED') msg = '❌ هذا الكود مستخدم من قبل.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Widget _buildFeatureRow(IconData icon, String title, String subtitle) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: const Color(0xFFC5A059).withOpacity(0.2), shape: BoxShape.circle),
+            child: Icon(icon, color: const Color(0xFFC5A059), size: 24),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              ],
+            ),
+          ),
+          const Icon(Icons.check_circle, color: Colors.green, size: 20),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(
+        title: const Text('النسخة البرو 👑', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent, elevation: 0, centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(colors: [Color(0xFFC5A059), Color(0xFFE8C07B)]),
+                  boxShadow: [BoxShadow(color: const Color(0xFFC5A059).withOpacity(0.4), blurRadius: 20, spreadRadius: 5)],
+                ),
+                child: const Icon(Icons.workspace_premium, size: 70, color: Colors.white),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text('ارتقِ بتجربتك مع السكرتير الشخصي', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+            const SizedBox(height: 10),
+            const Text('ادفع مرة واحدة فقط، واستمتع بكل المميزات مدى الحياة!', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Color(0xFFC5A059), fontWeight: FontWeight.bold)),
+            const SizedBox(height: 30),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1B2A4A),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFC5A059).withOpacity(0.3), width: 1),
+              ),
+              child: Column(
+                children: [
+                  _buildFeatureRow(Icons.mic, 'الأوامر الصوتية والنداء الدائم', 'تحكم بالكامل بصوتك وبدون لمس الهاتف'),
+                  _buildFeatureRow(Icons.vibration, 'إيقاف التسجيل بالهز', 'تحكم سريع أثناء التسجيل'),
+                  _buildFeatureRow(Icons.face, 'تخصيص السكرتير', 'غير اسمه وصورته حسب ذوقك'),
+                  _buildFeatureRow(Icons.music_note, 'نغمات حصرية للمنبهات', 'أصوات مرعب، آيفون، وصحيان قوي'),
+                  _buildFeatureRow(Icons.lock, 'قفل اليوميات', 'أمان تام لخصوصيتك بكلمة سر'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 30),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+              decoration: BoxDecoration(color: const Color(0xFFC5A059), borderRadius: BorderRadius.circular(50)),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('50', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.black)),
+                  SizedBox(width: 5),
+                  Text('ج.م / مدى الحياة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF25D366),
+                minimumSize: const Size.fromHeight(55),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.whatsapp, color: Colors.white, size: 30),
+              label: const Text('للطلب وشراء كود التفعيل (اضغط هنا)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              onPressed: () async {
+                final Uri url = Uri.parse('https://wa.me/201012345678?text=أهلاً، أريد شراء كود تفعيل النسخة البرو لتطبيق السكرتير');
+                try {
+                  if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+                    throw 'Could not launch';
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تأكد من وجود تطبيق واتساب'), backgroundColor: Colors.red));
+                  }
+                }
+              },
+            ),
+            const SizedBox(height: 30),
+            const Row(children: [Expanded(child: Divider(color: Colors.white24)), Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('لديك كود بالفعل؟', style: TextStyle(color: Colors.white54))), Expanded(child: Divider(color: Colors.white24))]),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _codeController,
+              style: const TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 2, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                hintText: 'أدخل الكود هنا (PRO-XXXX)',
+                hintStyle: const TextStyle(color: Colors.white38, letterSpacing: 1),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.05),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: const Color(0xFFC5A059).withOpacity(0.5))),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFC5A059), width: 2)),
+              ),
+            ),
+            const SizedBox(height: 15),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFC5A059),
+                minimumSize: const Size.fromHeight(55),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: _isLoading ? null : _activateCode,
+              child: _isLoading 
+                  ? const CircularProgressIndicator(color: Colors.black) 
+                  : const Text('تفعيل النسخة البرو الآن', style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 20),
+            TextButton.icon(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen())),
+              icon: const Icon(Icons.login, color: Colors.white54),
+              label: const Text('تسجيل الدخول / تغيير الحساب', style: TextStyle(color: Colors.white54)),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
     );
   }
 }
