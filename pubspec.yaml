@@ -37,6 +37,8 @@ dependencies:
   share_plus: ^7.2.1
   url_launcher: ^6.2.5
   font_awesome_flutter: 10.8.0
+  google_sign_in: ^6.2.1
+device_info_plus: ^11.1.2
 
 dev_dependencies:
   flutter_test:
