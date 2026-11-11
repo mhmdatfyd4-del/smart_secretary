@@ -2813,7 +2813,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     WidgetsBinding.instance.addObserver(this);
     _secretaryName = widget.secretaryName;
     _isUserMale = widget.isUserMale;
-    _checkProStatus(); // 👈 التعديل
+    _checkAccountStatus();
 
     _wakeWordChannel.setMethodCallHandler((call) async {
       if (call.method == 'onWakeWordDetected') {
@@ -2942,7 +2942,125 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _initAll();
   }
 
-  // 👇 التعديل: دالة فحص حالة البرو
+  Future<Map<String, String>> _getDeviceInfo() async {
+  final deviceInfo = DeviceInfoPlugin();
+  try {
+    if (Platform.isAndroid) {
+      final androidInfo = await deviceInfo.androidInfo;
+      return {'id': androidInfo.id, 'name': '${androidInfo.manufacturer} ${androidInfo.model}'};
+    } else if (Platform.isIOS) {
+      final iosInfo = await deviceInfo.iosInfo;
+      return {'id': iosInfo.identifierForVendor ?? 'unknown', 'name': iosInfo.name};
+    }
+  } catch (_) {}
+  return {'id': 'unknown_${DateTime.now().millisecondsSinceEpoch}', 'name': 'جهاز غير معروف'};
+}
+
+Future<bool> _verifyDeviceLimit() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return true;
+
+  final device = await _getDeviceInfo();
+  final deviceId = device['id']!;
+  final deviceName = device['name']!;
+
+  final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+
+  try {
+    final doc = await userRef.get();
+    final Map<String, dynamic> devices = Map<String, dynamic>.from(doc.data()?['devices'] ?? {});
+
+    if (devices.containsKey(deviceId)) {
+      if (devices[deviceId] != deviceName) {
+        await userRef.update({'devices.$deviceId': deviceName});
+      }
+      return true;
+    }
+
+    if (devices.length >= 3) { // 👈 الحد الأقصى 3 أجهزة
+      return false;
+    }
+
+    await userRef.update({'devices.$deviceId': deviceName});
+    return true;
+  } catch (e) {
+    return true;
+  }
+}
+
+Future<void> _checkAccountStatus() async {
+  final allowed = await _verifyDeviceLimit();
+  if (!allowed && mounted) {
+    setState(() => _isDeviceBlocked = true);
+    return;
+  }
+  if (mounted) setState(() => _isDeviceBlocked = false);
+  await _checkProStatus();
+}
+
+Future<void> _showManageDevicesDialog(BuildContext context) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
+  
+  final device = await _getDeviceInfo();
+  final currentDeviceId = device['id']!;
+
+  showDialog(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        title: const Text('الأجهزة المتصلة'),
+        content: StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const CircularProgressIndicator();
+            final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+            final devices = Map<String, dynamic>.from(data['devices'] ?? {});
+            
+            if (devices.isEmpty) return const Text('لا توجد أجهزة مسجلة.');
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: devices.entries.map((e) {
+                final isCurrent = e.key == currentDeviceId;
+                return ListTile(
+                  leading: Icon(Icons.devices, color: isCurrent ? Colors.green : Colors.grey),
+                  title: Text(e.value.toString(), style: TextStyle(fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal)),
+                  subtitle: isCurrent ? const Text('هذا الجهاز', style: TextStyle(color: Colors.green, fontSize: 12)) : null,
+                  trailing: isCurrent ? null : IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () async {
+                      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                        'devices.${e.key}': FieldValue.delete()
+                      });
+                    },
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق')),
+          if (_isDeviceBlocked)
+            ElevatedButton(
+              onPressed: () async {
+                final allowed = await _verifyDeviceLimit();
+                if (allowed) {
+                  Navigator.pop(ctx);
+                  _checkAccountStatus();
+                } else {
+                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('لا يزال الحد الأقصى ممتلئاً!')));
+                }
+              },
+              child: const Text('تحديث والمتابعة'),
+            )
+        ],
+      );
+    },
+  );
+}
+  
   Future<void> _checkProStatus() async {
     const storage = FlutterSecureStorage();
     final localIsPro = await storage.read(key: 'is_pro_user');
@@ -7446,27 +7564,36 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
   }
 
   int? _parsePrayerOffset(String cmd) {
-    final norm = _norm(cmd);
-    final isBefore = _hasAny(norm, ['قبل', 'قبلها', 'قبل ما']);
-    final isAfter = _hasAny(norm, ['بعد', 'بعدها', 'بعد ما']);
-    int? minutes;
-    if (_hasAny(norm, ['ساعتين وربع'])) minutes = 135;
-    else if (_hasAny(norm, ['ساعتين', 'ساعتان'])) minutes = 120;
-    else if (_hasAny(norm, ['ساعة وربع', 'ساعه وربع'])) minutes = 75;
-    else if (_hasAny(norm, ['ساعة ونص', 'ساعة ونصف', 'ساعه ونص'])) minutes = 90;
-    else if (_hasAny(norm, ['ساعة', 'ساعه'])) minutes = 60;
-    else if (_hasAny(norm, ['خمسة واربعين', 'خمسه واربعين', 'تلات تربع', '45 دقيقة', '45 دقيقه'])) minutes = 45;
-    else if (_hasAny(norm, ['اربعين', '40 دقيقة', '40 دقيقه'])) minutes = 40;
-    else if (_hasAny(norm, ['نص ساعة', 'نصف ساعة', 'نص ساعه', 'تلاتين', '30 دقيقة', '30 دقيقه'])) minutes = 30;
-    else if (_hasAny(norm, ['تلت ساعة', 'ثلث ساعة', 'عشرين', '20 دقيقة', '20 دقيقه'])) minutes = 20;
-    else if (_hasAny(norm, ['ربع ساعة', 'ربع ساعه', 'خمستاشر', '15 دقيقة', '15 دقيقه'])) minutes = 15;
-    else if (_hasAny(norm, ['عشر دقايق', 'عشر دقائق', '10 دقايق', '10 دقائق'])) minutes = 10;
-    else if (_hasAny(norm, ['خمس دقايق', 'خمس دقائق', '5 دقايق', '5 دقائق'])) minutes = 5;
-    if (minutes == null) return null;
-    if (isBefore && !isAfter) return -minutes;
-    if (isAfter && !isBefore) return minutes;
-    if (isBefore && isAfter) return -minutes;
-    return null;
+  final norm = _norm(cmd);
+  final isBefore = _hasAny(norm, ['قبل', 'قبلها', 'قبل ما']);
+  final isAfter = _hasAny(norm, ['بعد', 'بعدها', 'بعد ما']);
+  int? minutes;
+  
+  // 👇 التعديل هنا: بنشيك على الأجزاء (ربع، نص، تلت) الأول قبل كلمة "ساعة"
+  if (_hasAny(norm, ['ساعتين وربع'])) minutes = 135;
+  else if (_hasAny(norm, ['ساعتين', 'ساعتان'])) minutes = 120;
+  else if (_hasAny(norm, ['ساعة وربع', 'ساعه وربع'])) minutes = 75;
+  else if (_hasAny(norm, ['ساعة ونص', 'ساعة ونصف', 'ساعه ونص'])) minutes = 90;
+  
+  else if (_hasAny(norm, ['خمسة واربعين', 'خمسه واربعين', 'تلات تربع', '45 دقيقة', '45 دقيقه'])) minutes = 45;
+  else if (_hasAny(norm, ['اربعين', '40 دقيقة', '40 دقيقه'])) minutes = 40;
+  else if (_hasAny(norm, ['نص ساعة', 'نصف ساعة', 'نص ساعه', 'تلاتين', '30 دقيقة', '30 دقيقه'])) minutes = 30;
+  else if (_hasAny(norm, ['تلت ساعة', 'ثلث ساعة', 'تلت ساعه', 'ثلث ساعه', 'عشرين', '20 دقيقة', '20 دقيقه'])) minutes = 20;
+  
+  // 👇 ضفنا كلمة (ربع) لوحدها عشان لو قال "قبل الفجر بربع"
+  else if (_hasAny(norm, ['ربع ساعة', 'ربع ساعه', 'خمستاشر', 'ربع', '15 دقيقة', '15 دقيقه'])) minutes = 15;
+  
+  else if (_hasAny(norm, ['عشر دقايق', 'عشر دقائق', '10 دقايق', '10 دقائق'])) minutes = 10;
+  else if (_hasAny(norm, ['خمس دقايق', 'خمس دقائق', '5 دقايق', '5 دقائق'])) minutes = 5;
+  
+  // 👇 كلمة "ساعة" لوحدها بنشيك عليها في الآخر عشان متمسحش الربع والنص
+  else if (_hasAny(norm, ['ساعة', 'ساعه'])) minutes = 60; 
+
+  if (minutes == null) return null;
+  if (isBefore && !isAfter) return -minutes;
+  if (isAfter && !isBefore) return minutes;
+  if (isBefore && isAfter) return -minutes;
+  return null;
   }
 
   Future<bool> _handlePrayerRelativeAlarm(String rawCommand, String cmd) async {
@@ -8471,6 +8598,57 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
 
   @override
   Widget build(BuildContext context) {
+    if (_isDeviceBlocked) {
+  return Scaffold(
+    backgroundColor: const Color(0xFF1B2A4A),
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.devices_other, size: 80, color: Colors.redAccent),
+            const SizedBox(height: 20),
+            const Text(
+              'لقد وصلت للحد الأقصى للأجهزة المسموح بها لهذا الحساب (3 أجهزة).',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'للاستمرار، يرجى إزالة أحد الأجهزة الأخرى من القائمة أدناه.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFC5A059),
+                minimumSize: const Size.fromHeight(50),
+              ),
+              icon: const Icon(Icons.settings, color: Colors.black),
+              label: const Text('إدارة الأجهزة المتصلة', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+              onPressed: () => _showManageDevicesDialog(context),
+            ),
+            const SizedBox(height: 15),
+            TextButton(
+              onPressed: () async {
+                await FirebaseAuth.instance.signOut();
+                if (mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => LoginScreen()),
+                    (route) => false,
+                  );
+                }
+              },
+              child: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white54)),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+    }
     final List<Widget> screens = [
       _buildCalendarTab(),
       _buildDiariesTab(),
@@ -11296,6 +11474,9 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
 // 🎉 LoginScreen
 // ══════════════════════════════════════════════════════
 class LoginScreen extends StatefulWidget {
+  final bool startInRegisterMode; // 👈 ضيف السطر ده
+  const LoginScreen({super.key, this.startInRegisterMode = false}); // 👈 وعدل الكونستراكتور
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -11306,8 +11487,14 @@ class _LoginScreenState extends State<LoginScreen> {
   final _nameCtrl = TextEditingController();
   DateTime? _dob;
   
-  bool _isLogin = true;
+  late bool _isLogin;
   bool _isLoading = false;
+  
+  @override
+void initState() {
+  super.initState();
+  _isLogin = !widget.startInRegisterMode;
+}
 
   Future<void> _submit() async {
     if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty) return;
@@ -11345,12 +11532,52 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+  Future<void> _signInWithGoogle() async {
+  setState(() => _isLoading = true);
+  try {
+    final GoogleSignIn googleSignIn = GoogleSignIn();
+    final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+    if (googleUser == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1B2A4A),
-      appBar: AppBar(title: Text(_isLogin ? 'تسجيل الدخول' : 'إنشاء حساب جديد'), backgroundColor: Colors.transparent, elevation: 0),
+    final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+
+    UserCredential userCred = await FirebaseAuth.instance.signInWithCredential(credential);
+
+    if (userCred.additionalUserInfo?.isNewUser ?? false) {
+      await FirebaseFirestore.instance.collection('users').doc(userCred.user!.uid).set({
+        'name': googleUser.displayName ?? 'مستخدم',
+        'dob': '',
+        'email': googleUser.email,
+        'isPro': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+    if (mounted) Navigator.pop(context, true);
+  } catch (e) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في تسجيل الدخول بجوجل: $e'), backgroundColor: Colors.red));
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
+  }
+  }
+
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xFF1B2A4A),
+    appBar: AppBar(
+      title: Text(_isLogin ? 'تسجيل الدخول' : 'إنشاء حساب جديد', 
+        style: const TextStyle(color: Color(0xFFC5A059), fontWeight: FontWeight.bold)
+      ), 
+      backgroundColor: Colors.transparent, elevation: 0,
+      iconTheme: const IconThemeData(color: Color(0xFFC5A059)),
+    ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -11425,6 +11652,18 @@ class _LoginScreenState extends State<LoginScreen> {
               onPressed: _isLoading ? null : _submit,
               child: _isLoading ? const CircularProgressIndicator(color: Colors.black) : Text(_isLogin ? 'دخول' : 'إنشاء الحساب', style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
             ),
+            const SizedBox(height: 15),
+ElevatedButton.icon(
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Colors.white,
+    minimumSize: const Size.fromHeight(50),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+  ),
+  icon: Image.network('https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg', height: 24),
+  label: const Text('تسجيل الدخول باستخدام جوجل', style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
+  onPressed: _isLoading ? null : _signInWithGoogle,
+),
+const SizedBox(height: 5),
             TextButton(
               onPressed: () => setState(() {
                 _isLogin = !_isLogin;
@@ -11547,10 +11786,10 @@ class _PremiumScreenState extends State<PremiumScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
-        title: const Text('النسخة البرو 👑', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent, elevation: 0, centerTitle: true,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+  title: const Text('النسخة البرو 👑', style: TextStyle(color: Color(0xFFC5A059), fontWeight: FontWeight.bold)), // 👈 اللون الذهبي
+  backgroundColor: Colors.transparent, elevation: 0, centerTitle: true,
+  iconTheme: const IconThemeData(color: Color(0xFFC5A059)), // 👈 لون سهم الرجوع
+),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
@@ -11593,7 +11832,9 @@ class _PremiumScreenState extends State<PremiumScreen> {
         children: [
           Text('أكثر من 80 أمر صوتي ذكي', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
           SizedBox(height: 5),
-          Text('يدعم أكثر من 1200 مفردة ولهجة مصرية', style: TextStyle(color: Color(0xFFC5A059), fontSize: 14, fontWeight: FontWeight.bold)),
+          Text('(تحكم كامل في التطبيق باستخدام الصوت)', style: TextStyle(color: Color(0xFFC5A059), fontSize: 14, fontWeight: FontWeight.bold)),
+          SizedBox(height: 2),
+          Text('يدعم أكثر من 1200 مفردة ولهجة مصرية', style: TextStyle(color: Colors.white70, fontSize: 12)),
         ],
       ),
     ),
