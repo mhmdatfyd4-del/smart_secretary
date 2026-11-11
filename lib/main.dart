@@ -324,7 +324,8 @@ class SettingsScreen extends StatefulWidget {
   final String currentSecretaryName;
   final bool currentIsUserMale;
   final bool isProUser; // 👈
-  final VoidCallback onUpgrade; // 👈
+  final VoidCallback onUpgrade;
+  final VoidCallback onAuthChanged;
 
   final Future<void> Function(
     int hour, int minute, String voiceLevel,
@@ -346,7 +347,8 @@ class SettingsScreen extends StatefulWidget {
     required this.currentSecretaryName,
     required this.currentIsUserMale,
     required this.isProUser, // 👈
-    required this.onUpgrade, // 👈
+    required this.onUpgrade,
+    required this.onAuthChanged,
     required this.onSave,
     required this.onSaveSecretary,
   });
@@ -743,6 +745,125 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // 👇 كارت الحساب الشخصي
+Card(
+  elevation: 2,
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  child: Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      children: [
+        if (FirebaseAuth.instance.currentUser != null) ...[
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.account_circle, color: Color(0xFF1B2A4A), size: 40),
+            title: Text(
+              FirebaseAuth.instance.currentUser?.displayName ?? 'مستخدم',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            subtitle: Text(
+              FirebaseAuth.instance.currentUser?.email ?? '',
+              style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
+            ),
+          ),
+          const Divider(),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.password, color: Colors.blue),
+            title: const Text('تغيير كلمة المرور', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+            onTap: () async {
+              final user = FirebaseAuth.instance.currentUser;
+              if (user != null && user.email != null) {
+                try {
+                  await FirebaseAuth.instance.sendPasswordResetEmail(email: user.email!);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('تم إرسال رابط تغيير كلمة المرور إلى بريدك'), backgroundColor: Colors.green),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red));
+                  }
+                }
+              }
+            },
+          ),
+          const Divider(),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('تسجيل الخروج', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red)),
+            onTap: () async {
+              bool? confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('تسجيل الخروج'),
+                  content: const Text('هل أنت متأكد أنك تريد تسجيل الخروج؟'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('خروج', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await FirebaseAuth.instance.signOut();
+                const storage = FlutterSecureStorage();
+                await storage.delete(key: 'is_pro_user');
+                widget.onAuthChanged();
+                if (mounted) setState(() {});
+              }
+            },
+          ),
+        ] else ...[
+          const Row(
+            children: [
+              Icon(Icons.account_circle, color: Colors.grey, size: 40),
+              SizedBox(width: 12),
+              Text('حسابك الشخصي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.grey)),
+            ],
+          ),
+          const SizedBox(height: 15),
+          const Text('سجل دخولك أو أنشئ حساباً جديداً للاستفادة من المزامنة والنسخة البرو.', style: TextStyle(fontSize: 13, color: Colors.grey)),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                  onPressed: () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen()));
+                    widget.onAuthChanged();
+                    if (mounted) setState(() {});
+                  },
+                  child: const Text('تسجيل الدخول', style: TextStyle(color: Colors.white, fontSize: 13)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                  onPressed: () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen()));
+                    widget.onAuthChanged();
+                    if (mounted) setState(() {});
+                  },
+                  child: const Text('إنشاء حساب', style: TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          )
+        ]
+      ],
+    ),
+  ),
+),
+const SizedBox(height: 12),
           // 👇 بانر الترقية للبرو
           if (!widget.isProUser) ...[
             Container(
@@ -843,7 +964,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
                 const Icon(Icons.calendar_month, color: Color(0xFF1B2A4A), size: 26), const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('🎵 صوت منبه الجدول', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const Text('🎵 صوت منبه الجدول الإسبوعي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   Text(_defaultWeeklySound == null ? 'الافتراضي' : 'مخصص', style: TextStyle(fontSize: 12, color: _defaultWeeklySound != null ? const Color(0xFFC5A059) : Colors.grey)),
                 ])),
                 const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
@@ -7599,7 +7720,11 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
           ttsVolume: _ttsVolume,
           currentSecretaryName: _secretaryName,
           currentIsUserMale: _isUserMale,
-          isProUser: _isProUser, // 👈
+          isProUser: _isProUser,
+          onAuthChanged: () {
+  _checkProStatus();
+  setState(() {});
+},
           onUpgrade: () { // 👈
             Navigator.pop(context);
             Navigator.push(context, MaterialPageRoute(builder: (context) => PremiumScreen(
@@ -11084,17 +11209,40 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _nameCtrl = TextEditingController();
+  DateTime? _dob;
+  
   bool _isLogin = true;
   bool _isLoading = false;
 
   Future<void> _submit() async {
     if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty) return;
+    if (!_isLogin && (_nameCtrl.text.isEmpty || _dob == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى إدخال الاسم وتاريخ الميلاد'), backgroundColor: Colors.orange));
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       if (_isLogin) {
         await FirebaseAuth.instance.signInWithEmailAndPassword(email: _emailCtrl.text.trim(), password: _passCtrl.text.trim());
       } else {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(email: _emailCtrl.text.trim(), password: _passCtrl.text.trim());
+        UserCredential cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: _emailCtrl.text.trim(), 
+          password: _passCtrl.text.trim()
+        );
+        
+        if (cred.user != null) {
+          await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).set({
+            'name': _nameCtrl.text.trim(),
+            'dob': _dob!.toIso8601String(),
+            'email': _emailCtrl.text.trim(),
+            'isPro': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+          
+          await cred.user!.updateDisplayName(_nameCtrl.text.trim());
+        }
       }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -11109,23 +11257,88 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF1B2A4A),
       appBar: AppBar(title: Text(_isLogin ? 'تسجيل الدخول' : 'إنشاء حساب جديد'), backgroundColor: Colors.transparent, elevation: 0),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            const SizedBox(height: 20),
             const Icon(Icons.account_circle, size: 100, color: Color(0xFFC5A059)),
             const SizedBox(height: 30),
-            TextField(controller: _emailCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'البريد الإلكتروني', labelStyle: const TextStyle(color: Colors.white70), filled: true, fillColor: Colors.black26, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none))),
+            
+            if (!_isLogin) ...[
+              TextField(
+                controller: _nameCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'الاسم بالكامل',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  filled: true, fillColor: Colors.black26,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 15),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime(2000),
+                    firstDate: DateTime(1940),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) setState(() => _dob = picked);
+                },
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'تاريخ الميلاد',
+                    labelStyle: const TextStyle(color: Colors.white70),
+                    filled: true, fillColor: Colors.black26,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  ),
+                  child: Text(
+                    _dob == null ? 'اختر التاريخ' : DateFormat('yyyy/MM/dd').format(_dob!),
+                    style: TextStyle(color: _dob == null ? Colors.white38 : Colors.white),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 15),
+            ],
+
+            TextField(
+              controller: _emailCtrl,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'البريد الإلكتروني',
+                labelStyle: const TextStyle(color: Colors.white70),
+                filled: true, fillColor: Colors.black26,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              ),
+            ),
             const SizedBox(height: 15),
-            TextField(controller: _passCtrl, obscureText: true, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'كلمة المرور', labelStyle: const TextStyle(color: Colors.white70), filled: true, fillColor: Colors.black26, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none))),
+            TextField(
+              controller: _passCtrl,
+              obscureText: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'كلمة المرور',
+                labelStyle: const TextStyle(color: Colors.white70),
+                filled: true, fillColor: Colors.black26,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              ),
+            ),
             const SizedBox(height: 25),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059), minimumSize: const Size.fromHeight(50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
               onPressed: _isLoading ? null : _submit,
               child: _isLoading ? const CircularProgressIndicator(color: Colors.black) : Text(_isLogin ? 'دخول' : 'إنشاء الحساب', style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
             ),
-            TextButton(onPressed: () => setState(() => _isLogin = !_isLogin), child: Text(_isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب؟ سجل دخول', style: const TextStyle(color: Color(0xFFC5A059)))),
+            TextButton(
+              onPressed: () => setState(() {
+                _isLogin = !_isLogin;
+                _nameCtrl.clear();
+                _dob = null;
+              }), 
+              child: Text(_isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب؟ سجل دخول', style: const TextStyle(color: Color(0xFFC5A059)))
+            ),
           ],
         ),
       ),
@@ -11276,14 +11489,22 @@ class _PremiumScreenState extends State<PremiumScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Row(
-                    children: [
-                      Icon(Icons.record_voice_over, color: Color(0xFFC5A059), size: 30),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text('أكثر من 80 أمر صوتي ذكي', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    Icon(Icons.record_voice_over, color: Color(0xFFC5A059), size: 30),
+    SizedBox(width: 10),
+    Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('أكثر من 80 أمر صوتي ذكي', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          SizedBox(height: 5),
+          Text('يدعم أكثر من 1200 مفردة ولهجة مصرية', style: TextStyle(color: Color(0xFFC5A059), fontSize: 14, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    ),
+  ],
+),
                   const SizedBox(height: 10),
                   const Text(
                     'مش محتاج تلمس الشاشة. نادي "يا سكرتير" وتحدث معه كأنه إنسان حقيقي — ينفذ أوامرك ويرد عليك:',
@@ -11330,7 +11551,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
               label: const Text('للطلب وشراء كود التفعيل (اضغط هنا)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               onPressed: () async {
                 // 👇 غيّر الرقم لرقمك لو مختلف
-                final Uri url = Uri.parse('https://wa.me/201032491766?text=أهلاً، أريد شراء كود تفعيل النسخة البرو لتطبيق السكرتير');
+                final Uri url = Uri.parse('https://wa.me/201032491766?text=أهلاً، أريد شراء كود تفعيل النسخة البرو لتطبيق سكرتيري');
                 try {
                   if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
                     throw 'Could not launch';
