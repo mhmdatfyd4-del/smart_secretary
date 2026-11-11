@@ -33,6 +33,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // 👈 تم إضافة الاستيراد
 
 final StreamController<Map<String, dynamic>> _diaryVoiceStream = StreamController.broadcast();
 
@@ -90,7 +91,7 @@ AndroidNotificationSound? _getNotificationSound(String? soundUri) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(); // 👈 تهيئة فايربيز
+  await Firebase.initializeApp();
   await initializeDateFormatting('ar');
   tz.initializeTimeZones();
   tz.setLocalLocation(tz.getLocation('Africa/Cairo'));
@@ -256,7 +257,7 @@ class AppSettings {
   String diaryPin;
   String diarySecurityQuestion;
   String diarySecurityAnswer;
-  bool isProUser;
+  bool isProUser; // 👈 التعديل
 
   AppSettings({
     this.defaultReminderHour = 18,
@@ -288,7 +289,7 @@ class AppSettings {
     this.diaryPin = '',
     this.diarySecurityQuestion = '',
     this.diarySecurityAnswer = '',
-    this.isProUser = false,
+    this.isProUser = false, // 👈 التعديل
   });
 
   double get speechRate {
@@ -322,8 +323,8 @@ class SettingsScreen extends StatefulWidget {
   final double ttsVolume;
   final String currentSecretaryName;
   final bool currentIsUserMale;
-  final bool isProUser; // 👈 تعديل
-  final VoidCallback onUpgrade; // 👈 تعديل
+  final bool isProUser; // 👈
+  final VoidCallback onUpgrade; // 👈
 
   final Future<void> Function(
     int hour, int minute, String voiceLevel,
@@ -344,8 +345,8 @@ class SettingsScreen extends StatefulWidget {
     required this.ttsVolume,
     required this.currentSecretaryName,
     required this.currentIsUserMale,
-    required this.isProUser, // 👈 تعديل
-    required this.onUpgrade, // 👈 تعديل
+    required this.isProUser, // 👈
+    required this.onUpgrade, // 👈
     required this.onSave,
     required this.onSaveSecretary,
   });
@@ -524,7 +525,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final current = type == 'alarm' ? _defaultAlarmSound : (type == 'weekly' ? _defaultWeeklySound : _defaultEventSound);
     final result = await showDialog<String>(
       context: context,
-      builder: (_) => SoundPickerDialog(currentUri: current, voiceGender: widget.settings.voiceGender),
+      // 👇 ضفنا isProUser هنا
+      builder: (_) => SoundPickerDialog(currentUri: current, voiceGender: widget.settings.voiceGender, isProUser: widget.isProUser),
     );
     if (result != null) {
       if (!mounted) return;
@@ -818,66 +820,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
           
-          // 👇 كروت النغمات (مقفولة للبرو)
-          if (widget.isProUser) ...[
-            Card(
-              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: InkWell(
-                onTap: () => _pickDefaultSound('alarm'),
-                child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
-                  const Icon(Icons.notifications_active, color: Color(0xFF1B2A4A), size: 26), const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('🎵 صوت منبه المهام', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    Text(_defaultAlarmSound == null ? 'الافتراضي' : 'مخصص', style: TextStyle(fontSize: 12, color: _defaultAlarmSound != null ? const Color(0xFFC5A059) : Colors.grey)),
-                  ])),
-                  const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+          // 👇 كروت النغمات (مفتوحة للكل دلوقتي)
+          Card(
+            elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: InkWell(
+              onTap: () => _pickDefaultSound('alarm'),
+              child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+                const Icon(Icons.notifications_active, color: Color(0xFF1B2A4A), size: 26), const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('🎵 صوت منبه المهام', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(_defaultAlarmSound == null ? 'الافتراضي' : 'مخصص', style: TextStyle(fontSize: 12, color: _defaultAlarmSound != null ? const Color(0xFFC5A059) : Colors.grey)),
                 ])),
-              ),
+                const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+              ])),
             ),
-            const SizedBox(height: 12),
-            Card(
-              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: InkWell(
-                onTap: () => _pickDefaultSound('weekly'),
-                child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
-                  const Icon(Icons.calendar_month, color: Color(0xFF1B2A4A), size: 26), const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('🎵 صوت منبه الجدول', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    Text(_defaultWeeklySound == null ? 'الافتراضي' : 'مخصص', style: TextStyle(fontSize: 12, color: _defaultWeeklySound != null ? const Color(0xFFC5A059) : Colors.grey)),
-                  ])),
-                  const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: InkWell(
+              onTap: () => _pickDefaultSound('weekly'),
+              child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+                const Icon(Icons.calendar_month, color: Color(0xFF1B2A4A), size: 26), const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('🎵 صوت منبه الجدول', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(_defaultWeeklySound == null ? 'الافتراضي' : 'مخصص', style: TextStyle(fontSize: 12, color: _defaultWeeklySound != null ? const Color(0xFFC5A059) : Colors.grey)),
                 ])),
-              ),
+                const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+              ])),
             ),
-            const SizedBox(height: 12),
-            Card(
-              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: InkWell(
-                onTap: () => _pickDefaultSound('event'),
-                child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
-                  const Icon(Icons.celebration, color: Color(0xFF1B2A4A), size: 26), const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('🎵 صوت المناسبات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    Text(_defaultEventSound == null ? 'الافتراضي' : 'مخصص', style: TextStyle(fontSize: 12, color: _defaultEventSound != null ? const Color(0xFFC5A059) : Colors.grey)),
-                  ])),
-                  const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: InkWell(
+              onTap: () => _pickDefaultSound('event'),
+              child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+                const Icon(Icons.celebration, color: Color(0xFF1B2A4A), size: 26), const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('🎵 صوت المناسبات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(_defaultEventSound == null ? 'الافتراضي' : 'مخصص', style: TextStyle(fontSize: 12, color: _defaultEventSound != null ? const Color(0xFFC5A059) : Colors.grey)),
                 ])),
-              ),
+                const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1B2A4A)),
+              ])),
             ),
-            const SizedBox(height: 12),
-          ] else ...[
-            Card(
-              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: ListTile(
-                leading: const Icon(Icons.notifications_active, color: Colors.grey, size: 26),
-                title: const Text('🎵 تغيير نغمات المنبهات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey)),
-                subtitle: const Text('متاح في النسخة البرو 👑', style: TextStyle(color: Color(0xFFC5A059), fontSize: 12)),
-                trailing: const Icon(Icons.lock, color: Color(0xFFC5A059)),
-                onTap: widget.onUpgrade,
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
+          ),
+          const SizedBox(height: 12),
           
           // 👇 كارت السكرتير (مقفول للبرو)
           Card(
@@ -2289,8 +2277,9 @@ class _SetupSecretaryScreenState extends State<SetupSecretaryScreen> {
 class SoundPickerDialog extends StatefulWidget {
   final String? currentUri;
   final String voiceGender;
+  final bool isProUser; // 👈 التعديل
 
-  const SoundPickerDialog({super.key, this.currentUri, this.voiceGender = 'ذكر'});
+  const SoundPickerDialog({super.key, this.currentUri, this.voiceGender = 'ذكر', this.isProUser = false}); // 👈 التعديل
 
   @override
   State<SoundPickerDialog> createState() => _SoundPickerDialogState();
@@ -2397,6 +2386,8 @@ class _SoundPickerDialogState extends State<SoundPickerDialog> {
 
   Widget _soundTile({required String title, required String uri}) {
     final isSelected = _selected == uri;
+    final isLocked = !widget.isProUser && uri != 'default'; // 👈 التعديل: القفل هنا
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 2),
       decoration: BoxDecoration(
@@ -2413,15 +2404,22 @@ class _SoundPickerDialogState extends State<SoundPickerDialog> {
           value: uri,
           groupValue: _selected,
           activeColor: const Color(0xFF1B2A4A),
-          onChanged: (val) => setState(() => _selected = val),
+          onChanged: isLocked ? null : (val) => setState(() => _selected = val),
         ),
-        title: Text(title, style: const TextStyle(fontSize: 12)),
-        trailing: uri == 'default'
-            ? null
-            : IconButton(
-                icon: const Icon(Icons.volume_up, color: Color(0xFF1B2A4A)),
-                onPressed: () => _previewSound(uri),
-              ),
+        title: Text(title, style: TextStyle(fontSize: 12, color: isLocked ? Colors.grey : Colors.black87)),
+        trailing: isLocked
+            ? const Icon(Icons.lock, color: Color(0xFFC5A059), size: 20)
+            : (uri == 'default'
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.volume_up, color: Color(0xFF1B2A4A)),
+                    onPressed: () => _previewSound(uri),
+                  )),
+        onTap: isLocked ? () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('هذا الصوت متاح في النسخة البرو 👑'), backgroundColor: Colors.orange)
+          );
+        } : null,
       ),
     );
   }
@@ -2456,7 +2454,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   bool _isWakeWordListening = false;
   bool _isAlarmDialogOpen = false;
   bool _voiceDiaryAuthTemp = false;
-  bool _isProUser = false; // 👈 تعديل: إضافة حالة البرو
+  bool _isProUser = false; // 👈 التعديل
   String? _activeAlarmTitle;
   BuildContext? _alarmDialogContext;
 
@@ -2600,7 +2598,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     WidgetsBinding.instance.addObserver(this);
     _secretaryName = widget.secretaryName;
     _isUserMale = widget.isUserMale;
-    _checkProStatus(); // 👈 تعديل: فحص حالة البرو
+    _checkProStatus(); // 👈 التعديل
 
     _wakeWordChannel.setMethodCallHandler((call) async {
       if (call.method == 'onWakeWordDetected') {
@@ -2729,7 +2727,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _initAll();
   }
 
-  // 👇 تعديل: دالة فحص حالة البرو
+  // 👇 التعديل: دالة فحص حالة البرو
   Future<void> _checkProStatus() async {
     const storage = FlutterSecureStorage();
     final localIsPro = await storage.read(key: 'is_pro_user');
@@ -2967,22 +2965,22 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
           final prayerTime = dayPrayers[prayer]!;
           if (prayerTime.isBefore(now)) continue;
 
-          final channelId = 'adhan_channel_${prayer}_v2'; // 👈 تعديل: v2 لمنع المشاكل
+          final channelId = 'adhan_channel_${prayer}_v2'; // 👈 v2
           final channelName = 'تنبيهات الأذان ${names[prayer]}';
 
           final androidDetails = AndroidNotificationDetails(
             channelId,
             channelName,
             channelDescription: 'تنبيهات مواقيت الصلاة',
-            importance: Importance.high, // 👈 تعديل
-            priority: Priority.high, // 👈 تعديل
+            importance: Importance.high, // 👈 التعديل
+            priority: Priority.high, // 👈 التعديل
             playSound: true,
             sound: RawResourceAndroidNotificationSound(sounds[prayer]),
             enableVibration: true,
             category: AndroidNotificationCategory.alarm,
-            autoCancel: true, // 👈 تعديل
-            ongoing: false, // 👈 تعديل
-            fullScreenIntent: false, // 👈 تعديل
+            autoCancel: true, // 👈 التعديل
+            ongoing: false, // 👈 التعديل
+            fullScreenIntent: false, // 👈 التعديل (عشان ميفتحش التطبيق لوحده)
             visibility: NotificationVisibility.public,
             audioAttributesUsage: AudioAttributesUsage.alarm,
           );
@@ -3027,16 +3025,16 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       final scheduledTime = now.add(Duration(hours: i));
 
       final androidDetails = AndroidNotificationDetails(
-        'salat_ala_nabi_channel_v2', // 👈 تعديل: v2
+        'salat_ala_nabi_channel_v2', // 👈 v2
         'تذكير الصلاة على النبي',
         channelDescription: 'تنبيهات تذكير الصلاة على النبي',
-        importance: Importance.high, // 👈 تعديل
-        priority: Priority.high, // 👈 تعديل
+        importance: Importance.high, // 👈 التعديل
+        priority: Priority.high, // 👈 التعديل
         playSound: true,
         sound: const RawResourceAndroidNotificationSound('salat_ala_nabi'),
         enableVibration: true,
         category: AndroidNotificationCategory.reminder,
-        fullScreenIntent: false, // 👈 تعديل
+        fullScreenIntent: false, // 👈 التعديل
       );
 
       try {
@@ -3329,7 +3327,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     _settings.diaryPin = prefs.getString('diary_pin') ?? '';
     _settings.diarySecurityQuestion = prefs.getString('diary_sec_q') ?? '';
     _settings.diarySecurityAnswer = prefs.getString('diary_sec_a') ?? '';
-    _settings.isProUser = prefs.getBool('is_pro_user') ?? false; // 👈 تعديل
+    _settings.isProUser = prefs.getBool('is_pro_user') ?? false; // 👈 التعديل
 
     Future.delayed(const Duration(seconds: 2), () {
       _scheduleSalatAlaNabi();
@@ -3375,7 +3373,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     await prefs.setString('custom_greeting', _settings.customGreeting);
     await prefs.setBool('tahajjud_alert_enabled', _settings.tahajjudAlertEnabled);
     await prefs.setBool('is_dark_mode', _settings.isDarkMode);
-    await prefs.setBool('is_pro_user', _settings.isProUser); // 👈 تعديل
+    await prefs.setBool('is_pro_user', _settings.isProUser); // 👈 التعديل
     if (_settings.customImagePath != null) {
       await prefs.setString('custom_secretary_image', _settings.customImagePath!);
     } else {
@@ -3749,7 +3747,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   }
 
   Future<void> _listenVoiceCommand() async {
-    // 👇 تعديل: قفل المايك للنسخة البرو
+    // 👇 التعديل: قفل المايك للنسخة البرو
     if (!_isProUser) {
       if (mounted) {
         Navigator.push(context, MaterialPageRoute(builder: (context) => PremiumScreen(
@@ -3844,14 +3842,12 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     }
   }
 
-  // 👇 Wake Word Loop مع حماية البطارية
   Future<void> _startWakeWordLoop() async {
     if (_settings.wakeWordMode == 'off') return;
     if (_ignoreNextWakeWordStart) return;
     if (_isListening || _starting || _isRecording) return;
     if (_isInBackground && _settings.wakeWordMode == 'app_open') return;
 
-    // 👇 حماية البطارية: لو فشل 5 مرات، نستنى 30 ثانية
     if (_wakeWordFailCount >= 5) {
       Future.delayed(const Duration(seconds: 30), () {
         _wakeWordFailCount = 0;
@@ -3897,7 +3893,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
         },
       );
 
-      _wakeWordFailCount = 0; // نجح
+      _wakeWordFailCount = 0;
       _isWakeWordListening = false;
       if (mounted && !_isListening && !_starting && !_isRecording && _settings.wakeWordMode != 'off') {
         if (!_isInBackground || _settings.wakeWordMode != 'app_open') {
@@ -3910,10 +3906,9 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     } catch (e) {
       _isWakeWordListening = false;
-      _wakeWordFailCount++; // 👈 فشل
+      _wakeWordFailCount++;
       debugPrint("WakeWord Error: $e");
       if (mounted && _settings.wakeWordMode != 'off') {
-        // 👇 بنزود وقت الانتظار كل مرة بيفشل فيها
         final delay = Duration(milliseconds: 500 * _wakeWordFailCount);
         Future.delayed(delay, () {
           if (mounted && !_isListening && !_starting && !_isRecording && (!_isInBackground || _settings.wakeWordMode != 'app_open')) {
@@ -4459,6 +4454,10 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
     final nameNorm = _norm(_secretaryName);
     bool isCalledByName = cmd.contains(nameNorm) || cmd.contains('يا سكرتير') || cmd.contains('يا سكرتيره') || cmd.contains('يا سكرتيرة');
 
+    // 👈 ==========================================
+    // 👈 بداية الأوامر الصوتية للإعدادات
+    // 👈 ==========================================
+
     // 1. تغيير اسم السكرتير
     if (_hasAny(cmd, ['غير اسم السكرتير', 'غيري اسم السكرتير', 'غير اسمك', 'غيري اسمك', 'من دلوقتي اسمك', 'خلي اسمك'])) {
       String newName = rawCommand
@@ -4779,7 +4778,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
 // ══════════════════════════════════════════════════════
 // نهاية PART 5 / 8
-// ══════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════
     // ══════════════════════════════════════════════════════
 // PART 6 / 8
 // _processSmartVoiceCommand (تكملة) + التعديل ب (قراءة المواقيت
@@ -7600,8 +7599,8 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
           ttsVolume: _ttsVolume,
           currentSecretaryName: _secretaryName,
           currentIsUserMale: _isUserMale,
-          isProUser: _isProUser, // 👈 تعديل
-          onUpgrade: () { // 👈 تعديل
+          isProUser: _isProUser, // 👈
+          onUpgrade: () { // 👈
             Navigator.pop(context);
             Navigator.push(context, MaterialPageRoute(builder: (context) => PremiumScreen(
               onActivated: () {
@@ -7791,7 +7790,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                   onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval),
                 ),
                 const Divider(),
-                // 👇 تعديل: قفل النغمات لو مش برو
+                // 👇 التعديل: قفل النغمات لو مش برو
                 if (_isProUser) ...[
                   Row(children: [
                     const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
@@ -7803,7 +7802,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                       onPressed: () async {
                         final result = await showDialog<String>(
                           context: context,
-                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender),
+                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender, isProUser: _isProUser), // 👈
                         );
                         if (result != null) {
                           setStateSB(() => selectedSound = result == 'default' ? null : result);
@@ -7980,7 +7979,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                   onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval),
                 ),
                 const Divider(),
-                // 👇 تعديل: قفل النغمات لو مش برو
+                // 👇 التعديل: قفل النغمات لو مش برو
                 if (_isProUser) ...[
                   Row(children: [
                     const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
@@ -7992,7 +7991,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                       onPressed: () async {
                         final result = await showDialog<String>(
                           context: context,
-                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender),
+                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender, isProUser: _isProUser), // 👈
                         );
                         if (result != null) {
                           setStateSB(() => selectedSound = result == 'default' ? null : result);
@@ -8179,7 +8178,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                   onChanged: (val) => setStateSB(() => selectedRepeatType = val ?? 'سنوي'),
                 ),
                 const Divider(),
-                // 👇 تعديل: قفل النغمات لو مش برو
+                // 👇 التعديل: قفل النغمات لو مش برو
                 if (_isProUser) ...[
                   Row(children: [
                     const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
@@ -8191,7 +8190,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                       onPressed: () async {
                         final result = await showDialog<String>(
                           context: context,
-                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender),
+                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender, isProUser: _isProUser), // 👈
                         );
                         if (result != null) {
                           setStateSB(() => selectedSound = result == 'default' ? null : result);
@@ -8841,7 +8840,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                 icon: const Icon(Icons.delete_sweep, color: Colors.redAccent, size: 30),
                 tooltip: 'مسح كل اليوميات',
                 onPressed: () async {
-                  // 👇 تعديل: التحقق من الباسورد
+                  // 👇 التعديل: التحقق من الباسورد
                   if (_settings.diaryLockEnabled && _settings.diaryPin.isNotEmpty) {
                     final unlocked = await _showDiaryPinDialog();
                     if (!unlocked) return;
@@ -9939,7 +9938,7 @@ class _TalkingImageState extends State<_TalkingImage> with SingleTickerProviderS
 }
 
 // ══════════════════════════════════════════════════════
-// _DiaryPage (زي ما هي)
+// _DiaryPage
 // ══════════════════════════════════════════════════════
 class _DiaryPage extends StatefulWidget {
   final DateTime date;
@@ -10875,7 +10874,7 @@ class _DiaryPageState extends State<_DiaryPage> {
 }
 
 // ══════════════════════════════════════════════════════
-// _HijriCalendarWidget (زي ما هي)
+// _HijriCalendarWidget
 // ══════════════════════════════════════════════════════
 class _HijriCalendarWidget extends StatefulWidget {
   final DateTime selectedDate;
@@ -11195,6 +11194,21 @@ class _PremiumScreenState extends State<PremiumScreen> {
     }
   }
 
+  // 👇 دالة جديدة للـ Bullet Points
+  Widget _buildBulletPoint(String title, String examples) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 2),
+          Text(examples, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFeatureRow(IconData icon, String title, String subtitle) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -11250,6 +11264,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
             const SizedBox(height: 10),
             const Text('ادفع مرة واحدة فقط، واستمتع بكل المميزات مدى الحياة!', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Color(0xFFC5A059), fontWeight: FontWeight.bold)),
             const SizedBox(height: 30),
+            // 👇 كارت المميزات الجديد
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -11258,12 +11273,35 @@ class _PremiumScreenState extends State<PremiumScreen> {
                 border: Border.all(color: const Color(0xFFC5A059).withOpacity(0.3), width: 1),
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildFeatureRow(Icons.mic, 'الأوامر الصوتية والنداء الدائم', 'تحكم بالكامل بصوتك وبدون لمس الهاتف'),
-                  _buildFeatureRow(Icons.vibration, 'إيقاف التسجيل بالهز', 'تحكم سريع أثناء التسجيل'),
-                  _buildFeatureRow(Icons.face, 'تخصيص السكرتير', 'غير اسمه وصورته حسب ذوقك'),
+                  const Row(
+                    children: [
+                      Icon(Icons.record_voice_over, color: Color(0xFFC5A059), size: 30),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text('أكثر من 80 أمر صوتي ذكي', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'مش محتاج تلمس الشاشة. نادي "يا سكرتير" وتحدث معه كأنه إنسان حقيقي — ينفذ أوامرك ويرد عليك:',
+                    style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
+                  ),
+                  const SizedBox(height: 15),
+                  _buildBulletPoint('🗓️ إدارة المواعيد والمنبهات:', ' "فكرني بكرة 8 الصبح"، "عدل الموعد لـ 9"، "امسح منبهات النهاردة".'),
+                  _buildBulletPoint('🕌 مواقيت الصلاة والأذان:', ' "امتى أذان الفجر؟"، "فاضل كام على العصر؟"، "فكرني قبل المغرب بنص ساعة".'),
+                  _buildBulletPoint('📝 اليوميات والمهام:', ' "اكتب في يومياتي إني خلصت الشغل"، "ضيف مهمة جديدة"، "اقرا يومية امبارح".'),
+                  _buildBulletPoint('📅 الجدول الأسبوعي:', ' "ضيف موعد يوم السبت 5 العصر"، "عندي ايه بكرة؟"، "الغي جدول النهاردة".'),
+                  _buildBulletPoint('⚙️ تغيير الإعدادات بصوتك:', ' "غير اسمك لـ أحمد"، "خلي صوتك أسرع"، "فعل الوضع الليلي"، "غير نغمة المنبه".'),
+                  _buildBulletPoint('📿 التسبيح والأذكار:', ' "سبحان الله 33 مرة"، "العداد كام؟"، "صفري التسبيح"، "وضع الأذكار".'),
+                  _buildBulletPoint('🗣️ محادثة وردود ذكية:', ' "إزيك؟"، "قولي نكتة"، "قولي لغز"، "انت مين؟"، "ادعيلي"، "بحبك"، "أنا تعبان"، "قوليلي الساعة كام".'),
+                  const Divider(color: Colors.white24, height: 30),
+                  _buildFeatureRow(Icons.vibration, 'إيقاف التسجيل بالهز', 'تحكم سريع أثناء تسجيل الصوتيات'),
                   _buildFeatureRow(Icons.music_note, 'نغمات حصرية للمنبهات', 'أصوات مرعب، آيفون، وصحيان قوي'),
-                  _buildFeatureRow(Icons.lock, 'قفل اليوميات', 'أمان تام لخصوصيتك بكلمة سر'),
+                  _buildFeatureRow(Icons.face, 'تخصيص السكرتير', 'غير الاسم والصورة حسب ذوقك'),
+                  _buildFeatureRow(Icons.lock, 'قفل اليوميات السري', 'أمان تام لخصوصيتك بكلمة سر'),
                 ],
               ),
             ),
@@ -11281,29 +11319,29 @@ class _PremiumScreenState extends State<PremiumScreen> {
               ),
             ),
             const SizedBox(height: 30),
+            // 👇 زرار الواتساب بـ FaIcon
             ElevatedButton.icon(
-  style: ElevatedButton.styleFrom(
-    backgroundColor: const Color(0xFF25D366),
-    minimumSize: const Size.fromHeight(55),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-  ),
-  // 👇 التعديل هنا
-  icon: const FaIcon(FontAwesomeIcons.whatsapp, color: Colors.white, size: 30),
-  label: const Text('للطلب وشراء كود التفعيل (اضغط هنا)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-  onPressed: () async {
-    // 👇 متنساش تغير الرقم ده لرقمك
-    final Uri url = Uri.parse('https://wa.me/201032491766?text=أهلاً، أريد شراء كود تفعيل النسخة البرو لتطبيق السكرتير');
-    try {
-      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-        throw 'Could not launch';
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تأكد من وجود تطبيق واتساب'), backgroundColor: Colors.red));
-      }
-    }
-  },
-),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF25D366),
+                minimumSize: const Size.fromHeight(55),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const FaIcon(FontAwesomeIcons.whatsapp, color: Colors.white, size: 30),
+              label: const Text('للطلب وشراء كود التفعيل (اضغط هنا)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              onPressed: () async {
+                // 👇 غيّر الرقم لرقمك لو مختلف
+                final Uri url = Uri.parse('https://wa.me/201032491766?text=أهلاً، أريد شراء كود تفعيل النسخة البرو لتطبيق السكرتير');
+                try {
+                  if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+                    throw 'Could not launch';
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تأكد من وجود تطبيق واتساب'), backgroundColor: Colors.red));
+                  }
+                }
+              },
+            ),
             const SizedBox(height: 30),
             const Row(children: [Expanded(child: Divider(color: Colors.white24)), Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('لديك كود بالفعل؟', style: TextStyle(color: Colors.white54))), Expanded(child: Divider(color: Colors.white24))]),
             const SizedBox(height: 20),
@@ -11347,5 +11385,5 @@ class _PremiumScreenState extends State<PremiumScreen> {
 }
 
 // ══════════════════════════════════════════════════════
-// 🎉 نهاية الملف بالكامل — التطبيق كامل بدون أي نقص
+// 🎉 نهاية الملف بالكامل
 // ══════════════════════════════════════════════════════
