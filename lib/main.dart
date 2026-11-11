@@ -1137,7 +1137,7 @@ const SizedBox(height: 12),
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  DateFormat('hh:mm a', 'ar').format(DateTime(2024, 1, 1, _defaultReminderHour, _defaultReminderMinute)),
+                  DateFormat('hh:mm a', 'en').format(DateTime(2024, 1, 1, _defaultReminderHour, _defaultReminderMinute)).replaceAll('PM', 'م').replaceAll('AM', 'ص'),
                   style: const TextStyle(fontSize: 20, color: Color(0xFFC5A059), fontWeight: FontWeight.bold),
                 ),
               ),
@@ -2519,7 +2519,7 @@ class _SoundPickerDialogState extends State<SoundPickerDialog> {
   @override
   void initState() {
     super.initState();
-    _selected = widget.currentUri ?? 'default';
+    _selected = widget.currentUri ?? 'system_alarm';
     _loadSounds();
   }
 
@@ -8085,7 +8085,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     String selectedInterval = existingTask?['repeatInterval'] ?? _settings.defaultInterval;
     String selectedAdvanceReminder = existingTask?['advanceReminder'] ?? 'في الموعد';
     List<String> selectedDays = List<String>.from(existingTask?['customDays'] ?? []);
-    String? selectedSound = existingTask?['sound'] ?? defaultSound;
+    String? selectedSound = existingTask?['sound'] ?? defaultSound ?? 'system_alarm';
 
     final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'كل يومين', 'أسبوعي', 'كل أسبوعين', 'شهري', 'مخصص'];
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
@@ -8156,27 +8156,32 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                   onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval),
                 ),
                 const Divider(),
-                // 👇 التعديل: قفل النغمات لو مش برو
-                if (_isProUser) ...[
-                  Row(children: [
-                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
-                    const SizedBox(width: 8),
-                    const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(selectedSound == null ? 'الافتراضي' : 'مخصص', style: const TextStyle(fontSize: 13))),
-                    TextButton(
-                      onPressed: () async {
-                        final result = await showDialog<String>(
-                          context: context,
-                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender, isProUser: _isProUser), // 👈
-                        );
-                        if (result != null) {
-                          setStateSB(() => selectedSound = result == 'default' ? null : result);
-                        }
-                      },
-                      child: const Text('اختيار'),
-                    ),
-                  ]),
+                Row(children: [
+  const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
+  const SizedBox(width: 8),
+  const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+  const SizedBox(width: 8),
+  Expanded(
+    child: Text(
+      selectedSound == null || selectedSound == 'default' 
+          ? 'الافتراضي' 
+          : (selectedSound == 'system_alarm' ? 'منبه الهاتف' : 'مخصص'), 
+      style: const TextStyle(fontSize: 13)
+    )
+  ),
+  TextButton(
+    onPressed: () async {
+      final result = await showDialog<String>(
+        context: context,
+        builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender, isProUser: _isProUser),
+      );
+      if (result != null) {
+        setStateSB(() => selectedSound = result == 'default' ? null : result);
+      }
+    },
+    child: const Text('اختيار'),
+  ),
+]),
                 ] else ...[
                   const Row(children: [
                     Icon(Icons.music_note, color: Colors.grey),
@@ -8298,8 +8303,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     }
     String selectedInterval = existingTask?['repeatInterval'] ?? _settings.defaultInterval;
     String selectedAdvanceReminder = existingTask?['advanceReminder'] ?? 'في الموعد';
-    String? selectedSound = existingTask?['sound'] ?? defaultSound;
-
+    String? selectedSound = existingTask?['sound'] ?? defaultSound ?? 'system_alarm';
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     final List<String> advanceOptions = ['في الموعد', 'قبلها بـ 5 دقائق', 'قبلها بـ 10 دقائق', 'قبلها بـ 15 دقيقة', 'قبلها بـ 20 دقيقة', 'قبلها بـ 30 دقيقة', 'قبلها بـ 45 دقيقة', 'قبلها بساعة', 'قبلها بساعتين', 'قبلها ب 6 ساعات', 'قبلها ب 12 ساعة', 'قبلها بـ 24 ساعة'];
 
@@ -8345,27 +8349,32 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                   onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval),
                 ),
                 const Divider(),
-                // 👇 التعديل: قفل النغمات لو مش برو
-                if (_isProUser) ...[
-                  Row(children: [
-                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
-                    const SizedBox(width: 8),
-                    const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(selectedSound == null ? 'الافتراضي' : 'مخصص', style: const TextStyle(fontSize: 13))),
-                    TextButton(
-                      onPressed: () async {
-                        final result = await showDialog<String>(
-                          context: context,
-                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender, isProUser: _isProUser), // 👈
-                        );
-                        if (result != null) {
-                          setStateSB(() => selectedSound = result == 'default' ? null : result);
-                        }
-                      },
-                      child: const Text('اختيار'),
-                    ),
-                  ]),
+                Row(children: [
+  const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
+  const SizedBox(width: 8),
+  const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+  const SizedBox(width: 8),
+  Expanded(
+    child: Text(
+      selectedSound == null || selectedSound == 'default' 
+          ? 'الافتراضي' 
+          : (selectedSound == 'system_alarm' ? 'منبه الهاتف' : 'مخصص'), 
+      style: const TextStyle(fontSize: 13)
+    )
+  ),
+  TextButton(
+    onPressed: () async {
+      final result = await showDialog<String>(
+        context: context,
+        builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender, isProUser: _isProUser),
+      );
+      if (result != null) {
+        setStateSB(() => selectedSound = result == 'default' ? null : result);
+      }
+    },
+    child: const Text('اختيار'),
+  ),
+]),
                 ] else ...[
                   const Row(children: [
                     Icon(Icons.music_note, color: Colors.grey),
@@ -8467,7 +8476,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     String selectedAdvanceReminder = existingEvent?['advanceReminder'] ?? 'قبلها بيوم';
     String selectedInterval = existingEvent?['repeatInterval'] ?? 'مرة واحدة';
     String selectedRepeatType = existingEvent?['repeatType'] ?? 'سنوي';
-    String? selectedSound = existingEvent?['sound'] ?? defaultEventSound;
+    String? selectedSound = existingTask?['sound'] ?? defaultSound ?? 'system_alarm';
     DateTime selectedEventDate = DateTime.now();
     if (existingEvent != null) {
       try {
@@ -8544,27 +8553,32 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                   onChanged: (val) => setStateSB(() => selectedRepeatType = val ?? 'سنوي'),
                 ),
                 const Divider(),
-                // 👇 التعديل: قفل النغمات لو مش برو
-                if (_isProUser) ...[
-                  Row(children: [
-                    const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
-                    const SizedBox(width: 8),
-                    const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(selectedSound == null ? 'الافتراضي' : 'مخصص', style: const TextStyle(fontSize: 13))),
-                    TextButton(
-                      onPressed: () async {
-                        final result = await showDialog<String>(
-                          context: context,
-                          builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender, isProUser: _isProUser), // 👈
-                        );
-                        if (result != null) {
-                          setStateSB(() => selectedSound = result == 'default' ? null : result);
-                        }
-                      },
-                      child: const Text('اختيار'),
-                    ),
-                  ]),
+                Row(children: [
+  const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
+  const SizedBox(width: 8),
+  const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+  const SizedBox(width: 8),
+  Expanded(
+    child: Text(
+      selectedSound == null || selectedSound == 'default' 
+          ? 'الافتراضي' 
+          : (selectedSound == 'system_alarm' ? 'منبه الهاتف' : 'مخصص'), 
+      style: const TextStyle(fontSize: 13)
+    )
+  ),
+  TextButton(
+    onPressed: () async {
+      final result = await showDialog<String>(
+        context: context,
+        builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender, isProUser: _isProUser),
+      );
+      if (result != null) {
+        setStateSB(() => selectedSound = result == 'default' ? null : result);
+      }
+    },
+    child: const Text('اختيار'),
+  ),
+]),
                 ] else ...[
                   const Row(children: [
                     Icon(Icons.music_note, color: Colors.grey),
@@ -9767,8 +9781,10 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
             final nextYear = DateTime(now.year + 1, eventDate.month, eventDate.day);
             final nextOccurrence = thisYear.isAfter(now) ? thisYear : nextYear;
             final remaining = _formatRemaining(nextOccurrence);
-            final reminderTime = '${(e['reminderHour'] ?? 18).toString().padLeft(2, '0')}:${(e['reminderMinute'] ?? 0).toString().padLeft(2, '0')}';
-            final repeatInterval = e['repeatInterval'] ?? 'مرة واحدة';
+final rH = e['reminderHour'] ?? 18;
+final rM = e['reminderMinute'] ?? 0;
+final reminderTime = DateFormat('hh:mm a', 'en').format(DateTime(2024, 1, 1, rH, rM)).replaceAll('PM', 'م').replaceAll('AM', 'ص');
+final repeatInterval = e['repeatInterval'] ?? 'مرة واحدة';
             final repeatType = e['repeatType'] ?? 'سنوي';
             return Container(
               margin: const EdgeInsets.symmetric(vertical: 5),
