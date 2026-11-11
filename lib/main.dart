@@ -860,33 +860,35 @@ StreamBuilder<DocumentSnapshot>(
           const SizedBox(height: 15),
           const Text('سجل دخولك أو أنشئ حساباً جديداً للاستفادة من النسخة البرو وإدارة الأجهزة.', style: TextStyle(fontSize: 13, color: Colors.grey)),
           const SizedBox(height: 15),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                  onPressed: () async {
-  await Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen(startInRegisterMode: true)));
-  widget.onAuthChanged();
-  if (mounted) setState(() {});
-},
-                  child: const Text('تسجيل الدخول', style: TextStyle(color: Colors.white, fontSize: 13)),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                  onPressed: () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen()));
-                    widget.onAuthChanged();
-                    if (mounted) setState(() {});
-                  },
-                  child: const Text('إنشاء حساب', style: TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          )
+         Row(
+  children: [
+    Expanded(
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+        onPressed: () async {
+          // 👇 زرار تسجيل الدخول بيفتح الشاشة عادي
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen()));
+          widget.onAuthChanged();
+          if (mounted) setState(() {});
+        },
+        child: const Text('تسجيل الدخول', style: TextStyle(color: Colors.white, fontSize: 13)),
+      ),
+    ),
+    const SizedBox(width: 10),
+    Expanded(
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC5A059), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+        onPressed: () async {
+          // 👇 زرار إنشاء حساب بيفتح الشاشة على وضع التسجيل مباشرة
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen(startInRegisterMode: true)));
+          widget.onAuthChanged();
+          if (mounted) setState(() {});
+        },
+        child: const Text('إنشاء حساب', style: TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.bold)),
+      ),
+    ),
+  ],
+)
         ]
       ],
     ),
@@ -2600,8 +2602,9 @@ class _SoundPickerDialogState extends State<SoundPickerDialog> {
 
   Widget _soundTile({required String title, required String uri}) {
     final isSelected = _selected == uri;
-    final isLocked = !widget.isProUser && uri != 'default'; // 👈 التعديل: القفل هنا
-
+    final isSecretaryVoice = uri == 'default';
+final isCustomSound = uri.startsWith('raw://') || uri.contains('alarm_');
+final isLocked = !widget.isProUser && (isSecretaryVoice || isCustomSound);
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 2),
       decoration: BoxDecoration(
@@ -11847,6 +11850,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                   ),
                   const SizedBox(height: 15),
                   _buildBulletPoint('🗓️ إدارة المواعيد والمنبهات:', ' "فكرني بكرة 8 الصبح"، "عدل الموعد لـ 9"، "امسح منبهات النهاردة".'),
+                  _buildBulletPoint('🗣️ التحكم في المنبه بالصوت:', ' "وقف المنبه"، "صحيت"، "أجله 10 دقايق"، "فكرني بعد نص ساعة".'),
                   _buildBulletPoint('🕌 مواقيت الصلاة والأذان:', ' "امتى أذان الفجر؟"، "فاضل كام على العصر؟"، "فكرني قبل المغرب بنص ساعة".'),
                   _buildBulletPoint('📝 اليوميات والمهام:', ' "اكتب في يومياتي إني خلصت الشغل"، "ضيف مهمة جديدة"، "اقرا يومية امبارح".'),
                   _buildBulletPoint('📅 الجدول الأسبوعي:', ' "ضيف موعد يوم السبت 5 العصر"، "عندي ايه بكرة؟"، "الغي جدول النهاردة".'),
@@ -11855,6 +11859,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                   _buildBulletPoint('🗣️ محادثة وردود ذكية:', ' "إزيك؟"، "قولي نكتة"، "قولي لغز"، "انت مين؟"، "ادعيلي"، "بحبك"، "أنا تعبان"، "قوليلي الساعة كام".'),
                   const Divider(color: Colors.white24, height: 30),
                   _buildFeatureRow(Icons.vibration, 'إيقاف التسجيل بالهز', 'تحكم سريع أثناء تسجيل الصوتيات'),
+                  _buildFeatureRow(Icons.alarm, 'إيقاف وتأجيل المنبه بالصوت', 'تحكم كامل في المنبه حتى لو إيدك مشغولة'),
                   _buildFeatureRow(Icons.music_note, 'نغمات حصرية للمنبهات', 'أصوات مرعب، آيفون، وصحيان قوي'),
                   _buildFeatureRow(Icons.face, 'تخصيص السكرتير', 'غير الاسم والصورة حسب ذوقك'),
                   _buildFeatureRow(Icons.lock, 'قفل اليوميات السري', 'أمان تام لخصوصيتك بكلمة سر'),
