@@ -1137,7 +1137,7 @@ const SizedBox(height: 12),
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  '${_defaultReminderHour.toString().padLeft(2, '0')}:${_defaultReminderMinute.toString().padLeft(2, '0')}',
+                  DateFormat('hh:mm a', 'ar').format(DateTime(2024, 1, 1, _defaultReminderHour, _defaultReminderMinute)),
                   style: const TextStyle(fontSize: 20, color: Color(0xFFC5A059), fontWeight: FontWeight.bold),
                 ),
               ),
@@ -1421,39 +1421,49 @@ const SizedBox(height: 12),
               onChanged: (v) => setState(() => _showAboveLockScreen = v),
             ),
           ),
+          // 👇 تشغيل الهز (برو)
+const SizedBox(height: 12),
+if (widget.isProUser)
+  Card(
+    elevation: 2,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.vibration, color: _shakeMode != 'off' ? const Color(0xFFC5A059) : const Color(0xFF1B2A4A), size: 26),
+            const SizedBox(width: 10),
+            const Text('تشغيل الهز', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          ]),
           const SizedBox(height: 12),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: _shakeMode != 'off' ? const Color(0xFFC5A059) : Colors.transparent, width: 2),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Icon(Icons.vibration, color: _shakeMode != 'off' ? const Color(0xFFC5A059) : const Color(0xFF1B2A4A), size: 26),
-                    const SizedBox(width: 10),
-                    const Text('تشغيل الهز', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  ]),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: _shakeMode,
-                    decoration: const InputDecoration(labelText: 'حالة الهز', border: OutlineInputBorder()),
-                    items: [
-                      DropdownMenuItem(value: 'off', child: Text('متوقف')),
-                      DropdownMenuItem(value: 'app_open', child: Text('التطبيق مفتوح فقط')),
-                      DropdownMenuItem(value: 'background', child: Text('التطبيق مفتوح + الخلفية')),
-                      DropdownMenuItem(value: 'always', child: Text('دائماً (حتى لو التطبيق مقفول)')),
-                    ],
-                    onChanged: (val) => setState(() => _shakeMode = val ?? 'off'),
-                  ),
-                ],
-              ),
-            ),
+          DropdownButtonFormField<String>(
+            value: _shakeMode,
+            decoration: const InputDecoration(labelText: 'حالة الهز', border: OutlineInputBorder()),
+            items: [
+              DropdownMenuItem(value: 'off', child: Text('متوقف')),
+              DropdownMenuItem(value: 'app_open', child: Text('التطبيق مفتوح فقط')),
+              DropdownMenuItem(value: 'background', child: Text('التطبيق مفتوح + الخلفية')),
+              DropdownMenuItem(value: 'always', child: Text('دائماً (حتى لو التطبيق مقفول)')),
+            ],
+            onChanged: (val) => setState(() => _shakeMode = val ?? 'off'),
           ),
+        ],
+      ),
+    ),
+  )
+else
+  Card(
+    elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    child: ListTile(
+      leading: const Icon(Icons.vibration, color: Colors.grey, size: 26),
+      title: const Text('تشغيل الهز', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey)),
+      subtitle: const Text('متاح في النسخة البرو 👑', style: TextStyle(color: Color(0xFFC5A059), fontSize: 12)),
+      trailing: const Icon(Icons.lock, color: Color(0xFFC5A059)),
+      onTap: widget.onUpgrade,
+    ),
+  ),
           
           // 👇 إيقاف التسجيل بالهز (مقفول للبرو)
           const SizedBox(height: 12),
@@ -2567,11 +2577,17 @@ class _SoundPickerDialogState extends State<SoundPickerDialog> {
                   shrinkWrap: true,
                   children: [
                     _soundTile(
-                      title: widget.voiceGender == 'ذكر'
-                          ? 'الافتراضي (السكرتير)'
-                          : 'الافتراضي (السكرتيرة)',
-                      uri: 'default',
-                    ),
+  title: 'منبه الهاتف الافتراضي',
+  uri: 'system_alarm',
+),
+const SizedBox(height: 5),
+if (widget.isProUser)
+  _soundTile(
+    title: widget.voiceGender == 'ذكر'
+        ? 'صوت السكرتير (برو)'
+        : 'صوت السكرتيرة (برو)',
+    uri: 'default',
+  ),
                     const Divider(),
                     if (_sounds.isEmpty)
                       const Padding(
@@ -2603,6 +2619,7 @@ class _SoundPickerDialogState extends State<SoundPickerDialog> {
   Widget _soundTile({required String title, required String uri}) {
     final isSelected = _selected == uri;
     final isSecretaryVoice = uri == 'default';
+final isSystemAlarm = uri == 'system_alarm';
 final isCustomSound = uri.startsWith('raw://') || uri.contains('alarm_');
 final isLocked = !widget.isProUser && (isSecretaryVoice || isCustomSound);
     return Container(
@@ -7277,8 +7294,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     }
 
     final userTitle = _userTitle;
-    final hasCustomSound = soundUri != null && soundUri.isNotEmpty && soundUri != 'default';
-
+    final hasCustomSound = soundUri != null && soundUri.isNotEmpty && soundUri != 'default' && soundUri != 'system_alarm';
     final taskData = _tasks.firstWhere((t) => t['task'] == taskTitle, orElse: () => {});
     final alarmId = taskData['alarmId'] as int?;
 
@@ -7302,11 +7318,12 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     _activeAlarmSoundUri = soundUri;
 
     void speakAlert() {
-      if (_isInBackground) return;
-      if (!hasCustomSound) {
-        _speak("حَانَ الآنَ مَوْعِدُ: $taskTitle");
-      }
-      HapticFeedback.vibrate();
+  if (_isInBackground) return;
+  // لو الصوت مخصص أو منبه الهاتف، التطبيق ميتكلمش
+  if (!hasCustomSound && soundUri != 'system_alarm') {
+    _speak("حَانَ الآنَ مَوْعِدُ: $taskTitle");
+  }
+  HapticFeedback.vibrate();
     }
 
     if (interval != 'بدون تنبيه') {
@@ -7986,6 +8003,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
               _settings.diarySecurityQuestion = diarySecurityQuestion;
               _settings.diarySecurityAnswer = diarySecurityAnswer;
             });
+            widget.onThemeChanged(isDarkMode);
 
             await _saveSettings();
             final prefs = await SharedPreferences.getInstance();
@@ -7994,7 +8012,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
             _settings.customUserTitle = prefs.getString('custom_user_title') ?? '';
             _settings.customSecTitle = prefs.getString('custom_sec_title') ?? '';
             _scheduleSalatAlaNabi();
-            widget.onThemeChanged(isDarkMode);
 
             Future.delayed(const Duration(milliseconds: 100), () async {
               try { _scheduleAdhan30Days(); } catch (_) {}
@@ -8498,7 +8515,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text('وقت التذكير: ${reminderTime.format(context)}'),
+                  title: Text('وقت التذكير: ${DateFormat('hh:mm a', 'ar').format(DateTime(2024, 1, 1, reminderTime.hour, reminderTime.minute))}'),
                   trailing: const Icon(Icons.access_time, color: Color(0xFF1B2A4A)),
                   onTap: () async {
                     final picked = await showTimePicker(context: context, initialTime: reminderTime);
@@ -11440,6 +11457,9 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
                 bool isSelected = gDate.year == widget.selectedDate.year &&
                                   gDate.month == widget.selectedDate.month &&
                                   gDate.day == widget.selectedDate.day;
+                bool isToday = gDate.year == DateTime.now().year &&
+               gDate.month == DateTime.now().month &&
+               gDate.day == DateTime.now().day;
                 return SizedBox(
                   width: cellWidth,
                   height: cellHeight,
@@ -11451,9 +11471,10 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
                         width: 38,
                         height: 38,
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isSelected ? const Color(0xFF1B2A4A) : null,
-                        ),
+  shape: BoxShape.circle,
+  color: isSelected ? const Color(0xFF1B2A4A) : null,
+  border: isToday && !isSelected ? Border.all(color: const Color(0xFF1B2A4A), width: 1.5) : null, // 👈 التعديل هنا
+),
                         alignment: Alignment.center,
                         child: Text('$day', style: TextStyle(
                           fontSize: 16,
@@ -11858,6 +11879,8 @@ class _PremiumScreenState extends State<PremiumScreen> {
                   _buildBulletPoint('📿 التسبيح والأذكار:', ' "سبحان الله 33 مرة"، "العداد كام؟"، "صفري التسبيح"، "وضع الأذكار".'),
                   _buildBulletPoint('🗣️ محادثة وردود ذكية:', ' "إزيك؟"، "قولي نكتة"، "قولي لغز"، "انت مين؟"، "ادعيلي"، "بحبك"، "أنا تعبان"، "قوليلي الساعة كام".'),
                   const Divider(color: Colors.white24, height: 30),
+                  _buildFeatureRow(Icons.vibration, 'تشغيل الهز', 'نادي السكرتير بهز الهاتف'),
+_buildFeatureRow(Icons.mic_external_on, 'النداء الدائم', 'نادي السكرتير بصوتك في أي وقت'),
                   _buildFeatureRow(Icons.vibration, 'إيقاف التسجيل بالهز', 'تحكم سريع أثناء تسجيل الصوتيات'),
                   _buildFeatureRow(Icons.alarm, 'إيقاف وتأجيل المنبه بالصوت', 'تحكم كامل في المنبه حتى لو إيدك مشغولة'),
                   _buildFeatureRow(Icons.music_note, 'نغمات حصرية للمنبهات', 'أصوات مرعب، آيفون، وصحيان قوي'),
