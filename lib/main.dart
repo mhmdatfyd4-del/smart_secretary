@@ -33,7 +33,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // 👈 تم إضافة الاستيراد
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 final StreamController<Map<String, dynamic>> _diaryVoiceStream = StreamController.broadcast();
 
@@ -790,6 +792,33 @@ Card(
               }
             },
           ),
+          // 👇 زرار الأجهزة المتصلة (بيظهر بس لو فيه أكتر من جهاز)
+StreamBuilder<DocumentSnapshot>(
+  stream: FirebaseAuth.instance.currentUser != null
+      ? FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).snapshots()
+      : const Stream.empty(),
+  builder: (context, snapshot) {
+    if (snapshot.hasData) {
+      final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+      final devices = data['devices'] as Map<String, dynamic>? ?? {};
+      if (devices.length > 1) { // بيظهر بس لو 2 أو أكتر
+        return Column(
+          children: [
+            const Divider(),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.devices, color: Colors.green),
+              title: const Text('الأجهزة المتصلة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+              onTap: () => _showManageDevicesDialog(),
+            ),
+          ],
+        );
+      }
+    }
+    return const SizedBox.shrink();
+  },
+),
           const Divider(),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -829,7 +858,7 @@ Card(
             ],
           ),
           const SizedBox(height: 15),
-          const Text('سجل دخولك أو أنشئ حساباً جديداً للاستفادة من المزامنة والنسخة البرو.', style: TextStyle(fontSize: 13, color: Colors.grey)),
+          const Text('سجل دخولك أو أنشئ حساباً جديداً للاستفادة من النسخة البرو وإدارة الأجهزة.', style: TextStyle(fontSize: 13, color: Colors.grey)),
           const SizedBox(height: 15),
           Row(
             children: [
@@ -837,10 +866,10 @@ Card(
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B2A4A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                   onPressed: () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen()));
-                    widget.onAuthChanged();
-                    if (mounted) setState(() {});
-                  },
+  await Navigator.push(context, MaterialPageRoute(builder: (_) => LoginScreen(startInRegisterMode: true)));
+  widget.onAuthChanged();
+  if (mounted) setState(() {});
+},
                   child: const Text('تسجيل الدخول', style: TextStyle(color: Colors.white, fontSize: 13)),
                 ),
               ),
@@ -1817,6 +1846,70 @@ const SizedBox(height: 12),
       ),
     );
   }
+  Future<Map<String, String>> _getDeviceInfo() async {
+  final deviceInfo = DeviceInfoPlugin();
+  try {
+    if (Platform.isAndroid) {
+      final androidInfo = await deviceInfo.androidInfo;
+      return {'id': androidInfo.id, 'name': '${androidInfo.manufacturer} ${androidInfo.model}'};
+    } else if (Platform.isIOS) {
+      final iosInfo = await deviceInfo.iosInfo;
+      return {'id': iosInfo.identifierForVendor ?? 'unknown', 'name': iosInfo.name};
+    }
+  } catch (_) {}
+  return {'id': 'unknown_${DateTime.now().millisecondsSinceEpoch}', 'name': 'جهاز غير معروف'};
+}
+
+Future<void> _showManageDevicesDialog() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
+  
+  final device = await _getDeviceInfo();
+  final currentDeviceId = device['id']!;
+
+  if (!mounted) return;
+  showDialog(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        title: const Text('الأجهزة المتصلة'),
+        content: StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const CircularProgressIndicator();
+            final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+            final devices = Map<String, dynamic>.from(data['devices'] ?? {});
+            
+            if (devices.isEmpty) return const Text('لا توجد أجهزة مسجلة.');
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: devices.entries.map((e) {
+                final isCurrent = e.key == currentDeviceId;
+                return ListTile(
+                  leading: Icon(Icons.smartphone, color: isCurrent ? Colors.green : Colors.grey),
+                  title: Text(e.value.toString(), style: TextStyle(fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal)),
+                  subtitle: isCurrent ? const Text('هذا الجهاز', style: TextStyle(color: Colors.green, fontSize: 12)) : null,
+                  trailing: isCurrent ? null : IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () async {
+                      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                        'devices.${e.key}': FieldValue.delete()
+                      });
+                    },
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق')),
+        ],
+      );
+    },
+  );
+}
 }
 
 // ══════════════════════════════════════════════════════
@@ -2575,7 +2668,8 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
   bool _isWakeWordListening = false;
   bool _isAlarmDialogOpen = false;
   bool _voiceDiaryAuthTemp = false;
-  bool _isProUser = false; // 👈 التعديل
+  bool _isProUser = false;
+  bool _isDeviceBlocked = false;
   String? _activeAlarmTitle;
   BuildContext? _alarmDialogContext;
 
