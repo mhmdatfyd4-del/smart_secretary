@@ -8375,13 +8375,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     child: const Text('اختيار'),
   ),
 ]),
-                ] else ...[
-                  const Row(children: [
-                    Icon(Icons.music_note, color: Colors.grey),
-                    SizedBox(width: 8),
-                    Text('🎵 الصوت: الافتراضي (تغيير النغمة في البرو 👑)', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  ]),
-                ],
+                
               ],
             ),
           ),
@@ -8476,7 +8470,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     String selectedAdvanceReminder = existingEvent?['advanceReminder'] ?? 'قبلها بيوم';
     String selectedInterval = existingEvent?['repeatInterval'] ?? 'مرة واحدة';
     String selectedRepeatType = existingEvent?['repeatType'] ?? 'سنوي';
-    String? selectedSound = existingTask?['sound'] ?? defaultSound ?? 'system_alarm';
+    String? selectedSound = existingEvent?['sound'] ?? defaultEventSound ?? 'system_alarm';
     DateTime selectedEventDate = DateTime.now();
     if (existingEvent != null) {
       try {
@@ -8579,13 +8573,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     child: const Text('اختيار'),
   ),
 ]),
-                ] else ...[
-                  const Row(children: [
-                    Icon(Icons.music_note, color: Colors.grey),
-                    SizedBox(width: 8),
-                    Text('🎵 الصوت: الافتراضي (تغيير النغمة في البرو 👑)', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  ]),
-                ],
+
               ],
             ),
           ),
