@@ -8184,7 +8184,6 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     ],
   ),
 ),
-actions: [
                 
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
