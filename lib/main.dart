@@ -2519,7 +2519,7 @@ class _SoundPickerDialogState extends State<SoundPickerDialog> {
   @override
   void initState() {
     super.initState();
-    _selected = widget.currentUri ?? 'system_alarm';
+    _selected = widget.currentUri ?? (widget.isProUser ? 'default' : 'system_alarm');
     _loadSounds();
   }
 
@@ -8085,8 +8085,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     String selectedInterval = existingTask?['repeatInterval'] ?? _settings.defaultInterval;
     String selectedAdvanceReminder = existingTask?['advanceReminder'] ?? 'في الموعد';
     List<String> selectedDays = List<String>.from(existingTask?['customDays'] ?? []);
-    String? selectedSound = existingTask?['sound'] ?? defaultSound ?? 'system_alarm';
-
+    String? selectedSound = existingTask?['sound'] ?? defaultSound ?? (_isProUser ? null : 'system_alarm');
     final List<String> repeatOptions = ['مرة واحدة', 'يومي', 'كل يومين', 'أسبوعي', 'كل أسبوعين', 'شهري', 'مخصص'];
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     final List<String> advanceOptions = ['في الموعد', 'قبلها بـ 5 دقائق', 'قبلها بـ 10 دقائق', 'قبلها بـ 15 دقيقة', 'قبلها بـ 30 دقيقة', 'قبلها بساعة', 'قبلها ب 6 ساعات', 'قبلها ب 12 ساعة', 'قبلها بـ 24 ساعة'];
@@ -8294,7 +8293,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     }
     String selectedInterval = existingTask?['repeatInterval'] ?? _settings.defaultInterval;
     String selectedAdvanceReminder = existingTask?['advanceReminder'] ?? 'في الموعد';
-    String? selectedSound = existingTask?['sound'] ?? defaultSound ?? 'system_alarm';
+    String? selectedSound = existingTask?['sound'] ?? defaultSound ?? (_isProUser ? null : 'system_alarm');
     final List<String> intervalOptions = ['بدون تنبيه', 'مرة واحدة', 'كل 10 ثواني', 'كل 20 ثانية', 'كل 30 ثانية', 'كل دقيقة', 'كل دقيقتين', 'كل 3 دقايق', 'كل 5 دقايق', 'كل 10 دقايق'];
     final List<String> advanceOptions = ['في الموعد', 'قبلها بـ 5 دقائق', 'قبلها بـ 10 دقائق', 'قبلها بـ 15 دقيقة', 'قبلها بـ 20 دقيقة', 'قبلها بـ 30 دقيقة', 'قبلها بـ 45 دقيقة', 'قبلها بساعة', 'قبلها بساعتين', 'قبلها ب 6 ساعات', 'قبلها ب 12 ساعة', 'قبلها بـ 24 ساعة'];
 
@@ -8461,7 +8460,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     String selectedAdvanceReminder = existingEvent?['advanceReminder'] ?? 'قبلها بيوم';
     String selectedInterval = existingEvent?['repeatInterval'] ?? 'مرة واحدة';
     String selectedRepeatType = existingEvent?['repeatType'] ?? 'سنوي';
-    String? selectedSound = existingEvent?['sound'] ?? defaultEventSound ?? 'system_alarm';
+    String? selectedSound = existingEvent?['sound'] ?? defaultEventSound ?? (_isProUser ? null : 'system_alarm');
     DateTime selectedEventDate = DateTime.now();
     if (existingEvent != null) {
       try {
