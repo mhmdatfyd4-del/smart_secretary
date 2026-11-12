@@ -8155,32 +8155,36 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
                   onChanged: (val) => setStateSB(() => selectedInterval = val ?? _settings.defaultInterval),
                 ),
                 const Divider(),
-                Row(children: [
-  const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
-  const SizedBox(width: 8),
-  const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-  const SizedBox(width: 8),
-  Expanded(
-    child: Text(
-      selectedSound == null || selectedSound == 'default' 
-          ? 'الافتراضي' 
-          : (selectedSound == 'system_alarm' ? 'منبه الهاتف' : 'مخصص'), 
-      style: const TextStyle(fontSize: 13)
-    )
+                      Row(children: [
+        const Icon(Icons.music_note, color: Color(0xFF1B2A4A)),
+        const SizedBox(width: 8),
+        const Text('🎵 الصوت:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            selectedSound == null || selectedSound == 'default' 
+                ? 'الافتراضي' 
+                : (selectedSound == 'system_alarm' ? 'منبه الهاتف' : 'مخصص'), 
+            style: const TextStyle(fontSize: 13)
+          )
+        ),
+        TextButton(
+          onPressed: () async {
+            final result = await showDialog<String>(
+              context: context,
+              builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender, isProUser: _isProUser),
+            );
+            if (result != null) {
+              setStateSB(() => selectedSound = result == 'default' ? null : result);
+            }
+          },
+          child: const Text('اختيار'),
+        ),
+      ]),
+    ],
   ),
-  TextButton(
-    onPressed: () async {
-      final result = await showDialog<String>(
-        context: context,
-        builder: (_) => SoundPickerDialog(currentUri: selectedSound, voiceGender: _settings.voiceGender, isProUser: _isProUser),
-      );
-      if (result != null) {
-        setStateSB(() => selectedSound = result == 'default' ? null : result);
-      }
-    },
-    child: const Text('اختيار'),
-  ),
-]),
+),
+actions: [
                 
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
