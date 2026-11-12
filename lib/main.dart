@@ -11429,7 +11429,7 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
           children: ['س', 'ح', 'ن', 'ث', 'ر', 'خ', 'ج']
               .map((d) => Expanded(
                     child: Center(
-                      child: Text(d, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 13)),
+                      child: Text(d, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87, fontSize: 15)),
                     ),
                   ))
               .toList(),
@@ -11474,7 +11474,7 @@ class _HijriCalendarWidgetState extends State<_HijriCalendarWidget> {
 ),
                         alignment: Alignment.center,
                         child: Text('$day', style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 17,
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                           color: isSelected ? Colors.white : Colors.black,
                         )),
