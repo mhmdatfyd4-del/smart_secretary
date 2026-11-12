@@ -8182,16 +8182,7 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     child: const Text('اختيار'),
   ),
 ]),
-                ] else ...[
-                  const Row(children: [
-                    Icon(Icons.music_note, color: Colors.grey),
-                    SizedBox(width: 8),
-                    Text('🎵 الصوت: الافتراضي (تغيير النغمة في البرو 👑)', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  ]),
-                ],
-              ],
-            ),
-          ),
+                
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
             ElevatedButton(
