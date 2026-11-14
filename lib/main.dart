@@ -3424,7 +3424,7 @@ Future<void> _showManageDevicesDialog(BuildContext context) async {
     int notificationId = 8000;
     int count = 0;
 
-    const int maxNotifications = 480;
+    const int maxNotifications = 300;
     const int totalHoursToSchedule = 30 * 24;
 
     for (int i = 1; i <= totalHoursToSchedule; i++) {
