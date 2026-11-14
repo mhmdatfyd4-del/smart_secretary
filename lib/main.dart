@@ -11719,9 +11719,21 @@ void initState() {
         }
       }
       if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: ${e.toString().split(']').last.trim()}'), backgroundColor: Colors.red));
-    } finally {
+    } on FirebaseAuthException catch (e) {
+  if (mounted) {
+    String msg = 'حدث خطأ غير متوقع.';
+    if (e.code == 'user-not-found') msg = 'لا يوجد حساب بهذا البريد الإلكتروني.';
+    else if (e.code == 'wrong-password') msg = 'كلمة المرور غير صحيحة.';
+    else if (e.code == 'email-already-in-use') msg = 'هذا البريد مسجل بالفعل.';
+    else if (e.code == 'weak-password') msg = 'كلمة المرور ضعيفة جداً.';
+    else if (e.code == 'network-request-failed') msg = 'مشكلة في الاتصال بالإنترنت.';
+    else if (e.code == 'invalid-email') msg = 'صيغة البريد الإلكتروني غير صحيحة.';
+    
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+  }
+} catch (e) {
+  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('حدث خطأ، يرجى المحاولة لاحقاً.'), backgroundColor: Colors.red));
+} finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
