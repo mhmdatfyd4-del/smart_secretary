@@ -8054,7 +8054,10 @@ if (isWritingToDiary) {
             Navigator.pop(context);
             Navigator.push(context, MaterialPageRoute(builder: (context) => PremiumScreen(
               onActivated: () {
-                setState(() => _isProUser = true);
+  setState(() {
+    _isProUser = true;
+    _settings.isProUser = true; // 👈 السطر الجديد
+  });
               }
             )));
           },
@@ -8809,7 +8812,10 @@ if (isWritingToDiary) {
               tooltip: 'الترقية للنسخة البرو',
               onPressed: () {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => PremiumScreen(
-                  onActivated: () => setState(() => _isProUser = true),
+                  onActivated: () => setState(() {
+  _isProUser = true;
+  _settings.isProUser = true;
+}),
                 )));
               },
             ),
