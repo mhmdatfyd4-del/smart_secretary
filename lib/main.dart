@@ -4214,22 +4214,42 @@ Future<void> _showManageDevicesDialog(BuildContext context) async {
         partialResults: true,
         onResult: (val) {
           if (_isTasbeehMode) {
-            if (val.finalResult && !hasFinishedTasbeeh) {
-              hasFinishedTasbeeh = true;
-              _handleTasbeehResult(val.recognizedWords);
-              Future.delayed(const Duration(milliseconds: 300), () {
-                if (mounted && _isTasbeehMode) _listenVoiceCommand();
-              });
-            }
-          } else if (_isAdhkarMode) {
-            if (val.finalResult && !hasFinishedAdhkar) {
-              hasFinishedAdhkar = true;
-              _handleAdhkarResult(val.recognizedWords);
-              Future.delayed(const Duration(milliseconds: 300), () {
-                if (mounted && _isAdhkarMode) _listenVoiceCommand();
-              });
-            }
-          } else {
+  if (val.finalResult && !hasFinishedTasbeeh) {
+    hasFinishedTasbeeh = true;
+    final cmd = _norm(val.recognizedWords);
+    
+    // 👈 التعديل: السماح بالخروج من وضع التسبيح فقط
+    if (_hasAny(cmd, ['اقفلي التسبيح', 'اقفل التسبيح', 'قفلي التسبيح', 'قفل التسبيح', 'خلص تسبيح', 'الغي التسبيح', 'كفاية تسبيح'])) {
+      setState(() => _isTasbeehMode = false);
+      await _speak("تَمَّ إِغْلَاقُ وَضْعِ التَّسْبِيح $_userTitle.");
+      return;
+    }
+    
+    // أي كلام تاني هيتحسب تسبيح (ولو مش تسبيح هيتجاهله)
+    _handleTasbeehResult(val.recognizedWords);
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted && _isTasbeehMode) _listenVoiceCommand();
+    });
+  }
+} else if (_isAdhkarMode) {
+  if (val.finalResult && !hasFinishedAdhkar) {
+    hasFinishedAdhkar = true;
+    final cmd = _norm(val.recognizedWords);
+    
+    // 👈 التعديل: السماح بالخروج من وضع الأذكار فقط
+    if (_hasAny(cmd, ['اقفلي الأذكار', 'اقفل الأذكار', 'قفلي الأذكار', 'قفل الأذكار', 'خلص أذكار', 'الغي الأذكار', 'كفاية أذكار'])) {
+      setState(() => _isAdhkarMode = false);
+      await _speak("تَمَّ إِغْلَاقُ وَضْعِ الأذْكَارِ $_userTitle.");
+      return;
+    }
+    
+    // أي كلام تاني هيتحسب ذكر
+    _handleAdhkarResult(val.recognizedWords);
+    Future.delayed(const Duration(milliseconds: 300), {
+      if (mounted && _isAdhkarMode) _listenVoiceCommand();
+    });
+  }
+} else {
             if (val.finalResult) {
               if (mounted) setState(() => _isListening = false);
               if (_settings.wakeWordMode != 'off') {
