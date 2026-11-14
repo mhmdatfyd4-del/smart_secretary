@@ -4147,7 +4147,9 @@ Future<void> _showManageDevicesDialog(BuildContext context) async {
         _DiaryPageState.activeInstance!.stopRecordingByVoice();
       }
 
-      await _tts.stop();
+      if (!_isAlarmDialogOpen) {
+  await _tts.stop();
+      }
       try { await _speech.cancel(); } catch (_) {}
 
       await Future.delayed(const Duration(milliseconds: 800));
