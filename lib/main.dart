@@ -4211,57 +4211,53 @@ Future<void> _showManageDevicesDialog(BuildContext context) async {
       bool hasFinishedAdhkar = false;
 
       await _speech.listen(
-        localeId: "ar-EG", onDevice: false,
-        listenFor: const Duration(seconds: 60), pauseFor: const Duration(seconds: 10),
-        partialResults: true,
-        onResult: (val) {
-          if (_isTasbeehMode) {
-  if (val.finalResult && !hasFinishedTasbeeh) {
-    hasFinishedTasbeeh = true;
-    final cmd = _norm(val.recognizedWords);
-    
-    // 👈 التعديل: السماح بالخروج من وضع التسبيح فقط
-    if (_hasAny(cmd, ['اقفلي التسبيح', 'اقفل التسبيح', 'قفلي التسبيح', 'قفل التسبيح', 'خلص تسبيح', 'الغي التسبيح', 'كفاية تسبيح'])) {
-      setState(() => _isTasbeehMode = false);
-      await _speak("تَمَّ إِغْلَاقُ وَضْعِ التَّسْبِيح $_userTitle.");
-      return;
+  localeId: "ar-EG", onDevice: false,
+  listenFor: const Duration(seconds: 60), pauseFor: const Duration(seconds: 10),
+  partialResults: true,
+  onResult: (val) async { // 👈 التعديل 1: ضفنا async
+    if (_isTasbeehMode) {
+      if (val.finalResult && !hasFinishedTasbeeh) {
+        hasFinishedTasbeeh = true;
+        final cmd = _norm(val.recognizedWords);
+        
+        if (_hasAny(cmd, ['اقفلي التسبيح', 'اقفل التسبيح', 'قفلي التسبيح', 'قفل التسبيح', 'خلص تسبيح', 'الغي التسبيح', 'كفاية تسبيح'])) {
+          setState(() => _isTasbeehMode = false);
+          await _speak("تَمَّ إِغْلَاقُ وَضْعِ التَّسْبِيح $_userTitle.");
+          return;
+        }
+        
+        _handleTasbeehResult(val.recognizedWords);
+        Future.delayed(const Duration(milliseconds: 300), () { // 👈 التعديل 2: ضفنا ()
+          if (mounted && _isTasbeehMode) _listenVoiceCommand();
+        });
+      }
+    } else if (_isAdhkarMode) {
+      if (val.finalResult && !hasFinishedAdhkar) {
+        hasFinishedAdhkar = true;
+        final cmd = _norm(val.recognizedWords);
+        
+        if (_hasAny(cmd, ['اقفلي الأذكار', 'اقفل الأذكار', 'قفلي الأذكار', 'قفل الأذكار', 'خلص أذكار', 'الغي الأذكار', 'كفاية أذكار'])) {
+          setState(() => _isAdhkarMode = false);
+          await _speak("تَمَّ إِغْلَاقُ وَضْعِ الأذْكَارِ $_userTitle.");
+          return;
+        }
+        
+        _handleAdhkarResult(val.recognizedWords);
+        Future.delayed(const Duration(milliseconds: 300), () { // 👈 التعديل 3: ضفنا ()
+          if (mounted && _isAdhkarMode) _listenVoiceCommand();
+        });
+      }
+    } else {
+      if (val.finalResult) {
+        if (mounted) setState(() => _isListening = false);
+        if (_settings.wakeWordMode != 'off') {
+          try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
+        }
+        _processSmartVoiceCommand(val.recognizedWords);
+      }
     }
-    
-    // أي كلام تاني هيتحسب تسبيح (ولو مش تسبيح هيتجاهله)
-    _handleTasbeehResult(val.recognizedWords);
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted && _isTasbeehMode) _listenVoiceCommand();
-    });
-  }
-} else if (_isAdhkarMode) {
-  if (val.finalResult && !hasFinishedAdhkar) {
-    hasFinishedAdhkar = true;
-    final cmd = _norm(val.recognizedWords);
-    
-    // 👈 التعديل: السماح بالخروج من وضع الأذكار فقط
-    if (_hasAny(cmd, ['اقفلي الأذكار', 'اقفل الأذكار', 'قفلي الأذكار', 'قفل الأذكار', 'خلص أذكار', 'الغي الأذكار', 'كفاية أذكار'])) {
-      setState(() => _isAdhkarMode = false);
-      await _speak("تَمَّ إِغْلَاقُ وَضْعِ الأذْكَارِ $_userTitle.");
-      return;
-    }
-    
-    // أي كلام تاني هيتحسب ذكر
-    _handleAdhkarResult(val.recognizedWords);
-    Future.delayed(const Duration(milliseconds: 300), {
-      if (mounted && _isAdhkarMode) _listenVoiceCommand();
-    });
-  }
-} else {
-            if (val.finalResult) {
-              if (mounted) setState(() => _isListening = false);
-              if (_settings.wakeWordMode != 'off') {
-                try { _wakeWordChannel.invokeMethod('resumeWakeWord'); } catch (_) {}
-              }
-              _processSmartVoiceCommand(val.recognizedWords);
-            }
-          }
-        },
-      );
+  },
+);
     } catch (e) {
       debugPrint("Listen Error: $e");
       if (mounted) setState(() => _isListening = false);
