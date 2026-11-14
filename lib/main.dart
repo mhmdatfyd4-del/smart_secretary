@@ -841,11 +841,15 @@ StreamBuilder<DocumentSnapshot>(
                 ),
               );
               if (confirm == true) {
-                await FirebaseAuth.instance.signOut();
-                const storage = FlutterSecureStorage();
-                await storage.delete(key: 'is_pro_user');
-                widget.onAuthChanged();
-                if (mounted) setState(() {});
+  await FirebaseAuth.instance.signOut();
+  const storage = FlutterSecureStorage();
+  await storage.delete(key: 'is_pro_user');
+
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove('is_pro_user'); // 👈 السطر الجديد
+
+  widget.onAuthChanged();
+  if (mounted) setState(() {});
               }
             },
           ),
@@ -2987,7 +2991,7 @@ Future<bool> _verifyDeviceLimit() async {
   final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
 
   try {
-    final doc = await userRef.get();
+    final doc = await userRef.get().timeout(const Duration(seconds: 3));
     final Map<String, dynamic> devices = Map<String, dynamic>.from(doc.data()?['devices'] ?? {});
 
     if (devices.containsKey(deviceId)) {
@@ -3009,13 +3013,14 @@ Future<bool> _verifyDeviceLimit() async {
 }
 
 Future<void> _checkAccountStatus() async {
+  await _checkProStatus(); // 👈 البرو الأول — من الذاكرة المحلية فورًا
+
   final allowed = await _verifyDeviceLimit();
   if (!allowed && mounted) {
     setState(() => _isDeviceBlocked = true);
     return;
   }
   if (mounted) setState(() => _isDeviceBlocked = false);
-  await _checkProStatus();
 }
 
 Future<void> _showManageDevicesDialog(BuildContext context) async {
@@ -3082,37 +3087,71 @@ Future<void> _showManageDevicesDialog(BuildContext context) async {
 }
   
   Future<void> _checkProStatus() async {
+  bool isPro = false;
   const storage = FlutterSecureStorage();
   final prefs = await SharedPreferences.getInstance();
-  
-  final localIsProSecure = await storage.read(key: 'is_pro_user');
-  final localIsProPrefs = prefs.getBool('is_pro_user') ?? false;
 
-  if (localIsProSecure == 'true' || localIsProPrefs) {
+  // 1. اقرأ من prefs (backup)
+  final localIsProPrefs = prefs.getBool('is_pro_user') ?? false;
+  if (localIsProPrefs) isPro = true;
+
+  // 2. اقرأ من SecureStorage (الأقوى)
+  try {
+    final localIsProSecure = await storage.read(key: 'is_pro_user');
+    if (localIsProSecure == 'true') isPro = true;
+  } catch (_) {}
+
+  // 3. لو لقيناه في أي مكان → زامن الاتنين + فعّله في الذاكرة
+  if (isPro) {
+    try {
+      await storage.write(key: 'is_pro_user', value: 'true');
+      await prefs.setBool('is_pro_user', true);
+    } catch (_) {}
+
     if (mounted) {
       setState(() {
         _isProUser = true;
-        _settings.isProUser = true; 
+        _settings.isProUser = true;
+      });
+    }
+  } else {
+    if (mounted) {
+      setState(() {
+        _isProUser = false;
+        _settings.isProUser = false;
       });
     }
   }
-  
+
+  // 4. لو في نت → Firestore هو المرجع النهائي
   try {
     User? user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(const Duration(seconds: 3));
-      if (doc.exists && doc.get('isPro') == true) {
-        await storage.write(key: 'is_pro_user', value: 'true');
-        await prefs.setBool('is_pro_user', true); 
-        if (mounted) {
-          setState(() {
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('users').doc(user.uid).get()
+          .timeout(const Duration(seconds: 3));
+
+      if (doc.exists) {
+        if (doc.get('isPro') == true) {
+          await storage.write(key: 'is_pro_user', value: 'true');
+          await prefs.setBool('is_pro_user', true);
+          if (mounted) setState(() {
             _isProUser = true;
             _settings.isProUser = true;
+          });
+        } else if (doc.get('isPro') == false) {
+          await storage.delete(key: 'is_pro_user');
+          await prefs.remove('is_pro_user');
+          if (mounted) setState(() {
+            _isProUser = false;
+            _settings.isProUser = false;
           });
         }
       }
     }
-  } catch (_) {}
+  } catch (_) {
+    // النت قطع → سيب الحالة المحلية زي ما هي
+  }
   }
 
   @override
@@ -3742,7 +3781,6 @@ Future<void> _showManageDevicesDialog(BuildContext context) async {
     await prefs.setString('custom_greeting', _settings.customGreeting);
     await prefs.setBool('tahajjud_alert_enabled', _settings.tahajjudAlertEnabled);
     await prefs.setBool('is_dark_mode', _settings.isDarkMode);
-    await prefs.setBool('is_pro_user', _settings.isProUser); // 👈 التعديل
     if (_settings.customImagePath != null) {
       await prefs.setString('custom_secretary_image', _settings.customImagePath!);
     } else {
