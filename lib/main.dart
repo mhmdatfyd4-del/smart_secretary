@@ -2688,6 +2688,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
 
   bool _speechReady = false;
   bool _starting = false;
+  StreamSubscription? _actionSub;
   bool _isListening = false;
   bool _isWakeWordListening = false;
   bool _isAlarmDialogOpen = false;
@@ -2893,7 +2894,7 @@ class _MainDashboardState extends State<MainDashboard> with SingleTickerProvider
       }
     });
 
-    _notificationActionController.stream.listen((action) {
+    _actionSub = _notificationActionController.stream.listen((action) {
       if (action == 'cancel') {
         _ignoreNextWakeWordStart = true;
         Future.delayed(const Duration(seconds: 5), () {
@@ -4046,6 +4047,7 @@ Future<void> _showManageDevicesDialog(BuildContext context) async {
       timer.cancel();
     }
     _speech.cancel();
+    _actionSub?.cancel();
     super.dispose();
   }
 
@@ -10837,11 +10839,22 @@ class _DiaryPageState extends State<_DiaryPage> {
     );
   }
 
-  void _addImageToEntries(String path) {
+  Future<void> _addImageToEntries(String path) async {
+  try {
+    final dir = await getApplicationDocumentsDirectory();
+    final fileName = 'img_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final newPath = '${dir.path}/$fileName';
+    await File(path).copy(newPath);
+    setState(() {
+      _entries.add({'type': 'image', 'content': newPath, 'time': DateTime.now()});
+      _sortEntries();
+    });
+  } catch (e) {
     setState(() {
       _entries.add({'type': 'image', 'content': path, 'time': DateTime.now()});
       _sortEntries();
     });
+  }
   }
 
   Future<void> _showRecordingNotification() async {
@@ -10896,17 +10909,31 @@ class _DiaryPageState extends State<_DiaryPage> {
   }
 
   Future<void> _stopRecording() async {
-    if (!_isRecordingNow) return;
-    setState(() => _isRecordingNow = false);
-    await _notifications.cancel(9999);
-    final path = await _recorder.stop();
-    setState(() {
-      _isRecordingNow = false;
-      if (path != null) {
+  if (!_isRecordingNow) return;
+  setState(() => _isRecordingNow = false);
+  await _notifications.cancel(9999);
+  final path = await _recorder.stop();
+  if (path != null) {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final fileName = 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final newPath = '${dir.path}/$fileName';
+      await File(path).copy(newPath);
+      setState(() {
+        _isRecordingNow = false;
+        _entries.add({'type': 'audio', 'content': newPath, 'time': DateTime.now()});
+        _sortEntries();
+      });
+    } catch (_) {
+      setState(() {
+        _isRecordingNow = false;
         _entries.add({'type': 'audio', 'content': path, 'time': DateTime.now()});
         _sortEntries();
-      }
-    });
+      });
+    }
+  } else {
+    setState(() => _isRecordingNow = false);
+  }
   }
 
   Future<void> _playAudio(String path) async {
