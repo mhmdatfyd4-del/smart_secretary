@@ -7356,7 +7356,33 @@ if (isWritingToDiary) {
   ) {
     _ignoreNextWakeWordStart = false;
 
-    if (scheduled.isBefore(DateTime.now().subtract(const Duration(minutes: 2)))) {
+// 👈 التعديل 1: تنظيف الاسم ومنع الأشباح
+String displayTitle = taskTitle;
+if (displayTitle.startsWith('جدول_')) {
+  final parts = displayTitle.split('_');
+  if (parts.length >= 4) {
+    displayTitle = parts.sublist(3).join('_');
+  }
+}
+
+bool taskExists = false;
+if (repeat == 'أسبوعي') {
+  taskExists = _weeklySchedule.any((t) {
+    final sched = DateTime.tryParse(t['scheduled']?.toString() ?? '');
+    final hhmm = sched != null ? DateFormat('HHmm').format(sched) : '';
+    return 'جدول_${t['day']}_${hhmm}_${t['task']}' == taskTitle;
+  });
+} else {
+  taskExists = _tasks.any((t) => t['task'] == taskTitle);
+}
+
+if (!taskExists) {
+  try { _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
+  try { _notifications.cancel(taskTitle.hashCode + 1000); } catch (_) {}
+  return; 
+}
+
+if (scheduled.isBefore(DateTime.now().subtract(const Duration(minutes: 2)))) {
       return;
     }
 
@@ -7405,7 +7431,7 @@ if (isWritingToDiary) {
   if (_isInBackground) return;
   // لو الصوت مخصص أو منبه الهاتف، التطبيق ميتكلمش
   if (!hasCustomSound && soundUri != 'system_alarm') {
-    _speak("حَانَ الآنَ مَوْعِدُ: $taskTitle");
+    _speak("حَانَ الآنَ مَوْعِدُ: $displayTitle");
   }
   HapticFeedback.vibrate();
     }
@@ -7472,7 +7498,7 @@ if (isWritingToDiary) {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        '$userTitle،\nحَانَ الآنَ مَوْعِدُ:\n"$taskTitle"',
+  '$userTitle،\nحَانَ الآنَ مَوْعِدُ:\n"$displayTitle"',
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, height: 1.4),
                       ),
@@ -7542,14 +7568,23 @@ if (isWritingToDiary) {
                                 _alarmDialogContext = null;
                                 try { await _notifications.cancel(alarmId ?? (taskTitle.hashCode + 1000)); } catch (_) {}
                                 try { await _nativeAlarmChannel.invokeMethod('stopAlarmService'); } catch (_) {}
-                                if (repeat == 'مرة واحدة') {
-                                  final idx = _tasks.indexWhere((t) => t['task'] == taskTitle);
-                                  if (idx != -1) { setState(() => _tasks.removeAt(idx)); _saveData(); }
-                                  _cancelNativeAlarm(taskTitle, customId: alarmId);
-                                  SharedPreferences.getInstance().then((prefs) => prefs.remove('pending_alarm'));
-                                } else {
-                                  _rescheduleRepeating(taskTitle, repeat, interval, customDays, scheduled, soundUri);
-                                }
+                                // 👈 التعديل: التأكد إن المنبه لسه موجود قبل الجدولة
+bool stillExists = repeat == 'أسبوعي'
+    ? _weeklySchedule.any((t) {
+        final sched = DateTime.tryParse(t['scheduled']?.toString() ?? '');
+        final hhmm = sched != null ? DateFormat('HHmm').format(sched) : '';
+        return 'جدول_${t['day']}_${hhmm}_${t['task']}' == taskTitle;
+      })
+    : _tasks.any((t) => t['task'] == taskTitle);
+
+if (repeat == 'مرة واحدة' || !stillExists) {
+  final idx = _tasks.indexWhere((t) => t['task'] == taskTitle);
+  if (idx != -1) { setState(() => _tasks.removeAt(idx)); _saveData(); }
+  _cancelNativeAlarm(taskTitle, customId: alarmId);
+  SharedPreferences.getInstance().then((prefs) => prefs.remove('pending_alarm'));
+} else {
+  _rescheduleRepeating(taskTitle, repeat, interval, customDays, scheduled, soundUri);
+}
                                 Navigator.pop(ctx);
                               },
                               child: const Text('خلاص', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
