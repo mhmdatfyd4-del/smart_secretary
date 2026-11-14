@@ -3082,21 +3082,37 @@ Future<void> _showManageDevicesDialog(BuildContext context) async {
 }
   
   Future<void> _checkProStatus() async {
-    const storage = FlutterSecureStorage();
-    final localIsPro = await storage.read(key: 'is_pro_user');
-    if (localIsPro == 'true') {
-      if (mounted) setState(() => _isProUser = true);
+  const storage = FlutterSecureStorage();
+  final prefs = await SharedPreferences.getInstance();
+  
+  final localIsProSecure = await storage.read(key: 'is_pro_user');
+  final localIsProPrefs = prefs.getBool('is_pro_user') ?? false;
+
+  if (localIsProSecure == 'true' || localIsProPrefs) {
+    if (mounted) {
+      setState(() {
+        _isProUser = true;
+        _settings.isProUser = true; 
+      });
     }
-    try {
-      User? user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(const Duration(seconds: 3));
-        if (doc.exists && doc.get('isPro') == true) {
-          await storage.write(key: 'is_pro_user', value: 'true');
-          if (mounted) setState(() => _isProUser = true);
+  }
+  
+  try {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(const Duration(seconds: 3));
+      if (doc.exists && doc.get('isPro') == true) {
+        await storage.write(key: 'is_pro_user', value: 'true');
+        await prefs.setBool('is_pro_user', true); 
+        if (mounted) {
+          setState(() {
+            _isProUser = true;
+            _settings.isProUser = true;
+          });
         }
       }
-    } catch (_) {}
+    }
+  } catch (_) {}
   }
 
   @override
@@ -4644,44 +4660,47 @@ Future<void> _showManageDevicesDialog(BuildContext context) async {
   }
 
   String _cleanDateWordsFromText(String text) {
-    String cleaned = text;
-    final monthsList = ['يناير','فبراير','مارس','ابريل','أبريل','مايو','يونيو','يوليو','اغسطس','أغسطس','سبتمبر','اكتوبر','أكتوبر','نوفمبر','ديسمبر'];
-    final dayWords = ['واحد', 'واحدة', 'اتنين', 'اثنين', 'تلاتة', 'ثلاثة', 'اربعة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'تمانية', 'ثمانية', 'تسعة', 'عشرة', 'حداشر', 'اتناشر', 'تلتاشر', 'اربعطاشر', 'خمستاشر', 'خمسة عشر', 'ستاشر', 'سبعتاشر', 'تمنتاشر', 'تسعتاشر', 'عشرين', 'تلاتين', 'ثلاثين'];
+  String cleaned = text;
+  final monthsList = ['يناير','فبراير','مارس','ابريل','أبريل','مايو','يونيو','يوليو','اغسطس','أغسطس','سبتمبر','اكتوبر','أكتوبر','نوفمبر','ديسمبر'];
+  final dayWords = ['واحد', 'واحدة', 'اتنين', 'اثنين', 'تلاتة', 'ثلاثة', 'اربعة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'تمانية', 'ثمانية', 'تسعة', 'عشرة', 'حداشر', 'اتناشر', 'تلتاشر', 'اربعطاشر', 'خمستاشر', 'خمسة عشر', 'ستاشر', 'سبعتاشر', 'تمنتاشر', 'تسعتاشر', 'عشرين', 'تلاتين', 'ثلاثين'];
 
-    for (var m in monthsList) {
-      cleaned = cleaned.replaceAll(RegExp(r'\d+\s*' + m), '');
-      for (var w in dayWords) {
-        cleaned = cleaned.replaceAll(RegExp(r'\b' + w + r'\s*' + m), '');
-      }
-      cleaned = cleaned.replaceAll(RegExp(r'\b' + m + r'\b'), '');
+  for (var m in monthsList) {
+    cleaned = cleaned.replaceAll(RegExp(r'\d+\s*' + m), '');
+    for (var w in dayWords) {
+      cleaned = cleaned.replaceAll(RegExp(r'\b' + w + r'\s*' + m), '');
     }
+    cleaned = cleaned.replaceAll(RegExp(r'\b' + m + r'\b'), '');
+  }
 
-    final relativeDays = [
-      'النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم',
-      'بكرة', 'بكره', 'غدا', 'غداً',
-      'امبارح', 'امس', 'البارح', 'اول امبارح', 'قبل امبارح',
-      'بعد بكرة', 'بعد بكره', 'بعد غد',
-      'الاسبوع الجاي', 'الاسبوع القادم', 'اسبوع جاي', 'الاسبوع اللي جاي',
-      'الشهر الجاي', 'الشهر القادم', 'شهر جاي', 'الشهر اللي جاي',
-      'السنة الجاية', 'السنة القادمة', 'سنة جاية', 'العام الجاي', 'السنة اللي جاية'
-    ];
-    relativeDays.sort((a, b) => b.length.compareTo(a.length));
-    for (var d in relativeDays) {
-      cleaned = cleaned.replaceAll(RegExp(r'\b' + d + r'\b'), '');
-    }
+  final relativeDays = [
+    'النهاردة', 'النهارده', 'انهاردة', 'انهارده', 'اليوم',
+    'بكرة', 'بكره', 'غدا', 'غداً',
+    'امبارح', 'امس', 'البارح', 'اول امبارح', 'قبل امبارح',
+    'بعد بكرة', 'بعد بكره', 'بعد غد',
+    'الاسبوع الجاي', 'الاسبوع القادم', 'اسبوع جاي', 'الاسبوع اللي جاي',
+    'الشهر الجاي', 'الشهر القادم', 'شهر جاي', 'الشهر اللي جاي',
+    'السنة الجاية', 'السنة القادمة', 'سنة جاية', 'العام الجاي', 'السنة اللي جاية'
+  ];
+  relativeDays.sort((a, b) => b.length.compareTo(a.length));
+  
+  // التعديل هنا: بنمسح الكلمة بس لو كانت في أول الجملة أو بعد كلمة (يومية/في/على)
+  for (var d in relativeDays) {
+    cleaned = cleaned.replaceFirst(RegExp(r'^' + d + r'\s*'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'(?:يومية|يوميه|في|على)\s*' + d + r'\b'), '');
+  }
 
-    final days = ['السبت', 'سبت', 'الاحد', 'الأحد', 'الحد', 'حد', 'الاتنين', 'الاثنين', 'التلات', 'الثلاثاء', 'الاربع', 'الأربعاء', 'الخميس', 'خميس', 'الجمعه', 'الجمعة', 'جمعه'];
-    for (var d in days) {
-      cleaned = cleaned.replaceAll(RegExp(r'\bيوم\s+' + d + r'\b'), '');
-      cleaned = cleaned.replaceAll(RegExp(r'\b' + d + r'\b'), '');
-    }
-    cleaned = cleaned.replaceAll(RegExp(r'\bيوم\b'), '');
+  final days = ['السبت', 'سبت', 'الاحد', 'الأحد', 'الحد', 'حد', 'الاتنين', 'الاثنين', 'التلات', 'الثلاثاء', 'الاربع', 'الأربعاء', 'الخميس', 'خميس', 'الجمعه', 'الجمعة', 'جمعه'];
+  for (var d in days) {
+    cleaned = cleaned.replaceAll(RegExp(r'\bيوم\s+' + d + r'\b'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\b' + d + r'\b'), '');
+  }
+  cleaned = cleaned.replaceAll(RegExp(r'\bيوم\b'), '');
 
-    cleaned = cleaned.replaceAll(RegExp(r'بعد\s*\d+\s*(يوم|ايام|أيام)'), '');
-    cleaned = cleaned.replaceAll(RegExp(r'\bيوم\s*\d{1,2}\b'), '');
-    cleaned = cleaned.replaceAll(RegExp(r'\b\d{1,2}\s*[/\-]\s*\d{1,2}\b'), '');
+  cleaned = cleaned.replaceAll(RegExp(r'بعد\s*\d+\s*(يوم|ايام|أيام)'), '');
+  cleaned = cleaned.replaceAll(RegExp(r'\bيوم\s*\d{1,2}\b'), '');
+  cleaned = cleaned.replaceAll(RegExp(r'\b\d{1,2}\s*[/\-]\s*\d{1,2}\b'), '');
 
-    return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+  return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   DateTime? _parseDiaryDate(String cmd) {
@@ -5606,30 +5625,55 @@ if (isDiaryLocked && isDiaryRelatedCommand) {
     }
 
     // 11. كتابة اليوميات
-    if (isWritingToDiary) {
-      String textToWrite = rawCommand;
-      final removeWords = ['اكتب', 'اكتبي', 'اكتبلي', 'سجل', 'سجلي', 'سجللي', 'في', 'اليوميات', 'يومياتي', 'يوميتي', 'يومية', 'يوميه', 'يا', 'سكرتير', 'سكرتيرة', 'عندك', 'عندي'];
-      for (var w in removeWords) { textToWrite = textToWrite.replaceAll(w, ''); }
-      textToWrite = _cleanDateWordsFromText(textToWrite);
+if (isWritingToDiary) {
+  String textToWrite = rawCommand;
+  
+  // 👈 التعديل: التحقق لو المستخدم طلب إضافة صورة مع الكتابة
+  bool wantsImage = _hasAny(cmd, ['ضيف صورة', 'ضيفي صورة', 'أضف صورة', 'وصورة', 'وصوره', 'ضيف صوره', 'ضيفي صوره']);
+  
+  // لو طلب صورة، هنشيل أمر الصورة من النص عشان ميتكتبش
+  if (wantsImage) {
+    textToWrite = textToWrite.replaceAll(RegExp(r'(?:و|ثم)?\s*(?:ضيف|ضيفي|أضف|اضف)\s*(?:صورة|صوره)'), '').trim();
+  }
 
-      if (textToWrite.isNotEmpty) {
-        if (_DiaryPageState.activeInstance != null) {
-          _diaryVoiceStream.add({'action': 'add_text_note', 'text': textToWrite});
-          await _speak("تَمَام $_userTitle، كَتَبْتْ النَّصْ فِي اليَوْمِيَّة الْمَفْتُوحَة.");
-        } else {
-          DateTime targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
-          final key = DateFormat('yyyy-MM-dd').format(targetDate);
-          final existing = _diaries[key] ?? {'text': '', 'entries': []};
-          existing['text'] = (existing['text'] ?? '') + '\n' + textToWrite;
-          setState(() => _diaries[key] = existing); _saveData();
-          await _speak("تَمَّ كِتَابَةُ اليَوْمِيَّةِ بِنَجَاح $_userTitle.");
-        }
-      } else {
-        if (mounted) _openDiaryPage(DateTime.now());
-        await _speak("اتْفَضَّلْ $_userTitle، اكْتُبْ يَوْمِيَّاتَك.");
-      }
-      return;
+  final removeWords = ['اكتب', 'اكتبي', 'اكتبلي', 'سجل', 'سجلي', 'سجللي', 'في', 'اليوميات', 'يومياتي', 'يوميتي', 'يومية', 'يوميه', 'يا', 'سكرتير', 'سكرتيرة', 'عندك', 'عندي'];
+  for (var w in removeWords) { textToWrite = textToWrite.replaceAll(w, ''); }
+  textToWrite = _cleanDateWordsFromText(textToWrite);
+
+  // كتابة النص لو موجود
+  if (textToWrite.isNotEmpty) {
+    if (_DiaryPageState.activeInstance != null) {
+      _diaryVoiceStream.add({'action': 'add_text_note', 'text': textToWrite});
+    } else {
+      DateTime targetDate = _parseDiaryDate(cmd) ?? DateTime.now();
+      final key = DateFormat('yyyy-MM-dd').format(targetDate);
+      final existing = _diaries[key] ?? {'text': '', 'entries': []};
+      existing['text'] = (existing['text'] ?? '') + '\n' + textToWrite;
+      setState(() => _diaries[key] = existing); _saveData();
     }
+  }
+
+  // 👈 تنفيذ أمر الصورة لو كان مطلوب
+  if (wantsImage) {
+    if (_DiaryPageState.activeInstance == null) {
+      _openDiaryPage(_parseDiaryDate(cmd) ?? DateTime.now());
+      await Future.delayed(const Duration(milliseconds: 800)); // نستنى اليومية تفتح
+    }
+    if (_DiaryPageState.activeInstance != null) {
+      _diaryVoiceStream.add({'action': 'add_image'});
+      await _speak("تَمَام $_userTitle، كَتَبْتْ النَّصْ. اخْتَارْ الصُّورَة دِلْوَقْتِي.");
+    }
+  } else {
+    // لو طلب كتابة بس
+    if (textToWrite.isNotEmpty) {
+      await _speak("تَمَام $_userTitle، كَتَبْتْ النَّصْ.");
+    } else {
+      if (mounted) _openDiaryPage(DateTime.now());
+      await _speak("اتْفَضَّلْ $_userTitle، اكْتُبْ يَوْمِيَّاتَك.");
+    }
+  }
+  return;
+}
 
     // 12. أوامر الإعدادات والوضع الليلي (القديمة كاحتياطي)
     if (_hasAny(cmd, ['افتح الإعدادات', 'افتحي الإعدادات', 'الإعدادات', 'اعدادات', 'الاعدادات', 'افتح الاعدادات'])) { _openSettingsScreen(); await _speak("تَمَّ فَتْحُ الإِعْدَادَاتِ $_userTitle."); return; }
@@ -11743,9 +11787,12 @@ class _PremiumScreenState extends State<PremiumScreen> {
       });
 
       const storage = FlutterSecureStorage();
-      await storage.write(key: 'is_pro_user', value: 'true');
+await storage.write(key: 'is_pro_user', value: 'true');
 
-      widget.onActivated();
+final prefs = await SharedPreferences.getInstance();
+await prefs.setBool('is_pro_user', true); // 👈 حفظ احتياطي
+
+widget.onActivated();
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('🎉 مبروك! تم تفعيل النسخة البرو بنجاح.'), backgroundColor: Colors.green));
